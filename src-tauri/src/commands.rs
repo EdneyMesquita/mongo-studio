@@ -5,9 +5,9 @@ use crate::connection::extract_uri_credentials;
 use crate::driver;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    CollectionInfo, ConnectionHandle, ConnectionProfile, ConnectionProfileInput,
-    ConnectionProfileMeta, ConnectionSource, ConnectionTestResult, DatabaseInfo, SecretBackendInfo,
-    SecretBackendKind,
+    CollectionInfo, CollectionStats, ConnectionHandle, ConnectionProfile, ConnectionProfileInput,
+    ConnectionProfileMeta, ConnectionSource, ConnectionTestResult, DatabaseInfo, FindQueryInput,
+    QueryResultPage, SecretBackendInfo, SecretBackendKind,
 };
 use crate::secrets::SecretKind;
 use crate::state::AppState;
@@ -229,4 +229,63 @@ pub async fn list_collections(
         .get(&session_id)
         .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
     driver::list_collections(&active.client, &database).await
+}
+
+#[tauri::command]
+pub async fn get_collection_stats(
+    state: State<'_, AppState>,
+    session_id: String,
+    database: String,
+    collection: String,
+) -> AppResult<CollectionStats> {
+    let sessions = state.sessions.read().await;
+    let active = sessions
+        .get(&session_id)
+        .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
+    driver::get_collection_stats(&active.client, &database, &collection).await
+}
+
+#[tauri::command]
+pub async fn run_find(
+    state: State<'_, AppState>,
+    session_id: String,
+    database: String,
+    collection: String,
+    query: FindQueryInput,
+) -> AppResult<QueryResultPage> {
+    let sessions = state.sessions.read().await;
+    let active = sessions
+        .get(&session_id)
+        .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
+    driver::run_find(&active.client, &database, &collection, &query).await
+}
+
+#[tauri::command]
+pub async fn run_aggregate(
+    state: State<'_, AppState>,
+    session_id: String,
+    database: String,
+    collection: String,
+    pipeline: serde_json::Value,
+) -> AppResult<QueryResultPage> {
+    let sessions = state.sessions.read().await;
+    let active = sessions
+        .get(&session_id)
+        .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
+    driver::run_aggregate(&active.client, &database, &collection, pipeline).await
+}
+
+#[tauri::command]
+pub async fn count_documents(
+    state: State<'_, AppState>,
+    session_id: String,
+    database: String,
+    collection: String,
+    filter: serde_json::Value,
+) -> AppResult<u64> {
+    let sessions = state.sessions.read().await;
+    let active = sessions
+        .get(&session_id)
+        .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
+    driver::count_documents(&active.client, &database, &collection, filter).await
 }

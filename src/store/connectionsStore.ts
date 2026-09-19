@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { api } from "../lib/tauri";
+import { useSessionsStore } from "./sessionsStore";
 import type {
   ConnectionProfileInput,
   ConnectionProfileMeta,
@@ -115,6 +116,7 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       await api.disconnect(session.sessionId);
+      useSessionsStore.getState().reset();
       set({ session: null, loading: false });
     } catch (e) {
       set({ error: String(e), loading: false });

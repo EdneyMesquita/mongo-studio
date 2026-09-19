@@ -9,6 +9,11 @@ import type {
   DatabaseInfo,
   SecretBackendInfo,
 } from "../types/connection";
+import type {
+  CollectionStats,
+  FindQueryInput,
+  QueryResultPage,
+} from "../types/query";
 
 export const api = {
   listConnectionProfiles: () =>
@@ -39,4 +44,34 @@ export const api = {
 
   listCollections: (sessionId: string, database: string) =>
     invoke<CollectionInfo[]>("list_collections", { sessionId, database }),
+
+  getCollectionStats: (sessionId: string, database: string, collection: string) =>
+    invoke<CollectionStats>("get_collection_stats", { sessionId, database, collection }),
+
+  runFind: (
+    sessionId: string,
+    database: string,
+    collection: string,
+    query: FindQueryInput,
+  ) => invoke<QueryResultPage>("run_find", { sessionId, database, collection, query }),
+
+  runAggregate: (
+    sessionId: string,
+    database: string,
+    collection: string,
+    pipeline: unknown,
+  ) =>
+    invoke<QueryResultPage>("run_aggregate", {
+      sessionId,
+      database,
+      collection,
+      pipeline,
+    }),
+
+  countDocuments: (
+    sessionId: string,
+    database: string,
+    collection: string,
+    filter: unknown,
+  ) => invoke<number>("count_documents", { sessionId, database, collection, filter }),
 };

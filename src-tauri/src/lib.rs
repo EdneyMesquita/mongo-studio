@@ -1,6 +1,7 @@
 mod commands;
 mod connection;
 mod driver;
+mod ejson;
 mod error;
 mod models;
 mod secrets;
@@ -33,6 +34,10 @@ pub fn run() {
             commands::secret_backend_info,
             commands::list_databases,
             commands::list_collections,
+            commands::get_collection_stats,
+            commands::run_find,
+            commands::run_aggregate,
+            commands::count_documents,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

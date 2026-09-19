@@ -1,17 +1,19 @@
 use std::sync::Arc;
 
 use futures_util::TryStreamExt;
-use mongodb::bson::doc;
+use mongodb::bson::{doc, Document};
 use mongodb::options::{
     ClientOptions, Credential, ServerAddress, Tls, TlsOptions as DriverTlsOptions,
 };
 use mongodb::Client;
 
 use crate::connection::reinsert_uri_credentials;
+use crate::ejson::{document_to_json, json_to_document, json_to_pipeline};
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    self, CollectionInfo, ConnectionAdvancedOptions, ConnectionProfile, ConnectionSource,
-    ConnectionTestResult, DatabaseInfo,
+    self, CollectionInfo, CollectionStats, ConnectionAdvancedOptions, ConnectionProfile,
+    ConnectionSource, ConnectionTestResult, DatabaseInfo, FindQueryInput, IndexInfo,
+    QueryResultPage,
 };
 use crate::secrets::{SecretKind, SecretStore};
 use crate::ssh_tunnel::{self, KnownHosts, SshTunnel, SshTunnelAuth, SshTunnelConfig};
@@ -323,6 +325,116 @@ pub async fn list_collections(client: &Client, db: &str) -> AppResult<Vec<Collec
         .collect())
 }
 
+pub async fn run_find(
+    client: &Client,
+    db: &str,
+    collection: &str,
+    input: &FindQueryInput,
+) -> AppResult<QueryResultPage> {
+    let filter = json_to_document(input.filter.clone())?;
+    let coll = client.database(db).collection::<Document>(collection);
+    let mut find = coll.find(filter);
+    if let Some(sort) = &input.sort {
+        find = find.sort(json_to_document(sort.clone())?);
+    }
+    if let Some(projection) = &input.projection {
+        find = find.projection(json_to_document(projection.clone())?);
+    }
+    if let Some(limit) = input.limit {
+        find = find.limit(limit);
+    }
+    if let Some(skip) = input.skip {
+        find = find.skip(skip);
+    }
+    let docs: Vec<Document> = find.await?.try_collect().await?;
+    let documents: Vec<_> = docs.into_iter().map(document_to_json).collect();
+    let returned = documents.len();
+    Ok(QueryResultPage {
+        documents,
+        returned,
+    })
+}
+
+pub async fn run_aggregate(
+    client: &Client,
+    db: &str,
+    collection: &str,
+    pipeline: serde_json::Value,
+) -> AppResult<QueryResultPage> {
+    let stages = json_to_pipeline(pipeline)?;
+    let docs: Vec<Document> = client
+        .database(db)
+        .collection::<Document>(collection)
+        .aggregate(stages)
+        .await?
+        .try_collect()
+        .await?;
+    let documents: Vec<_> = docs.into_iter().map(document_to_json).collect();
+    let returned = documents.len();
+    Ok(QueryResultPage {
+        documents,
+        returned,
+    })
+}
+
+pub async fn count_documents(
+    client: &Client,
+    db: &str,
+    collection: &str,
+    filter: serde_json::Value,
+) -> AppResult<u64> {
+    let filter = json_to_document(filter)?;
+    Ok(client
+        .database(db)
+        .collection::<Document>(collection)
+        .count_documents(filter)
+        .await?)
+}
+
+pub async fn get_collection_stats(
+    client: &Client,
+    db: &str,
+    collection: &str,
+) -> AppResult<CollectionStats> {
+    let coll = client.database(db).collection::<Document>(collection);
+    let document_count = coll.count_documents(doc! {}).await?;
+    let indexes = list_indexes(client, db, collection).await?;
+    Ok(CollectionStats {
+        document_count,
+        indexes,
+    })
+}
+
+pub async fn list_indexes(
+    client: &Client,
+    db: &str,
+    collection: &str,
+) -> AppResult<Vec<IndexInfo>> {
+    let models: Vec<_> = client
+        .database(db)
+        .collection::<Document>(collection)
+        .list_indexes()
+        .await?
+        .try_collect()
+        .await?;
+    Ok(models
+        .into_iter()
+        .map(|m| {
+            let name = m
+                .options
+                .as_ref()
+                .and_then(|o| o.name.clone())
+                .unwrap_or_default();
+            let unique = m.options.as_ref().and_then(|o| o.unique).unwrap_or(false);
+            IndexInfo {
+                name,
+                key: document_to_json(m.keys),
+                unique,
+            }
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod live_tests {
     use super::*;
@@ -330,13 +442,7 @@ mod live_tests {
     use crate::models::{ConnectionAdvancedOptions, TlsOptions};
     use crate::secrets::{InMemoryStore, SecretKind, SecretStore};
 
-    /// Exercises the real Phase 2 connect path against a live MongoDB
-    /// instance. Skipped by default; run explicitly with:
-    ///   set -a; source ../.env.local; set +a
-    ///   cargo test --lib -- --ignored live_connect_lists_databases
-    #[tokio::test]
-    #[ignore]
-    async fn live_connect_lists_databases() {
+    async fn live_connect() -> ActiveConnection {
         let uri = std::env::var("MONGO_STUDIO_TEST_URI")
             .expect("set MONGO_STUDIO_TEST_URI to run this test");
         let (stripped_uri, username, password) = extract_uri_credentials(&uri);
@@ -366,9 +472,19 @@ mod live_tests {
         let known_hosts = Arc::new(
             KnownHosts::load(&std::env::temp_dir().join("mongo-studio-live-test")).unwrap(),
         );
-        let active = connect(&profile, &secrets, &known_hosts)
+        connect(&profile, &secrets, &known_hosts)
             .await
-            .expect("connect should succeed");
+            .expect("connect should succeed")
+    }
+
+    /// Exercises the real Phase 2 connect path against a live MongoDB
+    /// instance. Skipped by default; run explicitly with:
+    ///   set -a; source ../.env.local; set +a
+    ///   cargo test --lib -- --ignored live_connect_lists_databases
+    #[tokio::test]
+    #[ignore]
+    async fn live_connect_lists_databases() {
+        let active = live_connect().await;
         let dbs = list_databases(&active.client)
             .await
             .expect("list_databases should succeed");
@@ -380,5 +496,75 @@ mod live_tests {
             "databases: {:?}",
             dbs.iter().map(|d| &d.name).collect::<Vec<_>>()
         );
+    }
+
+    /// Exercises the Phase 3 query path (list_collections, find, aggregate,
+    /// count, stats/indexes) against whatever the first database/collection
+    /// visible to the test user happens to contain. Skipped by default; run
+    /// explicitly with:
+    ///   set -a; source ../.env.local; set +a
+    ///   cargo test --lib -- --ignored live_query_flow
+    #[tokio::test]
+    #[ignore]
+    async fn live_query_flow() {
+        let active = live_connect().await;
+        let dbs = list_databases(&active.client).await.unwrap();
+        let db = dbs
+            .iter()
+            .find(|d| d.name != "admin" && d.name != "local")
+            .expect("expected at least one non-system database");
+
+        let collections = list_collections(&active.client, &db.name).await.unwrap();
+        let Some(collection) = collections.first() else {
+            println!("database {} has no collections, skipping", db.name);
+            return;
+        };
+
+        let stats = get_collection_stats(&active.client, &db.name, &collection.name)
+            .await
+            .unwrap();
+        println!(
+            "{}.{}: {} documents, {} indexes",
+            db.name,
+            collection.name,
+            stats.document_count,
+            stats.indexes.len()
+        );
+
+        let page = run_find(
+            &active.client,
+            &db.name,
+            &collection.name,
+            &FindQueryInput {
+                filter: serde_json::json!({}),
+                sort: None,
+                projection: None,
+                limit: Some(2),
+                skip: None,
+            },
+        )
+        .await
+        .unwrap();
+        println!("find returned {} document(s)", page.returned);
+
+        let count = count_documents(
+            &active.client,
+            &db.name,
+            &collection.name,
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+        assert_eq!(count, stats.document_count);
+
+        let agg = run_aggregate(
+            &active.client,
+            &db.name,
+            &collection.name,
+            serde_json::json!([{ "$limit": 1 }]),
+        )
+        .await
+        .unwrap();
+        assert!(agg.returned <= 1);
     }
 }

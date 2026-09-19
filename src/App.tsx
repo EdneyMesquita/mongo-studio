@@ -1,6 +1,7 @@
 import { AppShell } from "./components/layout/AppShell";
 import { ConnectionManager } from "./components/connections/ConnectionManager";
-import { DatabaseList } from "./components/sidebar/DatabaseList";
+import { DatabaseTree } from "./components/sidebar/DatabaseTree";
+import { DocumentGrid } from "./components/grid/DocumentGrid";
 import { useConnectionsStore } from "./store/connectionsStore";
 
 function App() {
@@ -8,12 +9,12 @@ function App() {
 
   return (
     <AppShell
-      sidebar={<ConnectionManager />}
+      sidebar={session ? <DatabaseTree /> : <ConnectionManager />}
       statusBar={
         <span>{session ? `Connected (${session.sessionId.slice(0, 8)})` : "Not connected"}</span>
       }
     >
-      <DatabaseList />
+      <DocumentGrid />
     </AppShell>
   );
 }

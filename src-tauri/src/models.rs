@@ -193,3 +193,35 @@ pub struct CollectionInfo {
     pub name: String,
     pub collection_type: String,
 }
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FindQueryInput {
+    pub filter: serde_json::Value,
+    pub sort: Option<serde_json::Value>,
+    pub projection: Option<serde_json::Value>,
+    pub limit: Option<i64>,
+    pub skip: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryResultPage {
+    pub documents: Vec<serde_json::Value>,
+    pub returned: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexInfo {
+    pub name: String,
+    pub key: serde_json::Value,
+    pub unique: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollectionStats {
+    pub document_count: u64,
+    pub indexes: Vec<IndexInfo>,
+}
