@@ -3,12 +3,17 @@ use serde_json::Value;
 
 use crate::error::{AppError, AppResult};
 
-/// Converts a BSON document to relaxed Extended JSON, e.g. `ObjectId` becomes
+/// Converts any BSON value to relaxed Extended JSON, e.g. `ObjectId` becomes
 /// `{"$oid": "..."}` and `DateTime` becomes `{"$date": "..."}`, so type
 /// fidelity survives the trip to the frontend instead of silently degrading
 /// to plain JSON strings/numbers.
+pub fn bson_to_json(bson: Bson) -> Value {
+    bson.into_relaxed_extjson()
+}
+
+/// Convenience wrapper of [`bson_to_json`] for a whole document.
 pub fn document_to_json(doc: Document) -> Value {
-    Bson::Document(doc).into_relaxed_extjson()
+    bson_to_json(Bson::Document(doc))
 }
 
 /// Parses a JSON object (optionally containing Extended JSON type tags) back

@@ -8,7 +8,7 @@ use mongodb::options::{
 use mongodb::Client;
 
 use crate::connection::reinsert_uri_credentials;
-use crate::ejson::{document_to_json, json_to_document, json_to_pipeline};
+use crate::ejson::{bson_to_json, document_to_json, json_to_document, json_to_pipeline};
 use crate::error::{AppError, AppResult};
 use crate::models::{
     self, CollectionInfo, CollectionStats, ConnectionAdvancedOptions, ConnectionProfile,
@@ -93,12 +93,11 @@ fn apply_advanced_overrides(
     if let Some(ms) = advanced.server_selection_timeout_ms {
         options.server_selection_timeout = Some(std::time::Duration::from_millis(ms));
     }
-    if let Some(n) = advanced.max_pool_size {
-        options.max_pool_size = Some(n);
-    }
-    if let Some(n) = advanced.min_pool_size {
-        options.min_pool_size = Some(n);
-    }
+    // Default to a single pooled connection per session rather than the
+    // driver's own defaults (min 0 / max 10) - a desktop client normally
+    // runs one query at a time per open connection tab.
+    options.max_pool_size = Some(advanced.max_pool_size.unwrap_or(1));
+    options.min_pool_size = Some(advanced.min_pool_size.unwrap_or(1));
     if let Some(rs) = &advanced.replica_set {
         options.repl_set_name = Some(rs.clone());
     }
@@ -389,6 +388,57 @@ pub async fn count_documents(
         .collection::<Document>(collection)
         .count_documents(filter)
         .await?)
+}
+
+pub async fn insert_one(
+    client: &Client,
+    db: &str,
+    collection: &str,
+    document: serde_json::Value,
+) -> AppResult<serde_json::Value> {
+    let document = json_to_document(document)?;
+    let result = client
+        .database(db)
+        .collection::<Document>(collection)
+        .insert_one(document)
+        .await?;
+    Ok(bson_to_json(result.inserted_id))
+}
+
+pub async fn update_one(
+    client: &Client,
+    db: &str,
+    collection: &str,
+    filter: serde_json::Value,
+    update: serde_json::Value,
+) -> AppResult<serde_json::Value> {
+    let filter = json_to_document(filter)?;
+    let update = json_to_document(update)?;
+    let result = client
+        .database(db)
+        .collection::<Document>(collection)
+        .update_one(filter, update)
+        .await?;
+    Ok(serde_json::json!({
+        "matchedCount": result.matched_count,
+        "modifiedCount": result.modified_count,
+        "upsertedId": result.upserted_id.map(bson_to_json),
+    }))
+}
+
+pub async fn delete_one(
+    client: &Client,
+    db: &str,
+    collection: &str,
+    filter: serde_json::Value,
+) -> AppResult<serde_json::Value> {
+    let filter = json_to_document(filter)?;
+    let result = client
+        .database(db)
+        .collection::<Document>(collection)
+        .delete_one(filter)
+        .await?;
+    Ok(serde_json::json!({ "deletedCount": result.deleted_count }))
 }
 
 pub async fn get_collection_stats(

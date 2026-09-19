@@ -14,6 +14,7 @@ import type {
   FindQueryInput,
   QueryResultPage,
 } from "../types/query";
+import type { ScriptResult } from "../types/script";
 
 export const api = {
   listConnectionProfiles: () =>
@@ -74,4 +75,22 @@ export const api = {
     collection: string,
     filter: unknown,
   ) => invoke<number>("count_documents", { sessionId, database, collection, filter }),
+
+  runScript: (
+    sessionId: string,
+    database: string,
+    script: string,
+    executionId: string,
+    timeoutMs: number | null,
+  ) =>
+    invoke<ScriptResult>("run_script", {
+      sessionId,
+      database,
+      script,
+      executionId,
+      timeoutMs,
+    }),
+
+  cancelScript: (executionId: string) =>
+    invoke<void>("cancel_script", { executionId }),
 };

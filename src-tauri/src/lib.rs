@@ -4,6 +4,7 @@ mod driver;
 mod ejson;
 mod error;
 mod models;
+mod scripting;
 mod secrets;
 mod ssh_tunnel;
 mod state;
@@ -38,6 +39,8 @@ pub fn run() {
             commands::run_find,
             commands::run_aggregate,
             commands::count_documents,
+            commands::run_script,
+            commands::cancel_script,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

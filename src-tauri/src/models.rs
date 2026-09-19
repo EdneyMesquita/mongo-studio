@@ -225,3 +225,10 @@ pub struct CollectionStats {
     pub document_count: u64,
     pub indexes: Vec<IndexInfo>,
 }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScriptResult {
+    pub value: serde_json::Value,
+    pub logs: Vec<String>,
+}

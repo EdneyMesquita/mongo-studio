@@ -1,4 +1,7 @@
-use tauri::State;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 use crate::connection::extract_uri_credentials;
@@ -7,8 +10,9 @@ use crate::error::{AppError, AppResult};
 use crate::models::{
     CollectionInfo, CollectionStats, ConnectionHandle, ConnectionProfile, ConnectionProfileInput,
     ConnectionProfileMeta, ConnectionSource, ConnectionTestResult, DatabaseInfo, FindQueryInput,
-    QueryResultPage, SecretBackendInfo, SecretBackendKind,
+    QueryResultPage, ScriptResult, SecretBackendInfo, SecretBackendKind,
 };
+use crate::scripting;
 use crate::secrets::SecretKind;
 use crate::state::AppState;
 
@@ -288,4 +292,56 @@ pub async fn count_documents(
         .get(&session_id)
         .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
     driver::count_documents(&active.client, &database, &collection, filter).await
+}
+
+#[tauri::command]
+pub async fn run_script(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    session_id: String,
+    database: String,
+    script: String,
+    execution_id: String,
+    timeout_ms: Option<u64>,
+) -> AppResult<ScriptResult> {
+    let client = {
+        let sessions = state.sessions.read().await;
+        let active = sessions
+            .get(&session_id)
+            .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
+        active.client.clone()
+    };
+
+    let cancel_flag = Arc::new(AtomicBool::new(false));
+    state
+        .running_scripts
+        .lock()
+        .unwrap()
+        .insert(execution_id.clone(), cancel_flag.clone());
+
+    let log_execution_id = execution_id.clone();
+    let on_log = move |message: String| {
+        let _ = app.emit(
+            "script-log",
+            serde_json::json!({ "executionId": log_execution_id, "message": message }),
+        );
+    };
+
+    let result =
+        scripting::run_script(client, database, script, timeout_ms, cancel_flag, on_log).await;
+
+    state.running_scripts.lock().unwrap().remove(&execution_id);
+
+    let result = result?;
+    Ok(ScriptResult {
+        value: result.value,
+        logs: result.logs,
+    })
+}
+
+#[tauri::command]
+pub fn cancel_script(state: State<AppState>, execution_id: String) {
+    if let Some(flag) = state.running_scripts.lock().unwrap().get(&execution_id) {
+        flag.store(true, Ordering::Relaxed);
+    }
 }

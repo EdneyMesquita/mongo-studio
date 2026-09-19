@@ -1,4 +1,6 @@
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 
 use tokio::sync::RwLock;
 
@@ -13,7 +15,11 @@ pub struct AppState {
     pub secret_store: Box<dyn SecretStore>,
     pub secret_backend: SecretBackendKind,
     pub known_hosts: Arc<KnownHosts>,
-    pub sessions: RwLock<std::collections::HashMap<SessionId, ActiveConnection>>,
+    pub sessions: RwLock<HashMap<SessionId, ActiveConnection>>,
+    /// Cancel flags for in-flight scripts, keyed by the frontend-generated
+    /// execution id, so `cancel_script` can flip the same flag the running
+    /// script's interrupt handler is polling.
+    pub running_scripts: Mutex<HashMap<String, Arc<AtomicBool>>>,
 }
 
 impl AppState {
@@ -35,7 +41,8 @@ impl AppState {
             secret_store,
             secret_backend,
             known_hosts,
-            sessions: RwLock::new(std::collections::HashMap::new()),
+            sessions: RwLock::new(HashMap::new()),
+            running_scripts: Mutex::new(HashMap::new()),
         })
     }
 }
