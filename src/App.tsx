@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { AppShell } from "./components/layout/AppShell";
-import { ConnectionManager } from "./components/connections/ConnectionManager";
-import { DatabaseTree } from "./components/sidebar/DatabaseTree";
+import { Sidebar } from "./components/sidebar/Sidebar";
 import { DocumentGrid } from "./components/grid/DocumentGrid";
 import { ScriptConsole } from "./components/console/ScriptConsole";
 import { useConnectionsStore } from "./store/connectionsStore";
@@ -14,9 +13,13 @@ function App() {
 
   return (
     <AppShell
-      sidebar={session ? <DatabaseTree /> : <ConnectionManager />}
+      sidebar={<Sidebar />}
       statusBar={
-        <span>{session ? `Connected (${session.sessionId.slice(0, 8)})` : "Not connected"}</span>
+        <span>
+          {session
+            ? `Connected${session.serverVersion ? ` · MongoDB ${session.serverVersion}` : ""}`
+            : "Not connected"}
+        </span>
       }
     >
       <div className="flex h-full flex-col">

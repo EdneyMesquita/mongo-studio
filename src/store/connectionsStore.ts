@@ -92,6 +92,16 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   },
 
   connect: async (id) => {
+    const current = get().session;
+    if (current && current.connectionId !== id) {
+      try {
+        await api.disconnect(current.sessionId);
+      } catch {
+        // best-effort - proceed to connect the new profile regardless
+      }
+      useSessionsStore.getState().reset();
+      set({ session: null });
+    }
     set({ loading: true, error: null });
     try {
       const handle = await api.connect(id);

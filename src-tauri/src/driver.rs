@@ -12,8 +12,8 @@ use crate::ejson::{bson_to_json, document_to_json, json_to_document, json_to_pip
 use crate::error::{AppError, AppResult};
 use crate::models::{
     self, CollectionInfo, CollectionStats, ConnectionAdvancedOptions, ConnectionProfile,
-    ConnectionSource, ConnectionTestResult, DatabaseInfo, FindQueryInput, IndexInfo,
-    QueryResultPage,
+    ConnectionSource, ConnectionTestResult, DatabaseInfo, ExplainQueryInput, ExplainVerbosity,
+    FindQueryInput, IndexInfo, QueryResultPage,
 };
 use crate::secrets::{SecretKind, SecretStore};
 use crate::ssh_tunnel::{self, KnownHosts, SshTunnel, SshTunnelAuth, SshTunnelConfig};
@@ -485,6 +485,79 @@ pub async fn list_indexes(
         .collect())
 }
 
+/// Per-index usage counters via the `$indexStats` aggregation stage: how
+/// many read/write ops have used each index since the server started (or
+/// since the index was created), which is what actually answers "is this
+/// index doing anything?" rather than just listing index shapes.
+pub async fn list_index_stats(
+    client: &Client,
+    db: &str,
+    collection: &str,
+) -> AppResult<Vec<serde_json::Value>> {
+    let docs: Vec<Document> = client
+        .database(db)
+        .collection::<Document>(collection)
+        .aggregate(vec![doc! { "$indexStats": {} }])
+        .await?
+        .try_collect()
+        .await?;
+    Ok(docs.into_iter().map(document_to_json).collect())
+}
+
+/// Runs the MongoDB `explain` command over a find or (when `query.pipeline`
+/// is set) an aggregate, at the requested verbosity. Built by hand via
+/// `run_command` rather than a driver-native helper, since the Rust driver
+/// doesn't expose one - this is also more portable, since `explain` wraps
+/// arbitrary commands the same way for any query shape.
+pub async fn explain_query(
+    client: &Client,
+    db: &str,
+    collection: &str,
+    query: &ExplainQueryInput,
+    verbosity: ExplainVerbosity,
+) -> AppResult<serde_json::Value> {
+    let inner_command = if let Some(pipeline) = &query.pipeline {
+        let stages = json_to_pipeline(pipeline.clone())?;
+        doc! {
+            "aggregate": collection,
+            "pipeline": stages,
+            "cursor": {},
+        }
+    } else {
+        let filter = json_to_document(query.filter.clone())?;
+        let mut cmd = doc! {
+            "find": collection,
+            "filter": filter,
+        };
+        if let Some(sort) = &query.sort {
+            cmd.insert("sort", json_to_document(sort.clone())?);
+        }
+        if let Some(projection) = &query.projection {
+            cmd.insert("projection", json_to_document(projection.clone())?);
+        }
+        if let Some(limit) = query.limit {
+            cmd.insert("limit", limit);
+        }
+        if let Some(skip) = query.skip {
+            cmd.insert("skip", skip as i64);
+        }
+        cmd
+    };
+
+    let verbosity_str = match verbosity {
+        ExplainVerbosity::QueryPlanner => "queryPlanner",
+        ExplainVerbosity::ExecutionStats => "executionStats",
+        ExplainVerbosity::AllPlansExecution => "allPlansExecution",
+    };
+    let explain_command = doc! {
+        "explain": inner_command,
+        "verbosity": verbosity_str,
+    };
+
+    let result = client.database(db).run_command(explain_command).await?;
+    Ok(document_to_json(result))
+}
+
 #[cfg(test)]
 mod live_tests {
     use super::*;
@@ -616,5 +689,86 @@ mod live_tests {
         .await
         .unwrap();
         assert!(agg.returned <= 1);
+    }
+
+    /// Exercises explain (both find- and aggregate-shaped) and $indexStats
+    /// against whatever the first database/collection contains. Skipped by
+    /// default; run explicitly with:
+    ///   set -a; source ../.env.local; set +a
+    ///   cargo test --lib -- --ignored live_explain_and_index_stats
+    #[tokio::test]
+    #[ignore]
+    async fn live_explain_and_index_stats() {
+        let active = live_connect().await;
+        let dbs = list_databases(&active.client).await.unwrap();
+        let db = dbs
+            .iter()
+            .find(|d| d.name != "admin" && d.name != "local")
+            .expect("expected at least one non-system database");
+        let collections = list_collections(&active.client, &db.name).await.unwrap();
+        let Some(collection) = collections.first() else {
+            println!("database {} has no collections, skipping", db.name);
+            return;
+        };
+
+        // Some Atlas tiers/roles don't grant the $indexStats privilege; that's
+        // a real, expected permissions boundary (not a bug here), so this
+        // just documents the behavior instead of asserting success.
+        match list_index_stats(&active.client, &db.name, &collection.name).await {
+            Ok(stats) => {
+                println!("index stats: {} entries", stats.len());
+                assert!(
+                    !stats.is_empty(),
+                    "every collection has at least the _id index"
+                );
+            }
+            Err(e) => println!(
+                "$indexStats not permitted for this user (expected on some Atlas tiers): {e}"
+            ),
+        }
+
+        let find_explain = explain_query(
+            &active.client,
+            &db.name,
+            &collection.name,
+            &ExplainQueryInput {
+                filter: serde_json::json!({}),
+                sort: None,
+                projection: None,
+                limit: Some(1),
+                skip: None,
+                pipeline: None,
+            },
+            ExplainVerbosity::ExecutionStats,
+        )
+        .await
+        .unwrap();
+        assert!(
+            find_explain.get("queryPlanner").is_some(),
+            "find explain should include queryPlanner: {find_explain}"
+        );
+        assert!(
+            find_explain.get("executionStats").is_some(),
+            "executionStats verbosity should include executionStats: {find_explain}"
+        );
+
+        let agg_explain = explain_query(
+            &active.client,
+            &db.name,
+            &collection.name,
+            &ExplainQueryInput {
+                filter: serde_json::json!({}),
+                sort: None,
+                projection: None,
+                limit: None,
+                skip: None,
+                pipeline: Some(serde_json::json!([{ "$limit": 1 }])),
+            },
+            ExplainVerbosity::QueryPlanner,
+        )
+        .await
+        .unwrap();
+        println!("aggregate explain: {agg_explain}");
+        assert!(agg_explain.is_object());
     }
 }

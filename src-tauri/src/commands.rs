@@ -10,9 +10,9 @@ use crate::error::{AppError, AppResult};
 use crate::export;
 use crate::models::{
     CollectionInfo, CollectionStats, ConnectionHandle, ConnectionProfile, ConnectionProfileInput,
-    ConnectionProfileMeta, ConnectionSource, ConnectionTestResult, DatabaseInfo, ExportOptions,
-    ExportQueryInput, ExportSummary, FindQueryInput, QueryResultPage, ScriptResult,
-    SecretBackendInfo, SecretBackendKind,
+    ConnectionProfileMeta, ConnectionSource, ConnectionTestResult, DatabaseInfo, ExplainQueryInput,
+    ExplainVerbosity, ExportOptions, ExportQueryInput, ExportSummary, FindQueryInput,
+    QueryResultPage, ScriptResult, SecretBackendInfo, SecretBackendKind,
 };
 use crate::scripting;
 use crate::secrets::SecretKind;
@@ -249,6 +249,36 @@ pub async fn get_collection_stats(
         .get(&session_id)
         .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
     driver::get_collection_stats(&active.client, &database, &collection).await
+}
+
+#[tauri::command]
+pub async fn list_index_stats(
+    state: State<'_, AppState>,
+    session_id: String,
+    database: String,
+    collection: String,
+) -> AppResult<Vec<serde_json::Value>> {
+    let sessions = state.sessions.read().await;
+    let active = sessions
+        .get(&session_id)
+        .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
+    driver::list_index_stats(&active.client, &database, &collection).await
+}
+
+#[tauri::command]
+pub async fn explain_query(
+    state: State<'_, AppState>,
+    session_id: String,
+    database: String,
+    collection: String,
+    query: ExplainQueryInput,
+    verbosity: ExplainVerbosity,
+) -> AppResult<serde_json::Value> {
+    let sessions = state.sessions.read().await;
+    let active = sessions
+        .get(&session_id)
+        .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
+    driver::explain_query(&active.client, &database, &collection, &query, verbosity).await
 }
 
 #[tauri::command]

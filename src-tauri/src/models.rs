@@ -272,3 +272,23 @@ pub struct ExportSummary {
     pub rows_written: u64,
     pub columns: Vec<String>,
 }
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExplainQueryInput {
+    pub filter: serde_json::Value,
+    pub sort: Option<serde_json::Value>,
+    pub projection: Option<serde_json::Value>,
+    pub limit: Option<i64>,
+    pub skip: Option<u64>,
+    /// When set, explains this aggregation pipeline instead of a find.
+    pub pipeline: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExplainVerbosity {
+    QueryPlanner,
+    ExecutionStats,
+    AllPlansExecution,
+}

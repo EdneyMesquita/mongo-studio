@@ -14,9 +14,10 @@ const sectionClass = "rounded border border-border-subtle p-3";
 
 interface ConnectionFormProps {
   onSaved: () => void;
+  onCancel: () => void;
 }
 
-export function ConnectionForm({ onSaved }: ConnectionFormProps) {
+export function ConnectionForm({ onSaved, onCancel }: ConnectionFormProps) {
   const [input, setInput] = useState<ConnectionProfileInput>(newProfileInput());
   const { saveProfile, testConnection, lastTestResult, loading, error } =
     useConnectionsStore();
@@ -37,9 +38,17 @@ export function ConnectionForm({ onSaved }: ConnectionFormProps) {
 
   return (
     <div className="flex flex-col gap-4 p-4 text-text-default">
-      <h2 className="text-sm font-semibold text-text-default">
-        New connection
-      </h2>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="rounded px-1.5 py-1 text-text-muted hover:bg-panel-hover hover:text-text-default"
+          onClick={onCancel}
+          title="Back"
+        >
+          ←
+        </button>
+        <h2 className="text-sm font-semibold text-text-default">New connection</h2>
+      </div>
 
       <div>
         <label className={labelClass}>Name</label>

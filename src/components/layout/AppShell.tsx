@@ -10,7 +10,7 @@ export function AppShell({ sidebar, statusBar, children }: AppShellProps) {
   return (
     <div className="flex h-screen w-screen flex-col bg-editor text-text-default">
       <div className="flex min-h-0 flex-1">
-        <aside className="w-64 shrink-0 overflow-y-auto border-r border-border-subtle bg-panel">
+        <aside className="w-64 shrink-0 overflow-y-auto border-r border-border-subtle bg-sidebar">
           {sidebar}
         </aside>
         <main className="min-w-0 flex-1 overflow-auto bg-editor">{children}</main>

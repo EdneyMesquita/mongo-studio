@@ -1,18 +1,130 @@
 @import "tailwindcss";
 
 @theme {
-  --color-editor: #1e1e1e;
-  --color-panel: #252526;
-  --color-panel-alt: #2d2d30;
-  --color-panel-hover: #2a2d2e;
-  --color-border-subtle: #3c3c3c;
-  --color-text-default: #cccccc;
-  --color-text-muted: #9d9d9d;
-  --color-text-faint: #6e7681;
-  --color-accent: #0e639c;
-  --color-accent-hover: #1177bb;
-  --color-run: #16825d;
-  --color-run-hover: #1a9c6d;
+  --color-editor: var(--t-editor);
+  --color-panel: var(--t-panel);
+  --color-panel-alt: var(--t-panel-alt);
+  --color-panel-hover: var(--t-panel-hover);
+  --color-border-subtle: var(--t-border-subtle);
+  --color-text-default: var(--t-text-default);
+  --color-text-muted: var(--t-text-muted);
+  --color-text-faint: var(--t-text-faint);
+  --color-accent: var(--t-accent);
+  --color-accent-hover: var(--t-accent-hover);
+  --color-run: var(--t-run);
+  --color-run-hover: var(--t-run-hover);
+  --color-sidebar: var(--t-sidebar);
+  --color-sidebar-active: var(--t-sidebar-active);
+  --color-sidebar-active-hover: var(--t-sidebar-active-hover);
+  --color-sidebar-hover: var(--t-sidebar-hover);
+  --color-status-green: var(--t-status-green);
+}
+
+/* "Compass" - default. Near-black sidebar with MongoDB Compass's plum
+   active-connection highlight. */
+:root,
+:root[data-theme="compass"] {
+  --t-editor: #1e1e1e;
+  --t-panel: #252526;
+  --t-panel-alt: #2d2d30;
+  --t-panel-hover: #2a2d2e;
+  --t-border-subtle: #3c3c3c;
+  --t-text-default: #cccccc;
+  --t-text-muted: #9d9d9d;
+  --t-text-faint: #6e7681;
+  --t-accent: #0e639c;
+  --t-accent-hover: #1177bb;
+  --t-run: #16825d;
+  --t-run-hover: #1a9c6d;
+  --t-sidebar: #0f1214;
+  --t-sidebar-active: #3d1e35;
+  --t-sidebar-active-hover: #4a2440;
+  --t-sidebar-hover: #1c2126;
+  --t-status-green: #4ade80;
+}
+
+/* "Dark Modern" - stock VS Code Dark+, blue accents throughout. */
+:root[data-theme="dark-modern"] {
+  --t-editor: #1e1e1e;
+  --t-panel: #252526;
+  --t-panel-alt: #2d2d30;
+  --t-panel-hover: #2a2d2e;
+  --t-border-subtle: #3c3c3c;
+  --t-text-default: #cccccc;
+  --t-text-muted: #9d9d9d;
+  --t-text-faint: #6e7681;
+  --t-accent: #0e639c;
+  --t-accent-hover: #1177bb;
+  --t-run: #16825d;
+  --t-run-hover: #1a9c6d;
+  --t-sidebar: #252526;
+  --t-sidebar-active: #37373d;
+  --t-sidebar-active-hover: #3f3f46;
+  --t-sidebar-hover: #2a2d2e;
+  --t-status-green: #4ade80;
+}
+
+/* "Monokai" */
+:root[data-theme="monokai"] {
+  --t-editor: #272822;
+  --t-panel: #2d2e27;
+  --t-panel-alt: #33342c;
+  --t-panel-hover: #3a3b32;
+  --t-border-subtle: #49493e;
+  --t-text-default: #f8f8f2;
+  --t-text-muted: #a6a795;
+  --t-text-faint: #75715e;
+  --t-accent: #ae81ff;
+  --t-accent-hover: #c39bff;
+  --t-run: #a6e22e;
+  --t-run-hover: #b9f13c;
+  --t-sidebar: #1e1f1c;
+  --t-sidebar-active: #4b3a1f;
+  --t-sidebar-active-hover: #5c481f;
+  --t-sidebar-hover: #33342c;
+  --t-status-green: #a6e22e;
+}
+
+/* "Dracula" */
+:root[data-theme="dracula"] {
+  --t-editor: #282a36;
+  --t-panel: #21222c;
+  --t-panel-alt: #343746;
+  --t-panel-hover: #3b3e52;
+  --t-border-subtle: #44475a;
+  --t-text-default: #f8f8f2;
+  --t-text-muted: #a9abc1;
+  --t-text-faint: #6272a4;
+  --t-accent: #bd93f9;
+  --t-accent-hover: #caa4fa;
+  --t-run: #50fa7b;
+  --t-run-hover: #6bffb0;
+  --t-sidebar: #191a21;
+  --t-sidebar-active: #44295a;
+  --t-sidebar-active-hover: #54346e;
+  --t-sidebar-hover: #2b2d3a;
+  --t-status-green: #50fa7b;
+}
+
+/* "Solarized Dark" */
+:root[data-theme="solarized-dark"] {
+  --t-editor: #002b36;
+  --t-panel: #073642;
+  --t-panel-alt: #0a4351;
+  --t-panel-hover: #0e4f5f;
+  --t-border-subtle: #115a6b;
+  --t-text-default: #eee8d5;
+  --t-text-muted: #93a1a1;
+  --t-text-faint: #586e75;
+  --t-accent: #268bd2;
+  --t-accent-hover: #3ba1e8;
+  --t-run: #859900;
+  --t-run-hover: #9bb000;
+  --t-sidebar: #00212b;
+  --t-sidebar-active: #2b4a3a;
+  --t-sidebar-active-hover: #375c48;
+  --t-sidebar-hover: #073642;
+  --t-status-green: #859900;
 }
 
 body {
