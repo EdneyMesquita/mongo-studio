@@ -7,10 +7,12 @@ use uuid::Uuid;
 use crate::connection::extract_uri_credentials;
 use crate::driver;
 use crate::error::{AppError, AppResult};
+use crate::export;
 use crate::models::{
     CollectionInfo, CollectionStats, ConnectionHandle, ConnectionProfile, ConnectionProfileInput,
-    ConnectionProfileMeta, ConnectionSource, ConnectionTestResult, DatabaseInfo, FindQueryInput,
-    QueryResultPage, ScriptResult, SecretBackendInfo, SecretBackendKind,
+    ConnectionProfileMeta, ConnectionSource, ConnectionTestResult, DatabaseInfo, ExportOptions,
+    ExportQueryInput, ExportSummary, FindQueryInput, QueryResultPage, ScriptResult,
+    SecretBackendInfo, SecretBackendKind,
 };
 use crate::scripting;
 use crate::secrets::SecretKind;
@@ -314,7 +316,7 @@ pub async fn run_script(
 
     let cancel_flag = Arc::new(AtomicBool::new(false));
     state
-        .running_scripts
+        .running_tasks
         .lock()
         .unwrap()
         .insert(execution_id.clone(), cancel_flag.clone());
@@ -330,7 +332,7 @@ pub async fn run_script(
     let result =
         scripting::run_script(client, database, script, timeout_ms, cancel_flag, on_log).await;
 
-    state.running_scripts.lock().unwrap().remove(&execution_id);
+    state.running_tasks.lock().unwrap().remove(&execution_id);
 
     let result = result?;
     Ok(ScriptResult {
@@ -341,7 +343,66 @@ pub async fn run_script(
 
 #[tauri::command]
 pub fn cancel_script(state: State<AppState>, execution_id: String) {
-    if let Some(flag) = state.running_scripts.lock().unwrap().get(&execution_id) {
+    if let Some(flag) = state.running_tasks.lock().unwrap().get(&execution_id) {
+        flag.store(true, Ordering::Relaxed);
+    }
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn export_to_csv(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    session_id: String,
+    database: String,
+    collection: String,
+    query: ExportQueryInput,
+    options: ExportOptions,
+    dest_path: String,
+    execution_id: String,
+) -> AppResult<ExportSummary> {
+    let client = {
+        let sessions = state.sessions.read().await;
+        let active = sessions
+            .get(&session_id)
+            .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
+        active.client.clone()
+    };
+
+    let cancel_flag = Arc::new(AtomicBool::new(false));
+    state
+        .running_tasks
+        .lock()
+        .unwrap()
+        .insert(execution_id.clone(), cancel_flag.clone());
+
+    let progress_execution_id = execution_id.clone();
+    let on_progress = move |rows_written: u64| {
+        let _ = app.emit(
+            "export-progress",
+            serde_json::json!({ "executionId": progress_execution_id, "rowsWritten": rows_written }),
+        );
+    };
+
+    let result = export::export_to_csv(
+        &client,
+        &database,
+        &collection,
+        query,
+        options,
+        std::path::Path::new(&dest_path),
+        cancel_flag,
+        on_progress,
+    )
+    .await;
+
+    state.running_tasks.lock().unwrap().remove(&execution_id);
+    result
+}
+
+#[tauri::command]
+pub fn cancel_export(state: State<AppState>, execution_id: String) {
+    if let Some(flag) = state.running_tasks.lock().unwrap().get(&execution_id) {
         flag.store(true, Ordering::Relaxed);
     }
 }

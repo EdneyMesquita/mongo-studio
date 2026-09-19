@@ -15,16 +15,16 @@ export function DatabaseTree() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-neutral-800 p-2">
+      <div className="flex items-center justify-between border-b border-border-subtle p-2">
         <div className="min-w-0">
-          <p className="truncate text-xs font-semibold text-neutral-300">Connected</p>
+          <p className="truncate text-xs font-semibold text-text-default">Connected</p>
           {session.serverVersion && (
-            <p className="text-[10px] text-neutral-600">MongoDB {session.serverVersion}</p>
+            <p className="text-[10px] text-text-faint">MongoDB {session.serverVersion}</p>
           )}
         </div>
         <button
           type="button"
-          className="shrink-0 rounded bg-neutral-800 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
+          className="shrink-0 rounded bg-panel-alt px-2 py-1 text-xs text-text-default hover:bg-panel-hover"
           onClick={() => disconnect()}
         >
           Disconnect
@@ -38,26 +38,26 @@ export function DatabaseTree() {
             <div key={db.name}>
               <button
                 type="button"
-                className={`flex w-full items-center justify-between px-2 py-1.5 text-left hover:bg-neutral-900 ${
-                  isOpen ? "bg-neutral-900 text-neutral-100" : "text-neutral-300"
+                className={`flex w-full items-center justify-between px-2 py-1.5 text-left hover:bg-panel ${
+                  isOpen ? "bg-panel text-text-default" : "text-text-default"
                 }`}
                 onClick={() => selectDatabase(session.sessionId, db.name)}
               >
                 <span className="truncate">{db.name}</span>
               </button>
               {isOpen && (
-                <div className="ml-3 border-l border-neutral-800 pl-2">
+                <div className="ml-3 border-l border-border-subtle pl-2">
                   {collections.length === 0 && (
-                    <p className="px-2 py-1 text-xs text-neutral-600">No collections</p>
+                    <p className="px-2 py-1 text-xs text-text-faint">No collections</p>
                   )}
                   {collections.map((coll) => (
                     <button
                       key={coll.name}
                       type="button"
-                      className={`block w-full truncate px-2 py-1 text-left text-xs hover:bg-neutral-900 ${
+                      className={`block w-full truncate px-2 py-1 text-left text-xs hover:bg-panel ${
                         selectedCollection === coll.name
-                          ? "bg-neutral-800 text-white"
-                          : "text-neutral-400"
+                          ? "bg-panel-alt text-white"
+                          : "text-text-muted"
                       }`}
                       onClick={() =>
                         selectCollection(session.sessionId, db.name, coll.name)

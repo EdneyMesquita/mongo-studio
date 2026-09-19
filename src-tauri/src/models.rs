@@ -232,3 +232,43 @@ pub struct ScriptResult {
     pub value: serde_json::Value,
     pub logs: Vec<String>,
 }
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportQueryInput {
+    pub filter: serde_json::Value,
+    pub sort: Option<serde_json::Value>,
+    pub projection: Option<serde_json::Value>,
+    /// When set, exports the result of this aggregation pipeline instead of
+    /// a plain find. `filter`/`sort`/`projection` are ignored in that case.
+    pub pipeline: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExportNestedMode {
+    /// Nested objects/arrays become dot- and index-notation columns, e.g.
+    /// `address.city`, `items.0.sku`.
+    Flatten,
+    /// Only top-level keys become columns; nested values are JSON-stringified
+    /// into a single cell.
+    Stringify,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportOptions {
+    pub nested_mode: ExportNestedMode,
+    /// How many leading documents to sample for column inference. Columns
+    /// for fields that only appear later in a very heterogeneous collection
+    /// won't be included - a documented tradeoff for not buffering the
+    /// entire result set in memory.
+    pub sample_size: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportSummary {
+    pub rows_written: u64,
+    pub columns: Vec<String>,
+}

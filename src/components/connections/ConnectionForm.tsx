@@ -8,9 +8,9 @@ import {
 } from "../../types/connection";
 
 const inputClass =
-  "w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none";
-const labelClass = "block text-xs text-neutral-400 mb-1";
-const sectionClass = "rounded border border-neutral-800 p-3";
+  "w-full rounded border border-border-subtle bg-panel px-2 py-1 text-sm text-text-default placeholder:text-text-faint focus:border-accent focus:outline-none";
+const labelClass = "block text-xs text-text-muted mb-1";
+const sectionClass = "rounded border border-border-subtle p-3";
 
 interface ConnectionFormProps {
   onSaved: () => void;
@@ -36,8 +36,8 @@ export function ConnectionForm({ onSaved }: ConnectionFormProps) {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4 text-neutral-200">
-      <h2 className="text-sm font-semibold text-neutral-300">
+    <div className="flex flex-col gap-4 p-4 text-text-default">
+      <h2 className="text-sm font-semibold text-text-default">
         New connection
       </h2>
 
@@ -145,7 +145,7 @@ export function ConnectionForm({ onSaved }: ConnectionFormProps) {
       </div>
 
       <details className={sectionClass}>
-        <summary className="cursor-pointer text-xs text-neutral-400">
+        <summary className="cursor-pointer text-xs text-text-muted">
           TLS
         </summary>
         <div className="mt-2 flex flex-col gap-2">
@@ -202,7 +202,7 @@ export function ConnectionForm({ onSaved }: ConnectionFormProps) {
       </details>
 
       <details className={sectionClass}>
-        <summary className="cursor-pointer text-xs text-neutral-400">
+        <summary className="cursor-pointer text-xs text-text-muted">
           SSH tunnel
         </summary>
         <div className="mt-2 flex flex-col gap-2">
@@ -316,7 +316,7 @@ export function ConnectionForm({ onSaved }: ConnectionFormProps) {
       </details>
 
       <details className={sectionClass}>
-        <summary className="cursor-pointer text-xs text-neutral-400">
+        <summary className="cursor-pointer text-xs text-text-muted">
           Advanced
         </summary>
         <div className="mt-2 grid grid-cols-2 gap-2">
@@ -449,7 +449,7 @@ export function ConnectionForm({ onSaved }: ConnectionFormProps) {
         </div>
         <button
           type="button"
-          className="mt-2 text-xs text-neutral-500 underline"
+          className="mt-2 text-xs text-text-muted underline"
           onClick={() => update("advanced", emptyAdvancedOptions())}
         >
           Reset advanced options
@@ -474,7 +474,7 @@ export function ConnectionForm({ onSaved }: ConnectionFormProps) {
         <button
           type="button"
           disabled={loading}
-          className="rounded bg-neutral-800 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-700 disabled:opacity-50"
+          className="rounded bg-panel-alt px-3 py-1.5 text-xs text-text-default hover:bg-panel-hover disabled:opacity-50"
           onClick={() => testConnection(input)}
         >
           Test connection
@@ -482,7 +482,7 @@ export function ConnectionForm({ onSaved }: ConnectionFormProps) {
         <button
           type="button"
           disabled={loading || !input.name}
-          className="rounded bg-emerald-700 px-3 py-1.5 text-xs text-white hover:bg-emerald-600 disabled:opacity-50"
+          className="rounded bg-run px-3 py-1.5 text-xs text-white hover:bg-run-hover disabled:opacity-50"
           onClick={handleSave}
         >
           Save

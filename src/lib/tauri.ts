@@ -15,6 +15,7 @@ import type {
   QueryResultPage,
 } from "../types/query";
 import type { ScriptResult } from "../types/script";
+import type { ExportOptions, ExportQueryInput, ExportSummary } from "../types/export";
 
 export const api = {
   listConnectionProfiles: () =>
@@ -93,4 +94,26 @@ export const api = {
 
   cancelScript: (executionId: string) =>
     invoke<void>("cancel_script", { executionId }),
+
+  exportToCsv: (
+    sessionId: string,
+    database: string,
+    collection: string,
+    query: ExportQueryInput,
+    options: ExportOptions,
+    destPath: string,
+    executionId: string,
+  ) =>
+    invoke<ExportSummary>("export_to_csv", {
+      sessionId,
+      database,
+      collection,
+      query,
+      options,
+      destPath,
+      executionId,
+    }),
+
+  cancelExport: (executionId: string) =>
+    invoke<void>("cancel_export", { executionId }),
 };

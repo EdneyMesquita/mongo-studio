@@ -16,10 +16,10 @@ pub struct AppState {
     pub secret_backend: SecretBackendKind,
     pub known_hosts: Arc<KnownHosts>,
     pub sessions: RwLock<HashMap<SessionId, ActiveConnection>>,
-    /// Cancel flags for in-flight scripts, keyed by the frontend-generated
-    /// execution id, so `cancel_script` can flip the same flag the running
-    /// script's interrupt handler is polling.
-    pub running_scripts: Mutex<HashMap<String, Arc<AtomicBool>>>,
+    /// Cancel flags for in-flight scripts and exports, keyed by the
+    /// frontend-generated execution id, so `cancel_script`/`cancel_export`
+    /// can flip the same flag the running task is polling.
+    pub running_tasks: Mutex<HashMap<String, Arc<AtomicBool>>>,
 }
 
 impl AppState {
@@ -42,7 +42,7 @@ impl AppState {
             secret_backend,
             known_hosts,
             sessions: RwLock::new(HashMap::new()),
-            running_scripts: Mutex::new(HashMap::new()),
+            running_tasks: Mutex::new(HashMap::new()),
         })
     }
 }

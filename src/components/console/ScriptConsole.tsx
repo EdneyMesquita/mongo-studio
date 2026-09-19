@@ -11,7 +11,7 @@ export function ScriptConsole() {
 
   if (!session) {
     return (
-      <div className="flex h-full items-center justify-center text-neutral-500">
+      <div className="flex h-full items-center justify-center text-text-muted">
         Connect to a database to use the script console
       </div>
     );
@@ -31,11 +31,11 @@ export function ScriptConsole() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-neutral-800 px-3 py-1.5 text-xs text-neutral-500">
+      <div className="flex items-center justify-between border-b border-border-subtle px-3 py-1.5 text-xs text-text-muted">
         <span>
           Script console
           {database ? (
-            <span className="ml-2 font-mono text-neutral-300">{database}</span>
+            <span className="ml-2 font-mono text-text-default">{database}</span>
           ) : (
             <span className="ml-2 text-amber-400">select a database first</span>
           )}
@@ -44,7 +44,7 @@ export function ScriptConsole() {
           {running ? (
             <button
               type="button"
-              className="rounded bg-neutral-800 px-3 py-1 text-neutral-200 hover:bg-neutral-700"
+              className="rounded bg-panel-alt px-3 py-1 text-text-default hover:bg-panel-hover"
               onClick={() => cancel()}
             >
               Cancel
@@ -53,7 +53,7 @@ export function ScriptConsole() {
             <button
               type="button"
               disabled={!database}
-              className="rounded bg-emerald-700 px-3 py-1 text-white hover:bg-emerald-600 disabled:opacity-50"
+              className="rounded bg-run px-3 py-1 text-white hover:bg-run-hover disabled:opacity-50"
               onClick={handleRun}
             >
               Run (⌘⏎)
@@ -81,7 +81,7 @@ export function ScriptConsole() {
             }}
           />
         </div>
-        <div className="min-h-[150px] flex-1 border-t border-neutral-800 md:h-full md:w-96 md:border-l md:border-t-0">
+        <div className="min-h-[150px] flex-1 border-t border-border-subtle md:h-full md:w-96 md:border-l md:border-t-0">
           <ConsoleOutput />
         </div>
       </div>

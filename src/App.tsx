@@ -21,15 +21,15 @@ function App() {
     >
       <div className="flex h-full flex-col">
         {session && (
-          <div className="flex gap-1 border-b border-neutral-800 bg-neutral-950 px-2 pt-1.5">
+          <div className="flex gap-1 border-b border-border-subtle bg-editor px-2 pt-1.5">
             {(["browse", "console"] as const).map((t) => (
               <button
                 key={t}
                 type="button"
                 className={`rounded-t px-3 py-1 text-xs capitalize ${
                   tab === t
-                    ? "bg-neutral-900 text-neutral-100"
-                    : "text-neutral-500 hover:text-neutral-300"
+                    ? "bg-panel text-text-default"
+                    : "text-text-muted hover:text-text-default"
                 }`}
                 onClick={() => setTab(t)}
               >

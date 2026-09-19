@@ -3,6 +3,7 @@ mod connection;
 mod driver;
 mod ejson;
 mod error;
+mod export;
 mod models;
 mod scripting;
 mod secrets;
@@ -17,6 +18,7 @@ use state::AppState;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let config_dir = app.path().app_config_dir()?;
             let state = AppState::init(&config_dir)
@@ -41,6 +43,8 @@ pub fn run() {
             commands::count_documents,
             commands::run_script,
             commands::cancel_script,
+            commands::export_to_csv,
+            commands::cancel_export,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

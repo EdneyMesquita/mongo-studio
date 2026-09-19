@@ -1,1 +1,26 @@
 @import "tailwindcss";
+
+@theme {
+  --color-editor: #1e1e1e;
+  --color-panel: #252526;
+  --color-panel-alt: #2d2d30;
+  --color-panel-hover: #2a2d2e;
+  --color-border-subtle: #3c3c3c;
+  --color-text-default: #cccccc;
+  --color-text-muted: #9d9d9d;
+  --color-text-faint: #6e7681;
+  --color-accent: #0e639c;
+  --color-accent-hover: #1177bb;
+  --color-run: #16825d;
+  --color-run-hover: #1a9c6d;
+}
+
+body {
+  background-color: var(--color-editor);
+  color: var(--color-text-default);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-subtle) transparent;
+}
