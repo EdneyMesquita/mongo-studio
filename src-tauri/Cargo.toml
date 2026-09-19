@@ -1,8 +1,8 @@
 [package]
 name = "mongo-studio"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "An open-source MongoDB GUI client"
+authors = ["Matheus Caetano"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -22,6 +22,19 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+mongodb = { version = "3.9.1", default-features = false, features = ["rustls-tls", "aws-auth", "bson-3", "compat-3-3-0", "cert-key-password", "dns-resolver"] }
+bson = { version = "3.1.0", features = ["serde_with-3", "chrono-0_4", "serde", "serde_json-1"] }
+keyring = { version = "4.2.0", default-features = false, features = ["apple-native-keyring-store", "v1", "windows-native-keyring-store", "zbus-secret-service-keyring-store"] }
+russh = "0.63.3"
+uuid = { version = "1.26.1", features = ["v4", "serde"] }
+thiserror = "2.0.20"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util"] }
+apple-native-keyring-store = { version = "1.0.2", features = ["keychain"] }
+aes-gcm = "0.11.1"
+rand = "0.10.2"
+base64 = "0.23.1"
+urlencoding = "2.1.3"
+futures-util = { version = "0.3.34", features = ["io"] }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

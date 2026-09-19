@@ -1,18 +1,19 @@
 import { AppShell } from "./components/layout/AppShell";
+import { ConnectionManager } from "./components/connections/ConnectionManager";
+import { DatabaseList } from "./components/sidebar/DatabaseList";
+import { useConnectionsStore } from "./store/connectionsStore";
 
 function App() {
+  const session = useConnectionsStore((s) => s.session);
+
   return (
     <AppShell
-      sidebar={
-        <div className="p-3 text-sm text-neutral-500">
-          No connections yet
-        </div>
+      sidebar={<ConnectionManager />}
+      statusBar={
+        <span>{session ? `Connected (${session.sessionId.slice(0, 8)})` : "Not connected"}</span>
       }
-      statusBar={<span>Mongo Studio</span>}
     >
-      <div className="flex h-full items-center justify-center text-neutral-500">
-        Connect to a database to get started
-      </div>
+      <DatabaseList />
     </AppShell>
   );
 }
