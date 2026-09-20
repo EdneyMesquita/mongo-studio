@@ -48,6 +48,14 @@ npm run tauri build
 
 Produces a platform-native installer (`.dmg`/`.app` on macOS, `.msi`/`.exe` on Windows, `.deb`/`.rpm`/`.AppImage` on Linux) under `src-tauri/target/release/bundle/`.
 
+### Regenerating the app icon
+
+The source design is `src-tauri/icons/icon-source.svg`. After editing it, regenerate every platform variant with:
+
+```sh
+npx tauri icon src-tauri/icons/icon-source.svg
+```
+
 ## Releasing
 
 Pushing a tag matching `vX.Y.Z` (e.g. `v0.2.0`) triggers `.github/workflows/release.yml`, which builds installers for macOS (universal binary), Windows, and Linux and attaches them to a **draft** GitHub release for review before publishing. You can also trigger it manually from the Actions tab. Builds are unsigned, so first launches will trip Gatekeeper (macOS) or SmartScreen (Windows) warnings until code signing is set up separately.

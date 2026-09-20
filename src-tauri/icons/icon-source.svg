@@ -1,0 +1,22 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#242837"/>
+      <stop offset="1" stop-color="#0d0f14"/>
+    </linearGradient>
+    <linearGradient id="cyl" x1="512" y1="230" x2="512" y2="800" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6EF0AE"/>
+      <stop offset="1" stop-color="#0E7C4A"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+
+  <!-- database cylinder -->
+  <path d="M 232 340 L 232 684 A 280 92 0 0 0 792 684 L 792 340 Z" fill="url(#cyl)"/>
+  <ellipse cx="512" cy="340" rx="280" ry="92" fill="url(#cyl)" stroke="#0a5c37" stroke-width="8"/>
+  <ellipse cx="512" cy="684" rx="280" ry="92" fill="none" stroke="#0a5c37" stroke-width="8" opacity="0.35"/>
+
+  <path d="M 232 458 A 280 92 0 0 0 792 458" fill="none" stroke="#0a5c37" stroke-width="8" opacity="0.55"/>
+  <path d="M 232 571 A 280 92 0 0 0 792 571" fill="none" stroke="#0a5c37" stroke-width="8" opacity="0.55"/>
+</svg>
