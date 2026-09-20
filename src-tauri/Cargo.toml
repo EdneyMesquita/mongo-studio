@@ -29,7 +29,6 @@ russh = "0.63.3"
 uuid = { version = "1.26.1", features = ["v4", "serde"] }
 thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util"] }
-apple-native-keyring-store = { version = "1.0.2", features = ["keychain"] }
 aes-gcm = "0.11.1"
 rand = "0.10.2"
 base64 = "0.23.1"
@@ -39,6 +38,13 @@ rquickjs = { version = "0.14.0", features = ["futures", "macro"] }
 csv = "1.4.0"
 tauri-plugin-dialog = "2.7.3"
 
+# Only needed to force-enable apple-native-keyring-store's own "keychain"
+# feature (keyring's own feature flag doesn't do that for us). Gated to
+# macOS since this crate's CoreFoundation-based code doesn't build on
+# Windows/Linux, and keyring's own cross-platform dependency already
+# handles those targets on its own.
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { version = "1.0.2", features = ["keychain"] }
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
