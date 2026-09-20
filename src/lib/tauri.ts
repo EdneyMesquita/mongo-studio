@@ -16,6 +16,7 @@ import type {
 } from "../types/query";
 import type { ScriptResult } from "../types/script";
 import type { ExportOptions, ExportQueryInput, ExportSummary } from "../types/export";
+import type { ExplainQueryInput, ExplainVerbosity } from "../types/explain";
 
 export const api = {
   listConnectionProfiles: () =>
@@ -116,4 +117,22 @@ export const api = {
 
   cancelExport: (executionId: string) =>
     invoke<void>("cancel_export", { executionId }),
+
+  listIndexStats: (sessionId: string, database: string, collection: string) =>
+    invoke<unknown[]>("list_index_stats", { sessionId, database, collection }),
+
+  explainQuery: (
+    sessionId: string,
+    database: string,
+    collection: string,
+    query: ExplainQueryInput,
+    verbosity: ExplainVerbosity,
+  ) =>
+    invoke<unknown>("explain_query", {
+      sessionId,
+      database,
+      collection,
+      query,
+      verbosity,
+    }),
 };

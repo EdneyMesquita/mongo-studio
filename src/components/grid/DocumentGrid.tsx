@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSessionsStore } from "../../store/sessionsStore";
 import { QueryBar } from "../query/QueryBar";
 import { ExportDialog } from "../export/ExportDialog";
+import { DocumentCard } from "./DocumentCard";
 
 export function DocumentGrid() {
   const { selectedCollection, selectedDatabase, stats, results, error, loading } =
@@ -50,12 +51,7 @@ export function DocumentGrid() {
         )}
         <div className="flex flex-col gap-2">
           {results?.documents.map((doc, i) => (
-            <pre
-              key={i}
-              className="overflow-x-auto rounded border border-border-subtle bg-panel p-2 text-xs text-text-default"
-            >
-              {JSON.stringify(doc, null, 2)}
-            </pre>
+            <DocumentCard key={i} doc={doc} collectionName={selectedCollection} />
           ))}
         </div>
       </div>

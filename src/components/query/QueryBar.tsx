@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import { useSessionsStore } from "../../store/sessionsStore";
 import type { QueryMode } from "../../store/sessionsStore";
+import { ExplainDialog } from "../explain/ExplainDialog";
 
 const inputClass =
   "rounded border border-border-subtle bg-panel px-2 py-1 text-xs text-text-default focus:border-accent focus:outline-none";
@@ -28,6 +30,7 @@ export function QueryBar() {
     setPipelineText,
     runQuery,
   } = useSessionsStore();
+  const [explainOpen, setExplainOpen] = useState(false);
 
   if (!session) return null;
 
@@ -118,7 +121,15 @@ export function QueryBar() {
         >
           Run
         </button>
+        <button
+          type="button"
+          className="rounded border border-border-subtle px-3 py-1.5 text-xs text-text-default hover:bg-panel-hover"
+          onClick={() => setExplainOpen(true)}
+        >
+          Explain
+        </button>
       </div>
+      {explainOpen && <ExplainDialog onClose={() => setExplainOpen(false)} />}
     </div>
   );
 }

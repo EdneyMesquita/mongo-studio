@@ -38,7 +38,7 @@ export function Sidebar() {
       )}
 
       <div className="flex items-center justify-between px-3 py-3">
-        <span className="text-base font-bold text-white">Mongo Studio</span>
+        <span className="text-base font-bold text-text-default">Mongo Studio</span>
         <ThemeSwitcher />
       </div>
 
@@ -48,7 +48,7 @@ export function Sidebar() {
         </span>
         <button
           type="button"
-          className="rounded p-1 text-text-muted hover:bg-sidebar-hover hover:text-white"
+          className="rounded p-1 text-text-muted hover:bg-sidebar-hover hover:text-text-default"
           onClick={() => setShowForm(true)}
           title="New connection"
         >

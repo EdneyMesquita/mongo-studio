@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Palette } from "lucide-react";
-import { THEMES, applyTheme, getStoredTheme } from "../../lib/themes";
+import { THEMES } from "../../lib/themes";
+import { useThemeStore } from "../../store/themeStore";
 
 export function ThemeSwitcher() {
   const [open, setOpen] = useState(false);
-  const [current, setCurrent] = useState(getStoredTheme());
+  const { themeId, setTheme } = useThemeStore();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -17,9 +18,8 @@ export function ThemeSwitcher() {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-  function pick(themeId: string) {
-    applyTheme(themeId);
-    setCurrent(themeId);
+  function pick(id: string) {
+    setTheme(id);
     setOpen(false);
   }
 
@@ -27,7 +27,7 @@ export function ThemeSwitcher() {
     <div className="relative" ref={ref}>
       <button
         type="button"
-        className="rounded p-1.5 text-text-muted hover:bg-sidebar-hover hover:text-white"
+        className="rounded p-1.5 text-text-muted hover:bg-sidebar-hover hover:text-text-default"
         onClick={() => setOpen((o) => !o)}
         title="Color theme"
       >
@@ -47,7 +47,7 @@ export function ThemeSwitcher() {
                 style={{ backgroundColor: theme.swatch }}
               />
               <span className="flex-1 truncate">{theme.name}</span>
-              {current === theme.id && (
+              {themeId === theme.id && (
                 <Check size={13} className="shrink-0 text-text-muted" />
               )}
             </button>

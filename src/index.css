@@ -127,6 +127,27 @@
   --t-status-green: #859900;
 }
 
+/* "Light" - VS Code Light+ style. */
+:root[data-theme="light"] {
+  --t-editor: #ffffff;
+  --t-panel: #f3f3f3;
+  --t-panel-alt: #ececec;
+  --t-panel-hover: #e4e6f1;
+  --t-border-subtle: #d4d4d4;
+  --t-text-default: #1e1e1e;
+  --t-text-muted: #5a5a5a;
+  --t-text-faint: #7a7a7a;
+  --t-accent: #0066b8;
+  --t-accent-hover: #005a9e;
+  --t-run: #0e7c4a;
+  --t-run-hover: #0a6b3f;
+  --t-sidebar: #f3f3f3;
+  --t-sidebar-active: #e5d1e6;
+  --t-sidebar-active-hover: #dcc0de;
+  --t-sidebar-hover: #e8e8e8;
+  --t-status-green: #0e7c4a;
+}
+
 body {
   background-color: var(--color-editor);
   color: var(--color-text-default);

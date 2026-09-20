@@ -2,12 +2,15 @@ import Editor from "@monaco-editor/react";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import { useSessionsStore } from "../../store/sessionsStore";
 import { useConsoleStore } from "../../store/consoleStore";
+import { useThemeStore } from "../../store/themeStore";
+import { isLightTheme } from "../../lib/themes";
 import { ConsoleOutput } from "./ConsoleOutput";
 
 export function ScriptConsole() {
   const session = useConnectionsStore((s) => s.session);
   const selectedDatabase = useSessionsStore((s) => s.selectedDatabase);
   const { script, running, setScript, cancel } = useConsoleStore();
+  const themeId = useThemeStore((s) => s.themeId);
 
   if (!session) {
     return (
@@ -65,7 +68,7 @@ export function ScriptConsole() {
         <div className="min-h-[200px] flex-1 md:h-full">
           <Editor
             language="javascript"
-            theme="vs-dark"
+            theme={isLightTheme(themeId) ? "light" : "vs-dark"}
             value={script}
             onChange={(value) => setScript(value ?? "")}
             options={{

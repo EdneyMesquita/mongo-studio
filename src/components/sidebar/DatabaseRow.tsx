@@ -32,7 +32,7 @@ export function DatabaseRow({ db, sessionId }: { db: DatabaseInfo; sessionId: st
               type="button"
               className={`block w-full truncate px-1.5 py-1 text-left text-[11px] hover:bg-sidebar-hover ${
                 selectedCollection === coll.name
-                  ? "font-medium text-white"
+                  ? "font-medium text-text-default"
                   : "text-text-muted"
               }`}
               onClick={() => selectCollection(sessionId, db.name, coll.name)}
