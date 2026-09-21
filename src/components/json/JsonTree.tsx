@@ -1,75 +1,8 @@
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
+import { bsonLiteral, childEntries, isPlainObject } from "../../lib/bsonValue";
 
 const INDENT_PX = 14;
-
-/**
- * The backend sends relaxed Extended JSON, so BSON types arrive as wrapper
- * objects. Rendering `{"$oid": "..."}` as an expandable node would bury the
- * value two lines deep, so collapse the known wrappers back into the scalar
- * they stand for, spelled the way mongosh spells it.
- *
- * Returns null for anything that is a genuine object.
- */
-function bsonLiteral(value: Record<string, unknown>): string | null {
-  const keys = Object.keys(value);
-  if (keys.length !== 1) return null;
-
-  switch (keys[0]) {
-    case "$oid":
-      return `ObjectId("${String(value.$oid)}")`;
-    case "$date": {
-      const date = value.$date;
-      if (typeof date === "string") return `ISODate("${date}")`;
-      // out-of-range dates stay as { $date: { $numberLong } } even in relaxed mode
-      if (isPlainObject(date) && typeof date.$numberLong === "string") {
-        return `ISODate(${date.$numberLong})`;
-      }
-      return null;
-    }
-    case "$numberDecimal":
-      return `Decimal128("${String(value.$numberDecimal)}")`;
-    case "$numberLong":
-      return `Long("${String(value.$numberLong)}")`;
-    case "$numberInt":
-      return String(value.$numberInt);
-    case "$numberDouble":
-      return String(value.$numberDouble);
-    case "$timestamp": {
-      const ts = value.$timestamp;
-      if (!isPlainObject(ts)) return null;
-      return `Timestamp(${String(ts.t)}, ${String(ts.i)})`;
-    }
-    case "$binary": {
-      const bin = value.$binary;
-      if (!isPlainObject(bin)) return null;
-      const base64 = String(bin.base64 ?? "");
-      const shown = base64.length > 24 ? `${base64.slice(0, 24)}…` : base64;
-      return `BinData(${String(bin.subType ?? "00")}, "${shown}")`;
-    }
-    case "$regularExpression": {
-      const re = value.$regularExpression;
-      if (!isPlainObject(re)) return null;
-      return `/${String(re.pattern ?? "")}/${String(re.options ?? "")}`;
-    }
-    case "$code":
-      return `Code(${JSON.stringify(value.$code)})`;
-    case "$symbol":
-      return `Symbol("${String(value.$symbol)}")`;
-    case "$minKey":
-      return "MinKey";
-    case "$maxKey":
-      return "MaxKey";
-    case "$undefined":
-      return "undefined";
-    default:
-      return null;
-  }
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function Scalar({ value }: { value: unknown }) {
   if (value === null) return <span className="text-json-null">null</span>;
@@ -119,10 +52,9 @@ function JsonNode({
   const [open, setOpen] = useState(depth < defaultOpenDepth);
 
   const isArray = Array.isArray(value);
-  const isBranch =
-    isArray || (isPlainObject(value) && bsonLiteral(value) === null);
+  const entries = childEntries(value);
 
-  if (!isBranch) {
+  if (entries === null) {
     return (
       <div
         className="break-words py-px"
@@ -135,9 +67,6 @@ function JsonNode({
     );
   }
 
-  const entries: [string, unknown][] = isArray
-    ? (value as unknown[]).map((v, i) => [String(i), v])
-    : Object.entries(value as Record<string, unknown>);
   const [openBrace, closeBrace] = isArray ? ["[", "]"] : ["{", "}"];
   const summary = isArray
     ? `${entries.length} item${entries.length === 1 ? "" : "s"}`
