@@ -13,6 +13,15 @@ const inputClass =
 const labelClass = "block text-xs text-text-muted mb-1";
 const sectionClass = "rounded border border-border-subtle p-3";
 
+type ConnectionTab = "general" | "tls" | "ssh" | "advanced";
+
+const tabs: { id: ConnectionTab; label: string }[] = [
+  { id: "general", label: "General" },
+  { id: "tls", label: "TLS" },
+  { id: "ssh", label: "SSH tunnel" },
+  { id: "advanced", label: "Advanced" },
+];
+
 interface ConnectionFormProps {
   onSaved: () => void;
   onCancel: () => void;
@@ -20,10 +29,22 @@ interface ConnectionFormProps {
 
 export function ConnectionForm({ onSaved, onCancel }: ConnectionFormProps) {
   const [input, setInput] = useState<ConnectionProfileInput>(newProfileInput());
+  const [tab, setTab] = useState<ConnectionTab>("general");
   const { saveProfile, testConnection, lastTestResult, loading, error } =
     useConnectionsStore();
 
   const sourceKind = input.source.kind;
+
+  // Tabs hide their fields, so mark the ones holding a non-default setting.
+  const tabHasSettings: Record<ConnectionTab, boolean> = {
+    general: false,
+    tls:
+      input.tls.enabled ||
+      input.tls.allowInvalidCertificates ||
+      Boolean(input.tls.caFile || input.tls.certKeyFile || input.tlsCertKeyPassphrase),
+    ssh: Boolean(input.sshTunnel?.enabled),
+    advanced: Object.values(input.advanced).some((v) => v !== null),
+  };
 
   function update<K extends keyof ConnectionProfileInput>(
     key: K,
@@ -52,6 +73,30 @@ export function ConnectionForm({ onSaved, onCancel }: ConnectionFormProps) {
       title="New connection"
       width="max-w-2xl"
       onClose={onCancel}
+      subheader={
+        <div className="flex gap-1 px-3">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs ${
+                tab === t.id
+                  ? "border-accent text-text-default"
+                  : "border-transparent text-text-muted hover:text-text-default"
+              }`}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+              {tabHasSettings[t.id] && (
+                <span
+                  className="h-1.5 w-1.5 rounded-full bg-status-green"
+                  title="Configured"
+                />
+              )}
+            </button>
+          ))}
+        </div>
+      }
       footer={
         <div className="flex flex-col gap-2">
           {lastTestResult && (
@@ -98,116 +143,117 @@ export function ConnectionForm({ onSaved, onCancel }: ConnectionFormProps) {
         </div>
       }
     >
-      <div className="flex flex-col gap-4 text-text-default">
-        <div>
-          <label className={labelClass}>Name</label>
-          <input
-            className={inputClass}
-            autoFocus
-            value={input.name}
-            onChange={(e) => update("name", e.target.value)}
-            placeholder="My cluster"
-          />
-        </div>
-
-        <div className={sectionClass}>
-          <div className="mb-2 flex gap-3 text-xs">
-            <label className="flex items-center gap-1">
-              <input
-                type="radio"
-                checked={sourceKind === "uri"}
-                onChange={() => update("source", { kind: "uri", uri: "" })}
-              />
-              Connection string
-            </label>
-            <label className="flex items-center gap-1">
-              <input
-                type="radio"
-                checked={sourceKind === "manual"}
-                onChange={() =>
-                  update("source", { kind: "manual", host: "", port: 27017, srv: false })
-                }
-              />
-              Host / port
-            </label>
-          </div>
-
-          {input.source.kind === "uri" ? (
+      <div className="flex min-h-[19rem] flex-col gap-4 text-text-default">
+        {tab === "general" && (
+          <>
             <div>
-              <label className={labelClass}>
-                URI (mongodb:// or mongodb+srv://)
-              </label>
+              <label className={labelClass}>Name</label>
               <input
                 className={inputClass}
-                value={input.source.uri}
-                onChange={(e) =>
-                  update("source", { kind: "uri", uri: e.target.value })
-                }
-                placeholder="mongodb+srv://user:pass@cluster0.example.mongodb.net/mydb"
+                autoFocus
+                value={input.name}
+                onChange={(e) => update("name", e.target.value)}
+                placeholder="My cluster"
               />
             </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-2">
-              <div className="col-span-2">
-                <label className={labelClass}>Host</label>
+
+            <div className={sectionClass}>
+              <div className="mb-2 flex gap-3 text-xs">
+                <label className="flex items-center gap-1">
+                  <input
+                    type="radio"
+                    checked={sourceKind === "uri"}
+                    onChange={() => update("source", { kind: "uri", uri: "" })}
+                  />
+                  Connection string
+                </label>
+                <label className="flex items-center gap-1">
+                  <input
+                    type="radio"
+                    checked={sourceKind === "manual"}
+                    onChange={() =>
+                      update("source", { kind: "manual", host: "", port: 27017, srv: false })
+                    }
+                  />
+                  Host / port
+                </label>
+              </div>
+
+              {input.source.kind === "uri" ? (
+                <div>
+                  <label className={labelClass}>
+                    URI (mongodb:// or mongodb+srv://)
+                  </label>
+                  <input
+                    className={inputClass}
+                    value={input.source.uri}
+                    onChange={(e) =>
+                      update("source", { kind: "uri", uri: e.target.value })
+                    }
+                    placeholder="mongodb+srv://user:pass@cluster0.example.mongodb.net/mydb"
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-2">
+                    <label className={labelClass}>Host</label>
+                    <input
+                      className={inputClass}
+                      value={input.source.host}
+                      onChange={(e) =>
+                        update("source", { ...input.source, host: e.target.value } as ConnectionProfileInput["source"])
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Port</label>
+                    <input
+                      className={inputClass}
+                      type="number"
+                      value={input.source.port}
+                      onChange={(e) =>
+                        update("source", { ...input.source, port: Number(e.target.value) } as ConnectionProfileInput["source"])
+                      }
+                    />
+                  </div>
+                  <label className="col-span-3 flex items-center gap-1 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={input.source.srv}
+                      onChange={(e) =>
+                        update("source", { ...input.source, srv: e.target.checked } as ConnectionProfileInput["source"])
+                      }
+                    />
+                    Use SRV record (mongodb+srv://)
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <div className={`${sectionClass} grid grid-cols-2 gap-2`}>
+              <div>
+                <label className={labelClass}>Username (optional override)</label>
                 <input
                   className={inputClass}
-                  value={input.source.host}
-                  onChange={(e) =>
-                    update("source", { ...input.source, host: e.target.value } as ConnectionProfileInput["source"])
-                  }
+                  value={input.username ?? ""}
+                  onChange={(e) => update("username", e.target.value || null)}
                 />
               </div>
               <div>
-                <label className={labelClass}>Port</label>
+                <label className={labelClass}>Password (optional override)</label>
                 <input
                   className={inputClass}
-                  type="number"
-                  value={input.source.port}
-                  onChange={(e) =>
-                    update("source", { ...input.source, port: Number(e.target.value) } as ConnectionProfileInput["source"])
-                  }
+                  type="password"
+                  value={input.password ?? ""}
+                  onChange={(e) => update("password", e.target.value || null)}
                 />
               </div>
-              <label className="col-span-3 flex items-center gap-1 text-xs">
-                <input
-                  type="checkbox"
-                  checked={input.source.srv}
-                  onChange={(e) =>
-                    update("source", { ...input.source, srv: e.target.checked } as ConnectionProfileInput["source"])
-                  }
-                />
-                Use SRV record (mongodb+srv://)
-              </label>
             </div>
-          )}
-        </div>
+          </>
+        )}
 
-        <div className={`${sectionClass} grid grid-cols-2 gap-2`}>
-          <div>
-            <label className={labelClass}>Username (optional override)</label>
-            <input
-              className={inputClass}
-              value={input.username ?? ""}
-              onChange={(e) => update("username", e.target.value || null)}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Password (optional override)</label>
-            <input
-              className={inputClass}
-              type="password"
-              value={input.password ?? ""}
-              onChange={(e) => update("password", e.target.value || null)}
-            />
-          </div>
-        </div>
-
-        <details className={sectionClass}>
-          <summary className="cursor-pointer text-xs text-text-muted">
-            TLS
-          </summary>
-          <div className="mt-2 flex flex-col gap-2">
+        {tab === "tls" && (
+          <div className="flex flex-col gap-2">
             <label className="flex items-center gap-1 text-xs">
               <input
                 type="checkbox"
@@ -258,13 +304,10 @@ export function ConnectionForm({ onSaved, onCancel }: ConnectionFormProps) {
               Allow invalid certificates (testing only)
             </label>
           </div>
-        </details>
+        )}
 
-        <details className={sectionClass}>
-          <summary className="cursor-pointer text-xs text-text-muted">
-            SSH tunnel
-          </summary>
-          <div className="mt-2 flex flex-col gap-2">
+        {tab === "ssh" && (
+          <div className="flex flex-col gap-2">
             <label className="flex items-center gap-1 text-xs">
               <input
                 type="checkbox"
@@ -372,148 +415,147 @@ export function ConnectionForm({ onSaved, onCancel }: ConnectionFormProps) {
               </>
             )}
           </div>
-        </details>
+        )}
 
-        <details className={sectionClass}>
-          <summary className="cursor-pointer text-xs text-text-muted">
-            Advanced
-          </summary>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <div>
-              <label className={labelClass}>App name</label>
-              <input
-                className={inputClass}
-                value={input.advanced.appName ?? ""}
-                onChange={(e) =>
-                  update("advanced", { ...input.advanced, appName: e.target.value || null })
-                }
-              />
+        {tab === "advanced" && (
+          <div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className={labelClass}>App name</label>
+                <input
+                  className={inputClass}
+                  value={input.advanced.appName ?? ""}
+                  onChange={(e) =>
+                    update("advanced", { ...input.advanced, appName: e.target.value || null })
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Replica set</label>
+                <input
+                  className={inputClass}
+                  value={input.advanced.replicaSet ?? ""}
+                  onChange={(e) =>
+                    update("advanced", { ...input.advanced, replicaSet: e.target.value || null })
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Connect timeout (ms)</label>
+                <input
+                  className={inputClass}
+                  type="number"
+                  value={input.advanced.connectTimeoutMs ?? ""}
+                  onChange={(e) =>
+                    update("advanced", {
+                      ...input.advanced,
+                      connectTimeoutMs: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Server selection timeout (ms)</label>
+                <input
+                  className={inputClass}
+                  type="number"
+                  value={input.advanced.serverSelectionTimeoutMs ?? ""}
+                  onChange={(e) =>
+                    update("advanced", {
+                      ...input.advanced,
+                      serverSelectionTimeoutMs: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Max pool size</label>
+                <input
+                  className={inputClass}
+                  type="number"
+                  value={input.advanced.maxPoolSize ?? ""}
+                  onChange={(e) =>
+                    update("advanced", {
+                      ...input.advanced,
+                      maxPoolSize: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Min pool size</label>
+                <input
+                  className={inputClass}
+                  type="number"
+                  value={input.advanced.minPoolSize ?? ""}
+                  onChange={(e) =>
+                    update("advanced", {
+                      ...input.advanced,
+                      minPoolSize: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Auth mechanism</label>
+                <select
+                  className={inputClass}
+                  value={input.advanced.authMechanism ?? ""}
+                  onChange={(e) =>
+                    update("advanced", {
+                      ...input.advanced,
+                      authMechanism: (e.target.value || null) as ConnectionProfileInput["advanced"]["authMechanism"],
+                    })
+                  }
+                >
+                  <option value="">Negotiate automatically</option>
+                  <option value="SCRAM_SHA1">SCRAM-SHA-1</option>
+                  <option value="SCRAM_SHA256">SCRAM-SHA-256</option>
+                  <option value="MONGODB_X509">X.509</option>
+                  <option value="MONGODB_AWS">MONGODB-AWS (IAM)</option>
+                  <option value="GSSAPI">Kerberos (GSSAPI, requires special build)</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Auth source</label>
+                <input
+                  className={inputClass}
+                  value={input.advanced.authSource ?? ""}
+                  onChange={(e) =>
+                    update("advanced", { ...input.advanced, authSource: e.target.value || null })
+                  }
+                />
+              </div>
+              <label className="flex items-center gap-1 text-xs">
+                <input
+                  type="checkbox"
+                  checked={input.advanced.retryWrites ?? true}
+                  onChange={(e) =>
+                    update("advanced", { ...input.advanced, retryWrites: e.target.checked })
+                  }
+                />
+                Retry writes
+              </label>
+              <label className="flex items-center gap-1 text-xs">
+                <input
+                  type="checkbox"
+                  checked={input.advanced.directConnection ?? false}
+                  onChange={(e) =>
+                    update("advanced", { ...input.advanced, directConnection: e.target.checked })
+                  }
+                />
+                Direct connection (skip topology discovery)
+              </label>
             </div>
-            <div>
-              <label className={labelClass}>Replica set</label>
-              <input
-                className={inputClass}
-                value={input.advanced.replicaSet ?? ""}
-                onChange={(e) =>
-                  update("advanced", { ...input.advanced, replicaSet: e.target.value || null })
-                }
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Connect timeout (ms)</label>
-              <input
-                className={inputClass}
-                type="number"
-                value={input.advanced.connectTimeoutMs ?? ""}
-                onChange={(e) =>
-                  update("advanced", {
-                    ...input.advanced,
-                    connectTimeoutMs: e.target.value ? Number(e.target.value) : null,
-                  })
-                }
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Server selection timeout (ms)</label>
-              <input
-                className={inputClass}
-                type="number"
-                value={input.advanced.serverSelectionTimeoutMs ?? ""}
-                onChange={(e) =>
-                  update("advanced", {
-                    ...input.advanced,
-                    serverSelectionTimeoutMs: e.target.value ? Number(e.target.value) : null,
-                  })
-                }
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Max pool size</label>
-              <input
-                className={inputClass}
-                type="number"
-                value={input.advanced.maxPoolSize ?? ""}
-                onChange={(e) =>
-                  update("advanced", {
-                    ...input.advanced,
-                    maxPoolSize: e.target.value ? Number(e.target.value) : null,
-                  })
-                }
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Min pool size</label>
-              <input
-                className={inputClass}
-                type="number"
-                value={input.advanced.minPoolSize ?? ""}
-                onChange={(e) =>
-                  update("advanced", {
-                    ...input.advanced,
-                    minPoolSize: e.target.value ? Number(e.target.value) : null,
-                  })
-                }
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Auth mechanism</label>
-              <select
-                className={inputClass}
-                value={input.advanced.authMechanism ?? ""}
-                onChange={(e) =>
-                  update("advanced", {
-                    ...input.advanced,
-                    authMechanism: (e.target.value || null) as ConnectionProfileInput["advanced"]["authMechanism"],
-                  })
-                }
-              >
-                <option value="">Negotiate automatically</option>
-                <option value="SCRAM_SHA1">SCRAM-SHA-1</option>
-                <option value="SCRAM_SHA256">SCRAM-SHA-256</option>
-                <option value="MONGODB_X509">X.509</option>
-                <option value="MONGODB_AWS">MONGODB-AWS (IAM)</option>
-                <option value="GSSAPI">Kerberos (GSSAPI, requires special build)</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Auth source</label>
-              <input
-                className={inputClass}
-                value={input.advanced.authSource ?? ""}
-                onChange={(e) =>
-                  update("advanced", { ...input.advanced, authSource: e.target.value || null })
-                }
-              />
-            </div>
-            <label className="flex items-center gap-1 text-xs">
-              <input
-                type="checkbox"
-                checked={input.advanced.retryWrites ?? true}
-                onChange={(e) =>
-                  update("advanced", { ...input.advanced, retryWrites: e.target.checked })
-                }
-              />
-              Retry writes
-            </label>
-            <label className="flex items-center gap-1 text-xs">
-              <input
-                type="checkbox"
-                checked={input.advanced.directConnection ?? false}
-                onChange={(e) =>
-                  update("advanced", { ...input.advanced, directConnection: e.target.checked })
-                }
-              />
-              Direct connection (skip topology discovery)
-            </label>
+            <button
+              type="button"
+              className="mt-2 text-xs text-text-muted underline"
+              onClick={() => update("advanced", emptyAdvancedOptions())}
+            >
+              Reset advanced options
+            </button>
           </div>
-          <button
-            type="button"
-            className="mt-2 text-xs text-text-muted underline"
-            onClick={() => update("advanced", emptyAdvancedOptions())}
-          >
-            Reset advanced options
-          </button>
-        </details>
+        )}
       </div>
     </Modal>
   );

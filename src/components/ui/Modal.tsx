@@ -5,6 +5,8 @@ interface ModalProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** Rendered in a fixed strip between the header and the body, e.g. tabs. */
+  subheader?: ReactNode;
   /** Rendered in a fixed bar below the scrollable body. */
   footer?: ReactNode;
   /** Tailwind max-width class for the panel. */
@@ -15,6 +17,7 @@ export function Modal({
   title,
   onClose,
   children,
+  subheader,
   footer,
   width = "max-w-md",
 }: ModalProps) {
@@ -49,6 +52,10 @@ export function Modal({
             <X size={15} />
           </button>
         </div>
+
+        {subheader && (
+          <div className="shrink-0 border-b border-border-subtle">{subheader}</div>
+        )}
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
 
