@@ -16,15 +16,6 @@ export function Sidebar() {
     loadSecretBackendInfo();
   }, [refreshProfiles, loadSecretBackendInfo]);
 
-  if (showForm) {
-    return (
-      <ConnectionForm
-        onSaved={() => setShowForm(false)}
-        onCancel={() => setShowForm(false)}
-      />
-    );
-  }
-
   const filtered = profiles.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase()),
   );
@@ -80,6 +71,13 @@ export function Sidebar() {
           <ConnectionRow key={profile.id} profile={profile} />
         ))}
       </div>
+
+      {showForm && (
+        <ConnectionForm
+          onSaved={() => setShowForm(false)}
+          onCancel={() => setShowForm(false)}
+        />
+      )}
     </div>
   );
 }
