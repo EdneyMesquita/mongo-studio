@@ -6,6 +6,7 @@ import {
   childEntries,
   dateIso,
   isPlainObject,
+  plainText,
   relativeTime,
 } from "../../lib/bsonValue";
 
@@ -13,7 +14,7 @@ const INDENT_PX = 14;
 /** Fields shown inline in a collapsed object's preview before giving up. */
 const PREVIEW_FIELDS = 3;
 
-function ScalarText({ value }: { value: unknown }) {
+function ScalarText({ value, quoted = false }: { value: unknown; quoted?: boolean }) {
   if (value === null) return <span className="text-json-null">null</span>;
 
   const iso = dateIso(value);
@@ -34,7 +35,9 @@ function ScalarText({ value }: { value: unknown }) {
 
   switch (typeof value) {
     case "string":
-      return <span className="text-json-string">{value}</span>;
+      return (
+        <span className="text-json-string">{quoted ? `"${value}"` : value}</span>
+      );
     case "number":
       return <span className="text-json-number">{value}</span>;
     case "boolean":
@@ -44,35 +47,47 @@ function ScalarText({ value }: { value: unknown }) {
   }
 }
 
+interface PreviewProps {
+  value: unknown;
+  /** Field to leave out, when the Key column already shows it. */
+  omitKey?: string;
+}
+
 /** One-line summary of a collapsed object or array, as the row's value. */
-function Preview({ value }: { value: unknown }) {
+function Preview({ value, omitKey }: PreviewProps) {
   if (Array.isArray(value)) {
     return <span className="text-text-muted">Array[{value.length}]</span>;
   }
   const entries = Object.entries(value as Record<string, unknown>);
-  const shown = entries.slice(0, PREVIEW_FIELDS);
+  const shown = entries
+    .filter(([key]) => key !== omitKey)
+    .slice(0, PREVIEW_FIELDS);
   return (
-    <span className="text-text-muted">
-      {"{ "}
-      {shown.map(([key, child], i) => (
-        <span key={key}>
-          {i > 0 && ", "}
-          <span className="text-json-key">{key}</span>
-          {": "}
-          {childEntries(child) === null ? (
-            <ScalarText value={child} />
-          ) : (
-            <span className="text-text-faint">
-              {Array.isArray(child) ? "[…]" : "{…}"}
-            </span>
-          )}
-        </span>
-      ))}
-      {" }"}
-      <span className="ml-1 text-text-faint">
-        ({entries.length} field{entries.length === 1 ? "" : "s"})
+    // The field count is pinned outside the truncating span: it is the most
+    // useful part of the preview, so it must survive a narrow column.
+    <div className="flex min-w-0 items-baseline gap-2">
+      <span className="truncate text-text-muted">
+        {"{ "}
+        {shown.map(([key, child], i) => (
+          <span key={key}>
+            {i > 0 && ", "}
+            <span className="text-json-key">{key}</span>
+            {": "}
+            {childEntries(child) === null ? (
+              <ScalarText value={child} quoted />
+            ) : (
+              <span className="text-text-faint">
+                {Array.isArray(child) ? "[…]" : "{…}"}
+              </span>
+            )}
+          </span>
+        ))}
+        {" }"}
       </span>
-    </span>
+      <span className="shrink-0 text-text-faint">
+        {entries.length} field{entries.length === 1 ? "" : "s"}
+      </span>
+    </div>
   );
 }
 
@@ -158,14 +173,14 @@ export function JsonTable({ value, rootActions, className = "" }: JsonTableProps
           <col className="w-[34%]" />
           <col />
           <col className="w-[15%]" />
-          {rootActions && <col className="w-[58px]" />}
+          {rootActions && <col className="w-[76px]" />}
         </colgroup>
         <thead>
           <tr>
             <th className={headCell}>Key</th>
             <th className={headCell}>Value</th>
             <th className={headCell}>Type</th>
-            {rootActions && <th className={headCell} />}
+            {rootActions && <th className={`${headCell} pr-3`} />}
           </tr>
         </thead>
         <tbody>
@@ -175,11 +190,14 @@ export function JsonTable({ value, rootActions, className = "" }: JsonTableProps
             return (
               <tr
                 key={row.path}
-                className="group border-b border-border-subtle/50 align-top hover:bg-panel-hover"
+                className="group border-b border-border-subtle/50 align-middle hover:bg-panel-hover"
               >
                 <td
-                  className={`px-2 py-1 ${row.hasChildren ? "cursor-pointer" : ""}`}
+                  className={`truncate px-2 py-1 ${
+                    row.hasChildren ? "cursor-pointer" : ""
+                  }`}
                   style={{ paddingLeft: row.depth * INDENT_PX + 8 }}
+                  title={row.label}
                   onClick={row.hasChildren ? () => toggle(row.path) : undefined}
                 >
                   {row.hasChildren ? (
@@ -195,26 +213,34 @@ export function JsonTable({ value, rootActions, className = "" }: JsonTableProps
                   {row.ordinal && (
                     <span className="mr-1 text-text-faint">{row.ordinal}</span>
                   )}
-                  <span className="break-all text-text-default">{row.label}</span>
+                  <span className="text-text-default">{row.label}</span>
                 </td>
-                <td className="break-all px-2 py-1">
+                <td
+                  className="overflow-hidden px-2 py-1"
+                  title={plainText(row.value)}
+                >
                   {children === null ? (
-                    <ScalarText value={row.value} />
+                    <div className="truncate">
+                      <ScalarText value={row.value} />
+                    </div>
                   ) : children.length === 0 ? (
                     <span className="text-text-faint">
                       {Array.isArray(row.value) ? "Array[0]" : "{ }"}
                     </span>
                   ) : (
-                    <Preview value={row.value} />
+                    <Preview
+                      value={row.value}
+                      omitKey={row.depth === 0 && numbered ? "_id" : undefined}
+                    />
                   )}
                 </td>
-                <td className="px-2 py-1 text-text-muted">
+                <td className="truncate px-2 py-1 text-text-muted">
                   {bsonTypeName(row.value, row.depth === 0 && numbered)}
                 </td>
                 {rootActions && (
-                  <td className="px-2 py-1">
+                  <td className="py-1 pl-2 pr-3">
                     {row.rootIndex !== null && (
-                      <span className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <span className="flex justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                         {rootActions(row.value, row.rootIndex)}
                       </span>
                     )}

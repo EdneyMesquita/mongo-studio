@@ -158,3 +158,15 @@ export function relativeTime(iso: string, now = Date.now()): string | null {
   }
   return fmt.format(0, "second");
 }
+
+/** Plain-text rendering of any value, for a cell's hover title. */
+export function plainText(value: unknown, maxLength = 400): string {
+  const literal = bsonLiteral(value);
+  const text =
+    literal !== null
+      ? literal
+      : typeof value === "string"
+        ? value
+        : JSON.stringify(value) ?? String(value);
+  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+}
