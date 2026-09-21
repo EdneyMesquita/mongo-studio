@@ -18,6 +18,13 @@
   --color-sidebar-active-hover: var(--t-sidebar-active-hover);
   --color-sidebar-hover: var(--t-sidebar-hover);
   --color-status-green: var(--t-status-green);
+  --color-json-key: var(--t-json-key);
+  --color-json-string: var(--t-json-string);
+  --color-json-number: var(--t-json-number);
+  --color-json-boolean: var(--t-json-boolean);
+  --color-json-null: var(--t-json-null);
+  --color-json-bson: var(--t-json-bson);
+  --color-json-punct: var(--t-json-punct);
 }
 
 /* "Compass" - default. Near-black sidebar with MongoDB Compass's plum
@@ -41,6 +48,13 @@
   --t-sidebar-active-hover: #4a2440;
   --t-sidebar-hover: #1c2126;
   --t-status-green: #4ade80;
+  --t-json-key: #9cdcfe;
+  --t-json-string: #ce9178;
+  --t-json-number: #b5cea8;
+  --t-json-boolean: #569cd6;
+  --t-json-null: #569cd6;
+  --t-json-bson: #4ec9b0;
+  --t-json-punct: #808080;
 }
 
 /* "Dark Modern" - stock VS Code Dark+, blue accents throughout. */
@@ -62,6 +76,13 @@
   --t-sidebar-active-hover: #3f3f46;
   --t-sidebar-hover: #2a2d2e;
   --t-status-green: #4ade80;
+  --t-json-key: #9cdcfe;
+  --t-json-string: #ce9178;
+  --t-json-number: #b5cea8;
+  --t-json-boolean: #569cd6;
+  --t-json-null: #569cd6;
+  --t-json-bson: #4ec9b0;
+  --t-json-punct: #808080;
 }
 
 /* "Monokai" */
@@ -83,6 +104,13 @@
   --t-sidebar-active-hover: #5c481f;
   --t-sidebar-hover: #33342c;
   --t-status-green: #a6e22e;
+  --t-json-key: #a6e22e;
+  --t-json-string: #e6db74;
+  --t-json-number: #ae81ff;
+  --t-json-boolean: #ae81ff;
+  --t-json-null: #f92672;
+  --t-json-bson: #66d9ef;
+  --t-json-punct: #75715e;
 }
 
 /* "Dracula" */
@@ -104,6 +132,13 @@
   --t-sidebar-active-hover: #54346e;
   --t-sidebar-hover: #2b2d3a;
   --t-status-green: #50fa7b;
+  --t-json-key: #8be9fd;
+  --t-json-string: #f1fa8c;
+  --t-json-number: #bd93f9;
+  --t-json-boolean: #bd93f9;
+  --t-json-null: #ff79c6;
+  --t-json-bson: #50fa7b;
+  --t-json-punct: #6272a4;
 }
 
 /* "Solarized Dark" */
@@ -125,6 +160,13 @@
   --t-sidebar-active-hover: #375c48;
   --t-sidebar-hover: #073642;
   --t-status-green: #859900;
+  --t-json-key: #268bd2;
+  --t-json-string: #2aa198;
+  --t-json-number: #d33682;
+  --t-json-boolean: #b58900;
+  --t-json-null: #cb4b16;
+  --t-json-bson: #859900;
+  --t-json-punct: #586e75;
 }
 
 /* "Light" - VS Code Light+ style. */
@@ -146,6 +188,13 @@
   --t-sidebar-active-hover: #dcc0de;
   --t-sidebar-hover: #e8e8e8;
   --t-status-green: #0e7c4a;
+  --t-json-key: #0451a5;
+  --t-json-string: #a31515;
+  --t-json-number: #098658;
+  --t-json-boolean: #0000ff;
+  --t-json-null: #0000ff;
+  --t-json-bson: #267f99;
+  --t-json-punct: #666666;
 }
 
 body {

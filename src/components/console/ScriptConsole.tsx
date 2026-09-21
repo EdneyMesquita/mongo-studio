@@ -5,6 +5,7 @@ import { useConsoleStore } from "../../store/consoleStore";
 import { useThemeStore } from "../../store/themeStore";
 import { isLightTheme } from "../../lib/themes";
 import { ConsoleOutput } from "./ConsoleOutput";
+import { ResultViewToggle } from "../json/ResultViewToggle";
 
 export function ScriptConsole() {
   const session = useConnectionsStore((s) => s.session);
@@ -43,7 +44,8 @@ export function ScriptConsole() {
             <span className="ml-2 text-amber-400">select a database first</span>
           )}
         </span>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <ResultViewToggle />
           {running ? (
             <button
               type="button"
