@@ -1,4 +1,5 @@
 import { useConsoleStore } from "../../store/consoleStore";
+import { JsonTree } from "../json/JsonTree";
 
 export function ConsoleOutput() {
   const { logs, result, hasResult, error, running } = useConsoleStore();
@@ -22,9 +23,9 @@ export function ConsoleOutput() {
         </pre>
       )}
       {hasResult && (
-        <pre className="mt-2 whitespace-pre-wrap rounded bg-panel p-2 text-emerald-300">
-          {JSON.stringify(result, null, 2)}
-        </pre>
+        <div className="mt-2 rounded bg-panel p-2">
+          <JsonTree value={result} />
+        </div>
       )}
     </div>
   );

@@ -3,6 +3,7 @@ import { Check, Copy, Pencil } from "lucide-react";
 import { useConsoleStore } from "../../store/consoleStore";
 import { useUiStore } from "../../store/uiStore";
 import { buildEditScript } from "../../lib/editScript";
+import { JsonTree } from "../json/JsonTree";
 
 interface DocumentCardProps {
   doc: unknown;
@@ -50,7 +51,7 @@ export function DocumentCard({ doc, collectionName }: DocumentCardProps) {
           <Pencil size={13} />
         </button>
       </div>
-      <pre className="overflow-x-auto p-2 pr-16 text-xs text-text-default">{json}</pre>
+      <JsonTree value={doc} className="p-2 pr-16" />
     </div>
   );
 }
