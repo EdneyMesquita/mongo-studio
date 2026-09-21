@@ -3,16 +3,21 @@ import { useSessionsStore } from "../../store/sessionsStore";
 import type { DatabaseInfo } from "../../types/connection";
 
 export function DatabaseRow({ db, sessionId }: { db: DatabaseInfo; sessionId: string }) {
-  const { selectedDatabase, selectedCollection, collections, selectDatabase, selectCollection } =
-    useSessionsStore();
-  const isOpen = selectedDatabase === db.name;
+  const {
+    expandedDatabase,
+    selectedCollection,
+    collections,
+    toggleDatabase,
+    selectCollection,
+  } = useSessionsStore();
+  const isOpen = expandedDatabase === db.name;
 
   return (
     <div>
       <button
         type="button"
         className="flex w-full items-center gap-1.5 px-1.5 py-1 text-left text-xs text-text-default hover:bg-sidebar-hover"
-        onClick={() => selectDatabase(sessionId, db.name)}
+        onClick={() => toggleDatabase(sessionId, db.name)}
       >
         <ChevronRight
           size={12}
