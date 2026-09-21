@@ -7,6 +7,12 @@ export type QueryMode = "find" | "aggregate";
 
 interface SessionsState {
   collections: CollectionInfo[];
+  /**
+   * Which database shows its collections in the sidebar. Kept apart from
+   * `selectedDatabase` so collapsing a database is purely visual and doesn't
+   * throw away the collection currently being browsed.
+   */
+  expandedDatabase: string | null;
   selectedDatabase: string | null;
   selectedCollection: string | null;
   stats: CollectionStats | null;
@@ -20,6 +26,7 @@ interface SessionsState {
   loading: boolean;
   error: string | null;
 
+  toggleDatabase: (sessionId: string, database: string) => Promise<void>;
   selectDatabase: (sessionId: string, database: string) => Promise<void>;
   selectCollection: (
     sessionId: string,
@@ -63,6 +70,7 @@ const initialQueryState = {
 
 export const useSessionsStore = create<SessionsState>((set, get) => ({
   collections: [],
+  expandedDatabase: null,
   selectedDatabase: null,
   selectedCollection: null,
   stats: null,
@@ -71,8 +79,24 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
   loading: false,
   error: null,
 
+  toggleDatabase: async (sessionId, database) => {
+    const { expandedDatabase, selectedDatabase } = get();
+    if (expandedDatabase === database) {
+      set({ expandedDatabase: null });
+      return;
+    }
+    // Reopening the database already loaded: its collections are still in
+    // hand, so just show them again rather than clearing the current query.
+    if (selectedDatabase === database) {
+      set({ expandedDatabase: database });
+      return;
+    }
+    await get().selectDatabase(sessionId, database);
+  },
+
   selectDatabase: async (sessionId, database) => {
     set({
+      expandedDatabase: database,
       selectedDatabase: database,
       selectedCollection: null,
       stats: null,
@@ -90,6 +114,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
 
   selectCollection: async (sessionId, database, collection) => {
     set({
+      expandedDatabase: database,
       selectedDatabase: database,
       selectedCollection: collection,
       results: null,
@@ -155,6 +180,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
   reset: () =>
     set({
       collections: [],
+      expandedDatabase: null,
       selectedDatabase: null,
       selectedCollection: null,
       stats: null,

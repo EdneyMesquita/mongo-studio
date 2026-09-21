@@ -1,7 +1,11 @@
 import { useConsoleStore } from "../../store/consoleStore";
+import { JsonTree } from "../json/JsonTree";
+import { JsonTable } from "../json/JsonTable";
+import { useUiStore } from "../../store/uiStore";
 
 export function ConsoleOutput() {
   const { logs, result, hasResult, error, running } = useConsoleStore();
+  const resultView = useUiStore((s) => s.resultView);
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-2 font-mono text-xs">
@@ -22,9 +26,13 @@ export function ConsoleOutput() {
         </pre>
       )}
       {hasResult && (
-        <pre className="mt-2 whitespace-pre-wrap rounded bg-panel p-2 text-emerald-300">
-          {JSON.stringify(result, null, 2)}
-        </pre>
+        <div className="mt-2 rounded bg-panel">
+          {resultView === "table" ? (
+            <JsonTable value={result} />
+          ) : (
+            <JsonTree value={result} className="p-2" />
+          )}
+        </div>
       )}
     </div>
   );

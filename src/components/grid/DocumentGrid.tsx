@@ -3,11 +3,16 @@ import { useSessionsStore } from "../../store/sessionsStore";
 import { QueryBar } from "../query/QueryBar";
 import { ExportDialog } from "../export/ExportDialog";
 import { DocumentCard } from "./DocumentCard";
+import { DocumentActions } from "./DocumentActions";
+import { JsonTable } from "../json/JsonTable";
+import { ResultViewToggle } from "../json/ResultViewToggle";
+import { useUiStore } from "../../store/uiStore";
 
 export function DocumentGrid() {
   const { selectedCollection, selectedDatabase, stats, results, error, loading } =
     useSessionsStore();
   const [exportOpen, setExportOpen] = useState(false);
+  const resultView = useUiStore((s) => s.resultView);
 
   if (!selectedCollection || !selectedDatabase) {
     return (
@@ -34,26 +39,41 @@ export function DocumentGrid() {
           {loading && <span>Loading…</span>}
           {results && <span>Showing {results.returned}</span>}
         </div>
-        <button
-          type="button"
-          className="rounded border border-border-subtle px-2 py-1 text-text-default hover:bg-panel-hover"
-          onClick={() => setExportOpen(true)}
-        >
-          Export CSV
-        </button>
+        <div className="flex items-center gap-2">
+          <ResultViewToggle />
+          <button
+            type="button"
+            className="rounded border border-border-subtle px-2 py-1 text-text-default hover:bg-panel-hover"
+            onClick={() => setExportOpen(true)}
+          >
+            Export CSV
+          </button>
+        </div>
       </div>
       {error && (
         <div className="m-2 rounded bg-red-950 p-2 text-xs text-red-300">{error}</div>
       )}
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto">
         {results?.documents.length === 0 && (
           <p className="p-3 text-xs text-text-faint">No documents match this query.</p>
         )}
-        <div className="flex flex-col gap-2">
-          {results?.documents.map((doc, i) => (
-            <DocumentCard key={i} doc={doc} collectionName={selectedCollection} />
-          ))}
-        </div>
+        {resultView === "table" ? (
+          results &&
+          results.documents.length > 0 && (
+            <JsonTable
+              value={results.documents}
+              rootActions={(doc) => (
+                <DocumentActions doc={doc} collectionName={selectedCollection} />
+              )}
+            />
+          )
+        ) : (
+          <div className="flex flex-col gap-2 p-2">
+            {results?.documents.map((doc, i) => (
+              <DocumentCard key={i} doc={doc} collectionName={selectedCollection} />
+            ))}
+          </div>
+        )}
       </div>
       {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}
     </div>
