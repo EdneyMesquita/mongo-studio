@@ -40,6 +40,9 @@ pub async fn export_to_csv(
         if let Some(projection) = query.projection {
             find = find.projection(json_to_document(projection)?);
         }
+        if let Some(limit) = query.limit {
+            find = find.limit(limit);
+        }
         find.await?
     };
 
@@ -329,6 +332,7 @@ mod live_tests {
                 sort: None,
                 projection: None,
                 pipeline: None,
+                limit: None,
             },
             ExportOptions {
                 nested_mode: ExportNestedMode::Flatten,

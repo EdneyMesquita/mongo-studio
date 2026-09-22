@@ -96,6 +96,16 @@ export interface SecretBackendInfo {
   warning: string | null;
 }
 
+export interface ConnectionsExportSummary {
+  exported: number;
+}
+
+export interface ConnectionsImportSummary {
+  imported: number;
+  errors: string[];
+  warnings: string[];
+}
+
 export interface DatabaseInfo {
   name: string;
   sizeOnDisk: number;

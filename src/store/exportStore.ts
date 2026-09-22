@@ -19,6 +19,7 @@ interface ExportState {
       filter: unknown;
       sort: unknown | null;
       pipeline: unknown | null;
+      limit: number | null;
     },
     nestedMode: ExportNestedMode,
     suggestedName: string,
@@ -59,6 +60,7 @@ export const useExportStore = create<ExportState>((set, get) => ({
           sort: query.sort,
           projection: null,
           pipeline: query.pipeline,
+          limit: query.limit,
         },
         { nestedMode, sampleSize: null },
         destPath,

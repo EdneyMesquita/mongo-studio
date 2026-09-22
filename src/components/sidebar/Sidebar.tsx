@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { ArrowLeftRight, Plus, Search } from "lucide-react";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import { ConnectionForm } from "../connections/ConnectionForm";
+import { ConnectionsImportExportDialog } from "../connections/ConnectionsImportExportDialog";
 import { ConnectionRow } from "./ConnectionRow";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 
@@ -9,6 +10,7 @@ export function Sidebar() {
   const { profiles, refreshProfiles, loadSecretBackendInfo, secretBackend } =
     useConnectionsStore();
   const [showForm, setShowForm] = useState(false);
+  const [showImportExport, setShowImportExport] = useState(false);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -37,14 +39,24 @@ export function Sidebar() {
         <span className="text-[11px] font-bold uppercase tracking-wide text-text-muted">
           Connections ({profiles.length})
         </span>
-        <button
-          type="button"
-          className="rounded p-1 text-text-muted hover:bg-sidebar-hover hover:text-text-default"
-          onClick={() => setShowForm(true)}
-          title="New connection"
-        >
-          <Plus size={15} />
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            className="rounded p-1 text-text-muted hover:bg-sidebar-hover hover:text-text-default"
+            onClick={() => setShowImportExport(true)}
+            title="Import / export connections"
+          >
+            <ArrowLeftRight size={14} />
+          </button>
+          <button
+            type="button"
+            className="rounded p-1 text-text-muted hover:bg-sidebar-hover hover:text-text-default"
+            onClick={() => setShowForm(true)}
+            title="New connection"
+          >
+            <Plus size={15} />
+          </button>
+        </div>
       </div>
 
       <div className="px-3 pb-2">
@@ -77,6 +89,10 @@ export function Sidebar() {
           onSaved={() => setShowForm(false)}
           onCancel={() => setShowForm(false)}
         />
+      )}
+
+      {showImportExport && (
+        <ConnectionsImportExportDialog onClose={() => setShowImportExport(false)} />
       )}
     </div>
   );
