@@ -240,8 +240,32 @@ pub struct ExportQueryInput {
     pub sort: Option<serde_json::Value>,
     pub projection: Option<serde_json::Value>,
     /// When set, exports the result of this aggregation pipeline instead of
-    /// a plain find. `filter`/`sort`/`projection` are ignored in that case.
+    /// a plain find. `filter`/`sort`/`projection`/`limit` are ignored in that case.
     pub pipeline: Option<serde_json::Value>,
+    /// Caps the number of exported documents, mirroring the grid's current
+    /// Limit field. Only applies to the plain find path; omitted by default
+    /// so export covers the whole filtered/sorted result set.
+    pub limit: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionsExportSummary {
+    pub exported: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionsImportSummary {
+    pub imported: usize,
+    /// Human-readable reasons individual connections in the file were
+    /// skipped (e.g. passphrase-encrypted, or missing a connection
+    /// string) - the rest of the file still imports.
+    pub errors: Vec<String>,
+    /// Notes about connections that *were* imported but need attention,
+    /// e.g. a NoSQLBooster-encrypted password that couldn't be carried
+    /// over and must be re-entered by hand.
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]

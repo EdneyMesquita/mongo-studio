@@ -25,7 +25,7 @@ pub struct ActiveConnection {
 
 /// Builds a plain connection URI (no advanced overrides applied yet) from a
 /// profile, reinserting credentials pulled from the secret store.
-fn build_uri(
+pub(crate) fn build_uri(
     profile: &ConnectionProfile,
     username: Option<&str>,
     password: Option<&str>,

@@ -1,5 +1,6 @@
 mod commands;
 mod connection;
+mod connections_io;
 mod driver;
 mod ejson;
 mod error;
@@ -47,6 +48,8 @@ pub fn run() {
             commands::cancel_export,
             commands::list_index_stats,
             commands::explain_query,
+            commands::export_connections,
+            commands::import_connections,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

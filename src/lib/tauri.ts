@@ -6,6 +6,8 @@ import type {
   ConnectionProfileInput,
   ConnectionProfileMeta,
   ConnectionTestResult,
+  ConnectionsExportSummary,
+  ConnectionsImportSummary,
   DatabaseInfo,
   SecretBackendInfo,
 } from "../types/connection";
@@ -41,6 +43,15 @@ export const api = {
 
   secretBackendInfo: () =>
     invoke<SecretBackendInfo>("secret_backend_info"),
+
+  exportConnections: (destPath: string, includeSecrets: boolean) =>
+    invoke<ConnectionsExportSummary>("export_connections", {
+      destPath,
+      includeSecrets,
+    }),
+
+  importConnections: (srcPath: string) =>
+    invoke<ConnectionsImportSummary>("import_connections", { srcPath }),
 
   listDatabases: (sessionId: string) =>
     invoke<DatabaseInfo[]>("list_databases", { sessionId }),

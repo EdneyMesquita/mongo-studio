@@ -8,26 +8,28 @@ interface ExportDialogProps {
   onClose: () => void;
 }
 
-function currentQuery(): {
+function currentQuery(capToLimit: boolean): {
   filter: unknown;
   sort: unknown | null;
   pipeline: unknown | null;
+  limit: number | null;
 } {
   const s = useSessionsStore.getState();
   if (s.mode === "aggregate") {
     const trimmed = s.pipelineText.trim();
-    return { filter: {}, sort: null, pipeline: trimmed ? JSON.parse(trimmed) : [] };
+    return { filter: {}, sort: null, pipeline: trimmed ? JSON.parse(trimmed) : [], limit: null };
   }
   const filter = s.filterText.trim() ? JSON.parse(s.filterText) : {};
   const sort = s.sortText.trim() ? JSON.parse(s.sortText) : null;
-  return { filter, sort, pipeline: null };
+  return { filter, sort, pipeline: null, limit: capToLimit ? s.limit : null };
 }
 
 export function ExportDialog({ onClose }: ExportDialogProps) {
   const session = useConnectionsStore((st) => st.session);
-  const { selectedDatabase, selectedCollection } = useSessionsStore();
+  const { selectedDatabase, selectedCollection, mode, limit } = useSessionsStore();
   const { running, rowsWritten, summary, error, start, cancel, reset } = useExportStore();
   const [nestedMode, setNestedMode] = useState<ExportNestedMode>("flatten");
+  const [capToLimit, setCapToLimit] = useState(false);
 
   if (!session || !selectedDatabase || !selectedCollection) return null;
 
@@ -35,7 +37,7 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
     if (!session || !selectedDatabase || !selectedCollection) return;
     let query;
     try {
-      query = currentQuery();
+      query = currentQuery(capToLimit);
     } catch {
       useExportStore.setState({ error: "Current filter/pipeline is not valid JSON" });
       return;
@@ -83,6 +85,17 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
             />
             Keep nested fields as JSON text in one column
           </label>
+          {mode === "find" && (
+            <label className="flex items-center gap-2 text-xs text-text-default">
+              <input
+                type="checkbox"
+                checked={capToLimit}
+                onChange={(e) => setCapToLimit(e.target.checked)}
+                disabled={running}
+              />
+              Cap to current limit ({limit})
+            </label>
+          )}
         </div>
 
         {running && (

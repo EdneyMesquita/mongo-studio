@@ -5,6 +5,7 @@ export interface ExportQueryInput {
   sort: unknown | null;
   projection: unknown | null;
   pipeline: unknown | null;
+  limit: number | null;
 }
 
 export interface ExportOptions {

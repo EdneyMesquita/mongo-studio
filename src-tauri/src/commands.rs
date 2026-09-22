@@ -5,14 +5,17 @@ use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 use crate::connection::extract_uri_credentials;
+use crate::connections_io;
 use crate::driver;
 use crate::error::{AppError, AppResult};
 use crate::export;
 use crate::models::{
-    CollectionInfo, CollectionStats, ConnectionHandle, ConnectionProfile, ConnectionProfileInput,
-    ConnectionProfileMeta, ConnectionSource, ConnectionTestResult, DatabaseInfo, ExplainQueryInput,
-    ExplainVerbosity, ExportOptions, ExportQueryInput, ExportSummary, FindQueryInput,
-    QueryResultPage, ScriptResult, SecretBackendInfo, SecretBackendKind,
+    CollectionInfo, CollectionStats, ConnectionAdvancedOptions, ConnectionHandle,
+    ConnectionProfile, ConnectionProfileInput, ConnectionProfileMeta, ConnectionSource,
+    ConnectionTestResult, ConnectionsExportSummary, ConnectionsImportSummary, DatabaseInfo,
+    ExplainQueryInput, ExplainVerbosity, ExportOptions, ExportQueryInput, ExportSummary,
+    FindQueryInput, QueryResultPage, ScriptResult, SecretBackendInfo, SecretBackendKind,
+    TlsOptions,
 };
 use crate::scripting;
 use crate::secrets::SecretKind;
@@ -140,6 +143,70 @@ pub async fn delete_connection_profile(state: State<'_, AppState>, id: String) -
     state.connection_store.delete(&id)?;
     let _ = state.secret_store.delete_all(&id);
     Ok(())
+}
+
+#[tauri::command]
+pub async fn export_connections(
+    state: State<'_, AppState>,
+    dest_path: String,
+    include_secrets: bool,
+) -> AppResult<ConnectionsExportSummary> {
+    let profiles = state.connection_store.list();
+    let exported = connections_io::export_connections(
+        &profiles,
+        include_secrets,
+        state.secret_store.as_ref(),
+        std::path::Path::new(&dest_path),
+    )?;
+    Ok(ConnectionsExportSummary { exported })
+}
+
+#[tauri::command]
+pub async fn import_connections(
+    state: State<'_, AppState>,
+    src_path: String,
+) -> AppResult<ConnectionsImportSummary> {
+    let raw = std::fs::read_to_string(&src_path)?;
+    let parsed = connections_io::parse_connections_file(&raw)?;
+
+    let mut imported = 0;
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+    for entry in parsed {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(message) => {
+                errors.push(message);
+                continue;
+            }
+        };
+        if let Some(warning) = entry.warning {
+            warnings.push(warning);
+        }
+        let input = ConnectionProfileInput {
+            id: None,
+            name: entry.name,
+            source: ConnectionSource::Uri { uri: entry.uri },
+            database: None,
+            username: entry.username,
+            password: None,
+            tls: TlsOptions::default(),
+            tls_cert_key_passphrase: None,
+            ssh_tunnel: entry.ssh_tunnel,
+            ssh_password: entry.ssh_password,
+            ssh_key_passphrase: entry.ssh_key_passphrase,
+            advanced: ConnectionAdvancedOptions::default(),
+        };
+        let profile = materialize_profile(&state, input).await?;
+        state.connection_store.upsert(profile)?;
+        imported += 1;
+    }
+
+    Ok(ConnectionsImportSummary {
+        imported,
+        errors,
+        warnings,
+    })
 }
 
 #[tauri::command]
