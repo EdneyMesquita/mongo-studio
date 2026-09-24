@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useConnectionsStore } from "../../store/connectionsStore";
-import { useSessionsStore } from "../../store/sessionsStore";
+import type { CollectionTab } from "../../store/sessionsStore";
 import { api } from "../../lib/tauri";
 import { summarizeExplain } from "../../lib/explain";
 import type { ExplainVerbosity } from "../../types/explain";
 
 interface ExplainDialogProps {
+  tab: CollectionTab;
   onClose: () => void;
 }
 
@@ -15,10 +16,16 @@ const verbosityOptions: { id: ExplainVerbosity; label: string }[] = [
   { id: "all_plans_execution", label: "All plans execution" },
 ];
 
-export function ExplainDialog({ onClose }: ExplainDialogProps) {
+export function ExplainDialog({ tab, onClose }: ExplainDialogProps) {
   const session = useConnectionsStore((s) => s.session);
-  const { selectedDatabase, selectedCollection, mode, filterText, sortText, pipelineText } =
-    useSessionsStore();
+  const {
+    database: selectedDatabase,
+    collection: selectedCollection,
+    mode,
+    filterText,
+    sortText,
+    pipelineText,
+  } = tab;
   const [verbosity, setVerbosity] = useState<ExplainVerbosity>("execution_stats");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

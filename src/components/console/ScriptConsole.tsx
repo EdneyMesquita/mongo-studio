@@ -1,6 +1,6 @@
 import Editor from "@monaco-editor/react";
 import { useConnectionsStore } from "../../store/connectionsStore";
-import { useSessionsStore } from "../../store/sessionsStore";
+import { selectCurrentDatabase, useSessionsStore } from "../../store/sessionsStore";
 import { useConsoleStore } from "../../store/consoleStore";
 import { useThemeStore } from "../../store/themeStore";
 import { isLightTheme } from "../../lib/themes";
@@ -9,7 +9,7 @@ import { ResultViewToggle } from "../json/ResultViewToggle";
 
 export function ScriptConsole() {
   const session = useConnectionsStore((s) => s.session);
-  const selectedDatabase = useSessionsStore((s) => s.selectedDatabase);
+  const selectedDatabase = useSessionsStore(selectCurrentDatabase);
   const { script, running, setScript, cancel } = useConsoleStore();
   const themeId = useThemeStore((s) => s.themeId);
 
@@ -28,7 +28,7 @@ export function ScriptConsole() {
   function handleRun() {
     const currentSession = useConnectionsStore.getState().session;
     const currentDatabase =
-      useSessionsStore.getState().selectedDatabase ?? currentSession?.databases[0]?.name;
+      selectCurrentDatabase(useSessionsStore.getState()) ?? currentSession?.databases[0]?.name;
     if (!currentSession || !currentDatabase) return;
     useConsoleStore.getState().run(currentSession.sessionId, currentDatabase);
   }

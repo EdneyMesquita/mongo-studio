@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSessionsStore } from "../../store/sessionsStore";
+import type { CollectionTab } from "../../store/sessionsStore";
 import { QueryBar } from "../query/QueryBar";
 import { ExportDialog } from "../export/ExportDialog";
 import { DocumentCard } from "./DocumentCard";
@@ -8,23 +8,21 @@ import { JsonTable } from "../json/JsonTable";
 import { ResultViewToggle } from "../json/ResultViewToggle";
 import { useUiStore } from "../../store/uiStore";
 
-export function DocumentGrid() {
-  const { selectedCollection, selectedDatabase, stats, results, error, loading } =
-    useSessionsStore();
+export function DocumentGrid({ tab }: { tab: CollectionTab }) {
+  const {
+    database: selectedDatabase,
+    collection: selectedCollection,
+    stats,
+    results,
+    error,
+    loading,
+  } = tab;
   const [exportOpen, setExportOpen] = useState(false);
   const resultView = useUiStore((s) => s.resultView);
 
-  if (!selectedCollection || !selectedDatabase) {
-    return (
-      <div className="flex h-full items-center justify-center text-text-muted">
-        Select a collection to browse its documents
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-full flex-col">
-      <QueryBar />
+      <QueryBar tab={tab} />
       <div className="flex items-center justify-between border-b border-border-subtle bg-editor px-3 py-1.5 text-xs text-text-muted">
         <div className="flex items-center gap-3">
           <span className="font-mono text-text-default">
@@ -75,7 +73,7 @@ export function DocumentGrid() {
           </div>
         )}
       </div>
-      {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}
+      {exportOpen && <ExportDialog tab={tab} onClose={() => setExportOpen(false)} />}
     </div>
   );
 }

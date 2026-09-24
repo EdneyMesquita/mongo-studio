@@ -1,20 +1,23 @@
 import { useState } from "react";
 import { useConnectionsStore } from "../../store/connectionsStore";
-import { useSessionsStore } from "../../store/sessionsStore";
+import type { CollectionTab } from "../../store/sessionsStore";
 import { useExportStore } from "../../store/exportStore";
 import type { ExportNestedMode } from "../../types/export";
 
 interface ExportDialogProps {
+  tab: CollectionTab;
   onClose: () => void;
 }
 
-function currentQuery(capToLimit: boolean): {
+function currentQuery(
+  s: CollectionTab,
+  capToLimit: boolean,
+): {
   filter: unknown;
   sort: unknown | null;
   pipeline: unknown | null;
   limit: number | null;
 } {
-  const s = useSessionsStore.getState();
   if (s.mode === "aggregate") {
     const trimmed = s.pipelineText.trim();
     return { filter: {}, sort: null, pipeline: trimmed ? JSON.parse(trimmed) : [], limit: null };
@@ -24,9 +27,9 @@ function currentQuery(capToLimit: boolean): {
   return { filter, sort, pipeline: null, limit: capToLimit ? s.limit : null };
 }
 
-export function ExportDialog({ onClose }: ExportDialogProps) {
+export function ExportDialog({ tab, onClose }: ExportDialogProps) {
   const session = useConnectionsStore((st) => st.session);
-  const { selectedDatabase, selectedCollection, mode, limit } = useSessionsStore();
+  const { database: selectedDatabase, collection: selectedCollection, mode, limit } = tab;
   const { running, rowsWritten, summary, error, start, cancel, reset } = useExportStore();
   const [nestedMode, setNestedMode] = useState<ExportNestedMode>("flatten");
   const [capToLimit, setCapToLimit] = useState(false);
@@ -37,7 +40,7 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
     if (!session || !selectedDatabase || !selectedCollection) return;
     let query;
     try {
-      query = currentQuery(capToLimit);
+      query = currentQuery(tab, capToLimit);
     } catch {
       useExportStore.setState({ error: "Current filter/pipeline is not valid JSON" });
       return;
