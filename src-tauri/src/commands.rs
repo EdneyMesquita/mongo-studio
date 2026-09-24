@@ -364,6 +364,25 @@ pub async fn run_find(
     driver::run_find(&active.client, &database, &collection, &query).await
 }
 
+/// Sets one field of one document, found by `_id`. Returns the document as
+/// stored afterwards.
+#[tauri::command]
+pub async fn update_field(
+    state: State<'_, AppState>,
+    session_id: String,
+    database: String,
+    collection: String,
+    id: serde_json::Value,
+    path: Vec<String>,
+    value: serde_json::Value,
+) -> AppResult<serde_json::Value> {
+    let sessions = state.sessions.read().await;
+    let active = sessions
+        .get(&session_id)
+        .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
+    driver::update_field(&active.client, &database, &collection, id, &path, value).await
+}
+
 #[tauri::command]
 pub async fn run_aggregate(
     state: State<'_, AppState>,

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use mongodb::options::{
-    ClientOptions, Credential, ServerAddress, Tls, TlsOptions as DriverTlsOptions,
+    ClientOptions, Credential, ReturnDocument, ServerAddress, Tls, TlsOptions as DriverTlsOptions,
 };
 use mongodb::Client;
 
@@ -354,6 +354,58 @@ pub async fn run_find(
     })
 }
 
+/// Joins a document field path for `$set`. Rejects `_id`, which MongoDB
+/// won't change, and segments `$set` would read as something other than one
+/// plain field name: empty, dotted, or starting with `$`.
+pub fn field_path(segments: &[String]) -> AppResult<String> {
+    let Some(first) = segments.first() else {
+        return Err(AppError::InvalidInput("empty field path".to_string()));
+    };
+    if first == "_id" {
+        return Err(AppError::InvalidInput("_id can't be changed".to_string()));
+    }
+    if let Some(bad) = segments
+        .iter()
+        .find(|s| s.is_empty() || s.contains('.') || s.starts_with('$'))
+    {
+        return Err(AppError::InvalidInput(format!(
+            "field {bad:?} can't be edited in place"
+        )));
+    }
+    Ok(segments.join("."))
+}
+
+/// Sets one field of the document with this `_id` and returns the document
+/// as stored afterwards, so the caller shows exactly what was written. `id`
+/// and `value` are Extended JSON, so BSON types survive the round trip.
+pub async fn update_field(
+    client: &Client,
+    db: &str,
+    collection: &str,
+    id: serde_json::Value,
+    path: &[String],
+    value: serde_json::Value,
+) -> AppResult<serde_json::Value> {
+    let path = field_path(path)?;
+    let filter = json_to_document(serde_json::json!({ "_id": id }))?;
+    let value = json_to_document(serde_json::json!({ "value": value }))?
+        .remove("value")
+        .ok_or_else(|| AppError::InvalidInput("missing value".to_string()))?;
+    let mut set = Document::new();
+    set.insert(path, value);
+
+    let updated = client
+        .database(db)
+        .collection::<Document>(collection)
+        .find_one_and_update(filter, doc! { "$set": set })
+        .return_document(ReturnDocument::After)
+        .await?
+        .ok_or_else(|| {
+            AppError::NotFound("the document no longer exists in the collection".to_string())
+        })?;
+    Ok(document_to_json(updated))
+}
+
 pub async fn run_aggregate(
     client: &Client,
     db: &str,
@@ -559,6 +611,38 @@ pub async fn explain_query(
 }
 
 #[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn segments(parts: &[&str]) -> Vec<String> {
+        parts.iter().map(|p| p.to_string()).collect()
+    }
+
+    #[test]
+    fn field_path_joins_nested_and_array_segments() {
+        assert_eq!(
+            field_path(&segments(&["props", "path"])).unwrap(),
+            "props.path"
+        );
+        assert_eq!(
+            field_path(&segments(&["items", "0", "qty"])).unwrap(),
+            "items.0.qty"
+        );
+    }
+
+    #[test]
+    fn field_path_rejects_what_set_would_misread() {
+        assert!(field_path(&[]).is_err());
+        assert!(field_path(&segments(&["_id"])).is_err());
+        assert!(field_path(&segments(&["a", ""])).is_err());
+        assert!(field_path(&segments(&["a.b"])).is_err());
+        assert!(field_path(&segments(&["$where"])).is_err());
+        // a nested field named _id is an ordinary field
+        assert!(field_path(&segments(&["ref", "_id"])).is_ok());
+    }
+}
+
+#[cfg(test)]
 mod live_tests {
     use super::*;
     use crate::connection::extract_uri_credentials;
@@ -695,6 +779,63 @@ mod live_tests {
     /// against whatever the first database/collection contains. Skipped by
     /// default; run explicitly with:
     ///   set -a; source ../.env.local; set +a
+    ///   cargo test --lib -- --ignored live_update_field
+    #[tokio::test]
+    #[ignore]
+    async fn live_update_field() {
+        let active = live_connect().await;
+        let coll_name = format!("update_field_{}", uuid::Uuid::new_v4().simple());
+        let coll = active
+            .client
+            .database("mongo_studio_test")
+            .collection::<Document>(&coll_name);
+        let oid = mongodb::bson::oid::ObjectId::new();
+        coll.insert_one(doc! {
+            "_id": oid,
+            "props": { "path": "/products", "durationMs": 10 },
+            "items": [ { "qty": 1 } ],
+        })
+        .await
+        .unwrap();
+
+        let id = serde_json::json!({ "$oid": oid.to_hex() });
+        let updated = update_field(
+            &active.client,
+            "mongo_studio_test",
+            &coll_name,
+            id.clone(),
+            &["props".to_string(), "path".to_string()],
+            serde_json::json!("/cart"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(updated["props"]["path"], "/cart");
+        assert_eq!(updated["props"]["durationMs"], 10, "siblings untouched");
+
+        let updated = update_field(
+            &active.client,
+            "mongo_studio_test",
+            &coll_name,
+            id,
+            &["items".to_string(), "0".to_string(), "qty".to_string()],
+            serde_json::json!(5),
+        )
+        .await
+        .unwrap();
+        assert_eq!(updated["items"][0]["qty"], 5);
+
+        let stored = coll.find_one(doc! { "_id": oid }).await.unwrap().unwrap();
+        assert_eq!(
+            stored
+                .get_document("props")
+                .unwrap()
+                .get_str("path")
+                .unwrap(),
+            "/cart"
+        );
+        coll.drop().await.unwrap();
+    }
+
     ///   cargo test --lib -- --ignored live_explain_and_index_stats
     #[tokio::test]
     #[ignore]
