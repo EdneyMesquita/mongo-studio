@@ -6,6 +6,7 @@ mod ejson;
 mod error;
 mod export;
 mod models;
+mod saved_scripts;
 mod scripting;
 mod secrets;
 mod ssh_tunnel;
@@ -13,6 +14,7 @@ mod state;
 
 use tauri::Manager;
 
+use saved_scripts::SavedScriptsStore;
 use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -25,6 +27,9 @@ pub fn run() {
             let state = AppState::init(&config_dir)
                 .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
             app.manage(state);
+            let scripts = SavedScriptsStore::load(&config_dir, &app.path().home_dir()?)
+                .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
+            app.manage(scripts);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -50,6 +55,10 @@ pub fn run() {
             commands::explain_query,
             commands::export_connections,
             commands::import_connections,
+            commands::suggest_script_path,
+            commands::save_script,
+            commands::list_saved_scripts,
+            commands::read_saved_script,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

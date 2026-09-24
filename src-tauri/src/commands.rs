@@ -17,6 +17,7 @@ use crate::models::{
     FindQueryInput, QueryResultPage, ScriptResult, SecretBackendInfo, SecretBackendKind,
     TlsOptions,
 };
+use crate::saved_scripts::{SavedScript, SavedScriptsStore};
 use crate::scripting;
 use crate::secrets::SecretKind;
 use crate::state::AppState;
@@ -502,4 +503,35 @@ pub fn cancel_export(state: State<AppState>, execution_id: String) {
     if let Some(flag) = state.running_tasks.lock().unwrap().get(&execution_id) {
         flag.store(true, Ordering::Relaxed);
     }
+}
+
+#[tauri::command]
+pub async fn suggest_script_path(store: State<'_, SavedScriptsStore>) -> AppResult<String> {
+    Ok(store.suggest_path()?.to_string_lossy().into_owned())
+}
+
+/// Saves a console script. With no `path` it lands in the default folder
+/// under a random name - what happens when the save dialog is dismissed.
+#[tauri::command]
+pub async fn save_script(
+    store: State<'_, SavedScriptsStore>,
+    path: Option<String>,
+    content: String,
+) -> AppResult<SavedScript> {
+    store.save(path.as_deref(), &content)
+}
+
+#[tauri::command]
+pub async fn list_saved_scripts(
+    store: State<'_, SavedScriptsStore>,
+) -> AppResult<Vec<SavedScript>> {
+    store.list()
+}
+
+#[tauri::command]
+pub async fn read_saved_script(
+    store: State<'_, SavedScriptsStore>,
+    path: String,
+) -> AppResult<String> {
+    store.read(&path)
 }
