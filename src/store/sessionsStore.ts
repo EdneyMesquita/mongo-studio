@@ -51,6 +51,8 @@ interface SessionsState {
   ) => Promise<void>;
   activateTab: (id: string) => void;
   closeTab: (id: string) => void;
+  closeOtherTabs: (id: string) => void;
+  closeAllTabs: () => void;
   updateTab: (id: string, patch: Partial<TabQueryFields>) => void;
   runQuery: (sessionId: string, id: string) => Promise<void>;
   reset: () => void;
@@ -199,6 +201,15 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
             : s.activeTabId;
         return { tabs, activeTabId };
       }),
+
+    closeOtherTabs: (id) =>
+      set((s) =>
+        s.tabs.some((t) => t.id === id)
+          ? { tabs: s.tabs.filter((t) => t.id === id), activeTabId: id }
+          : s,
+      ),
+
+    closeAllTabs: () => set({ tabs: [], activeTabId: null }),
 
     updateTab: (id, patch) => patchTab(id, patch),
 

@@ -1,9 +1,17 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 import { Loader2, X } from "lucide-react";
 import { useSessionsStore } from "../../store/sessionsStore";
 import type { CollectionTab } from "../../store/sessionsStore";
+import { ContextMenu } from "../ui/ContextMenu";
 
-function TabButton({ tab, active }: { tab: CollectionTab; active: boolean }) {
+interface TabButtonProps {
+  tab: CollectionTab;
+  active: boolean;
+  onContextMenu: (e: MouseEvent, tab: CollectionTab) => void;
+}
+
+function TabButton({ tab, active, onContextMenu }: TabButtonProps) {
   const activateTab = useSessionsStore((s) => s.activateTab);
   const closeTab = useSessionsStore((s) => s.closeTab);
   const ref = useRef<HTMLDivElement>(null);
@@ -40,6 +48,7 @@ function TabButton({ tab, active }: { tab: CollectionTab; active: boolean }) {
       onAuxClick={(e) => {
         if (e.button === 1) closeTab(tab.id);
       }}
+      onContextMenu={(e) => onContextMenu(e, tab)}
     >
       {tab.loading && (
         <Loader2 size={11} className="shrink-0 animate-spin text-text-faint" />
@@ -70,6 +79,16 @@ function TabButton({ tab, active }: { tab: CollectionTab; active: boolean }) {
 export function CollectionTabs() {
   const tabs = useSessionsStore((s) => s.tabs);
   const activeTabId = useSessionsStore((s) => s.activeTabId);
+  const closeTab = useSessionsStore((s) => s.closeTab);
+  const closeOtherTabs = useSessionsStore((s) => s.closeOtherTabs);
+  const closeAllTabs = useSessionsStore((s) => s.closeAllTabs);
+  const [menu, setMenu] = useState<{ tabId: string; x: number; y: number } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+
+  function openMenu(e: MouseEvent, tab: CollectionTab) {
+    e.preventDefault();
+    setMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
+  }
 
   if (tabs.length === 0) return null;
 
@@ -85,8 +104,29 @@ export function CollectionTabs() {
       }}
     >
       {tabs.map((tab) => (
-        <TabButton key={tab.id} tab={tab} active={tab.id === activeTabId} />
+        <TabButton
+          key={tab.id}
+          tab={tab}
+          active={tab.id === activeTabId}
+          onContextMenu={openMenu}
+        />
       ))}
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={closeMenu}
+          items={[
+            { label: "Close tab", onSelect: () => closeTab(menu.tabId) },
+            {
+              label: "Close other tabs",
+              onSelect: () => closeOtherTabs(menu.tabId),
+              disabled: tabs.length < 2,
+            },
+            { label: "Close all tabs", onSelect: closeAllTabs },
+          ]}
+        />
+      )}
     </div>
   );
 }
