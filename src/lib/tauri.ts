@@ -16,7 +16,7 @@ import type {
   FindQueryInput,
   QueryResultPage,
 } from "../types/query";
-import type { ScriptResult } from "../types/script";
+import type { SavedScript, ScriptResult } from "../types/script";
 import type { ExportOptions, ExportQueryInput, ExportSummary } from "../types/export";
 import type { ExplainQueryInput, ExplainVerbosity } from "../types/explain";
 
@@ -106,6 +106,16 @@ export const api = {
 
   cancelScript: (executionId: string) =>
     invoke<void>("cancel_script", { executionId }),
+
+  suggestScriptPath: () => invoke<string>("suggest_script_path"),
+
+  /** With a null path the backend picks a random name in the default folder. */
+  saveScript: (path: string | null, content: string) =>
+    invoke<SavedScript>("save_script", { path, content }),
+
+  listSavedScripts: () => invoke<SavedScript[]>("list_saved_scripts"),
+
+  readSavedScript: (path: string) => invoke<string>("read_saved_script", { path }),
 
   exportToCsv: (
     sessionId: string,

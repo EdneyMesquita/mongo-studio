@@ -1,35 +1,23 @@
+import { useEffect } from "react";
 import Editor from "@monaco-editor/react";
+import { Save, X } from "lucide-react";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import {
   selectActiveTab,
   selectCurrentDatabase,
   useSessionsStore,
 } from "../../store/sessionsStore";
-import { NO_TAB_CONSOLE, defaultScript, useConsoleStore } from "../../store/consoleStore";
+import {
+  NO_TAB_CONSOLE,
+  currentConsoleTarget,
+  defaultScript,
+  useConsoleStore,
+} from "../../store/consoleStore";
+import { hasUnsavedEdits, useScriptsStore } from "../../store/scriptsStore";
 import { useThemeStore } from "../../store/themeStore";
 import { isLightTheme } from "../../lib/themes";
 import { ConsoleOutput } from "./ConsoleOutput";
 import { ResultViewToggle } from "../json/ResultViewToggle";
-
-/**
- * Which console to show and run: the active tab's, scoped to its collection,
- * or the shared one while no tab is open. Read from the stores at call time,
- * because the run command is bound into Monaco once, at mount.
- */
-function currentTarget() {
-  const session = useConnectionsStore.getState().session;
-  const sessions = useSessionsStore.getState();
-  const tab = selectActiveTab(sessions);
-  const database = selectCurrentDatabase(sessions) ?? session?.databases[0]?.name ?? null;
-  const key = tab?.id ?? NO_TAB_CONSOLE;
-  const stored = useConsoleStore.getState().consoles[key]?.script;
-  return {
-    session,
-    database,
-    key,
-    script: stored ?? defaultScript(database, tab?.collection ?? null),
-  };
-}
 
 export function ScriptConsole() {
   const session = useConnectionsStore((s) => s.session);
@@ -41,6 +29,24 @@ export function ScriptConsole() {
   const consoleSession = useConsoleStore((s) => s.consoles[key]);
   const setScript = useConsoleStore((s) => s.setScript);
   const cancel = useConsoleStore((s) => s.cancel);
+  const file = useScriptsStore((s) => s.files[key]);
+  const saving = useScriptsStore((s) => s.saving);
+  const saveError = useScriptsStore((s) => s.saveError);
+  const saveScript = useScriptsStore((s) => s.save);
+  const detach = useScriptsStore((s) => s.detach);
+
+  // Ctrl/Cmd+S saves, adding Shift saves to a new file. On the window rather
+  // than as a Monaco command so it also works with the editor unfocused;
+  // Monaco has no binding of its own for it, so the event still gets here.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "s") return;
+      e.preventDefault();
+      useScriptsStore.getState().save(e.shiftKey);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   if (!session) {
     return (
@@ -51,12 +57,12 @@ export function ScriptConsole() {
   }
 
   const database = currentDatabase ?? session.databases[0]?.name ?? null;
-  const script =
-    consoleSession?.script ?? defaultScript(database, activeTab?.collection ?? null);
+  const untouched = defaultScript(database, activeTab?.collection ?? null);
+  const script = consoleSession?.script ?? untouched;
   const running = consoleSession?.running ?? false;
 
   function handleRun() {
-    const target = currentTarget();
+    const target = currentConsoleTarget();
     if (!target.session || !target.database) return;
     useConsoleStore
       .getState()
@@ -75,9 +81,46 @@ export function ScriptConsole() {
           ) : (
             <span className="ml-2 text-amber-400">select a database first</span>
           )}
+          <span
+            className="ml-3 inline-flex items-center gap-1 rounded bg-panel-alt px-1.5 py-0.5 font-mono"
+            title={file?.path ?? "Not saved yet"}
+          >
+            {file?.name ?? "untitled.js"}
+            {hasUnsavedEdits(script, file, untouched) && (
+              <span className="text-amber-400" aria-label="unsaved changes">
+                ●
+              </span>
+            )}
+            {file && (
+              <button
+                type="button"
+                className="rounded text-text-faint hover:text-text-default"
+                title={`Stop saving to ${file.name} - the next save asks for a file`}
+                aria-label={`Stop saving to ${file.name}`}
+                onClick={() => detach(key)}
+              >
+                <X size={11} />
+              </button>
+            )}
+          </span>
+          {saveError && (
+            <span className="ml-2 text-red-400" title={saveError}>
+              Save failed
+            </span>
+          )}
         </span>
         <div className="flex items-center gap-2">
           <ResultViewToggle />
+          <button
+            type="button"
+            disabled={saving}
+            className="flex items-center gap-1 rounded border border-border-subtle px-2.5 py-1 text-text-default hover:bg-panel-hover disabled:opacity-50"
+            title="Save (⌘S). Save as a new file: ⇧⌘S"
+            onClick={() => saveScript()}
+          >
+            <Save size={12} />
+            Save
+          </button>
           {running ? (
             <button
               type="button"

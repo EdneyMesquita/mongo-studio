@@ -4,6 +4,7 @@ import { useConnectionsStore } from "../../store/connectionsStore";
 import { ConnectionForm } from "../connections/ConnectionForm";
 import { ConnectionsImportExportDialog } from "../connections/ConnectionsImportExportDialog";
 import { ConnectionRow } from "./ConnectionRow";
+import { SavedScriptsPanel } from "./SavedScriptsPanel";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 
 export function Sidebar() {
@@ -83,6 +84,8 @@ export function Sidebar() {
           <ConnectionRow key={profile.id} profile={profile} />
         ))}
       </div>
+
+      <SavedScriptsPanel />
 
       {showForm && (
         <ConnectionForm
