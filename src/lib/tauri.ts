@@ -5,6 +5,7 @@ import type {
   ConnectionProfile,
   ConnectionProfileInput,
   ConnectionProfileMeta,
+  ConnectionImportPreview,
   ConnectionTestResult,
   ConnectionsExportSummary,
   ConnectionsImportSummary,
@@ -50,8 +51,12 @@ export const api = {
       includeSecrets,
     }),
 
-  importConnections: (srcPath: string) =>
-    invoke<ConnectionsImportSummary>("import_connections", { srcPath }),
+  previewConnectionsImport: (srcPath: string) =>
+    invoke<ConnectionImportPreview[]>("preview_connections_import", { srcPath }),
+
+  /** Imports the connections at `selected` positions of the file. */
+  importConnections: (srcPath: string, selected: number[]) =>
+    invoke<ConnectionsImportSummary>("import_connections", { srcPath, selected }),
 
   listDatabases: (sessionId: string) =>
     invoke<DatabaseInfo[]>("list_databases", { sessionId }),

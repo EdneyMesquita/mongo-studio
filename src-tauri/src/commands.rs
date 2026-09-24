@@ -11,11 +11,11 @@ use crate::error::{AppError, AppResult};
 use crate::export;
 use crate::models::{
     CollectionInfo, CollectionStats, ConnectionAdvancedOptions, ConnectionHandle,
-    ConnectionProfile, ConnectionProfileInput, ConnectionProfileMeta, ConnectionSource,
-    ConnectionTestResult, ConnectionsExportSummary, ConnectionsImportSummary, DatabaseInfo,
-    ExplainQueryInput, ExplainVerbosity, ExportOptions, ExportQueryInput, ExportSummary,
-    FindQueryInput, QueryResultPage, ScriptResult, SecretBackendInfo, SecretBackendKind,
-    TlsOptions,
+    ConnectionImportPreview, ConnectionProfile, ConnectionProfileInput, ConnectionProfileMeta,
+    ConnectionSource, ConnectionTestResult, ConnectionsExportSummary, ConnectionsImportSummary,
+    DatabaseInfo, ExplainQueryInput, ExplainVerbosity, ExportOptions, ExportQueryInput,
+    ExportSummary, FindQueryInput, QueryResultPage, ScriptResult, SecretBackendInfo,
+    SecretBackendKind, TlsOptions,
 };
 use crate::saved_scripts::{SavedScript, SavedScriptsStore};
 use crate::scripting;
@@ -167,18 +167,77 @@ pub async fn export_connections(
     Ok(ConnectionsExportSummary { exported })
 }
 
+/// Lists what an import file holds, without saving anything, so the user
+/// can pick which connections to import.
+#[tauri::command]
+pub async fn preview_connections_import(
+    state: State<'_, AppState>,
+    src_path: String,
+) -> AppResult<Vec<ConnectionImportPreview>> {
+    preview_import(&state, &std::fs::read_to_string(&src_path)?)
+}
+
+fn preview_import(state: &AppState, raw: &str) -> AppResult<Vec<ConnectionImportPreview>> {
+    let existing: std::collections::HashSet<String> = state
+        .connection_store
+        .list()
+        .into_iter()
+        .map(|p| p.name)
+        .collect();
+    Ok(connections_io::parse_connections_file(raw)?
+        .into_iter()
+        .enumerate()
+        .map(|(index, entry)| match entry {
+            Ok(entry) => ConnectionImportPreview {
+                index,
+                exists: existing.contains(&entry.name),
+                address: crate::models::redact_uri_summary(&entry.uri),
+                name: entry.name,
+                warning: entry.warning,
+                error: None,
+            },
+            Err(message) => ConnectionImportPreview {
+                index,
+                name: String::new(),
+                address: String::new(),
+                warning: None,
+                error: Some(message),
+                exists: false,
+            },
+        })
+        .collect())
+}
+
+/// Imports the connections at `selected` positions of the file (see
+/// `preview_connections_import`), or all of them when it's absent.
 #[tauri::command]
 pub async fn import_connections(
     state: State<'_, AppState>,
     src_path: String,
+    selected: Option<Vec<usize>>,
 ) -> AppResult<ConnectionsImportSummary> {
-    let raw = std::fs::read_to_string(&src_path)?;
-    let parsed = connections_io::parse_connections_file(&raw)?;
+    import_file(
+        &state,
+        &std::fs::read_to_string(&src_path)?,
+        selected.as_deref(),
+    )
+    .await
+}
+
+async fn import_file(
+    state: &AppState,
+    raw: &str,
+    selected: Option<&[usize]>,
+) -> AppResult<ConnectionsImportSummary> {
+    let parsed = connections_io::parse_connections_file(raw)?;
 
     let mut imported = 0;
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
-    for entry in parsed {
+    for (index, entry) in parsed.into_iter().enumerate() {
+        if selected.is_some_and(|picked| !picked.contains(&index)) {
+            continue;
+        }
         let entry = match entry {
             Ok(entry) => entry,
             Err(message) => {
@@ -203,7 +262,7 @@ pub async fn import_connections(
             ssh_key_passphrase: entry.ssh_key_passphrase,
             advanced: ConnectionAdvancedOptions::default(),
         };
-        let profile = materialize_profile(&state, input).await?;
+        let profile = materialize_profile(state, input).await?;
         state.connection_store.upsert(profile)?;
         imported += 1;
     }
@@ -672,6 +731,54 @@ mod tests {
     async fn save(state: &AppState, input: ConnectionProfileInput) -> ConnectionProfile {
         let profile = materialize_profile(state, input).await.unwrap();
         state.connection_store.upsert(profile).unwrap()
+    }
+
+    const THREE_CONNECTIONS: &str = r#"{
+        "type": "Compass Connections",
+        "version": 1,
+        "connections": [
+            { "id": "a", "connectionOptions": { "connectionString": "mongodb://bob:pw@one.example.net/" }, "favorite": { "name": "One" } },
+            { "id": "b", "connectionOptions": { "connectionString": "mongodb://two.example.net/" }, "favorite": { "name": "prod" } },
+            { "id": "c", "connectionOptions": { "connectionString": "mongodb://three.example.net/" }, "favorite": { "name": "Three" } }
+        ]
+    }"#;
+
+    #[tokio::test]
+    async fn preview_lists_the_file_without_saving_and_flags_existing_names() {
+        let (state, _, dir) = state();
+        save(&state, input(None, "prod", None)).await;
+
+        let preview = preview_import(&state, THREE_CONNECTIONS).unwrap();
+
+        let names: Vec<_> = preview.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["One", "prod", "Three"]);
+        assert_eq!(
+            preview.iter().map(|p| p.exists).collect::<Vec<_>>(),
+            [false, true, false]
+        );
+        assert!(!preview[0].address.contains("pw"), "credentials are masked");
+        assert_eq!(state.connection_store.list().len(), 1, "nothing saved");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[tokio::test]
+    async fn import_takes_only_the_selected_connections() {
+        let (state, _, dir) = state();
+
+        let summary = import_file(&state, THREE_CONNECTIONS, Some(&[0, 2]))
+            .await
+            .unwrap();
+
+        assert_eq!(summary.imported, 2);
+        let mut names: Vec<_> = state
+            .connection_store
+            .list()
+            .into_iter()
+            .map(|p| p.name)
+            .collect();
+        names.sort();
+        assert_eq!(names, ["One", "Three"]);
+        std::fs::remove_dir_all(dir).ok();
     }
 
     #[tokio::test]

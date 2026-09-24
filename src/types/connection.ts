@@ -100,6 +100,20 @@ export interface ConnectionsExportSummary {
   exported: number;
 }
 
+/** One connection found in an import file, before anything is saved. */
+export interface ConnectionImportPreview {
+  /** Position in the file, passed back to select it for import. */
+  index: number;
+  name: string;
+  /** Where it connects, credentials masked. */
+  address: string;
+  warning: string | null;
+  /** Why it can't be imported, when it can't. */
+  error: string | null;
+  /** A saved connection already has this name. */
+  exists: boolean;
+}
+
 export interface ConnectionsImportSummary {
   imported: number;
   errors: string[];

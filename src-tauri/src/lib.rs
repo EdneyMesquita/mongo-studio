@@ -56,6 +56,7 @@ pub fn run() {
             commands::explain_query,
             commands::export_connections,
             commands::import_connections,
+            commands::preview_connections_import,
             commands::suggest_script_path,
             commands::save_script,
             commands::list_saved_scripts,
