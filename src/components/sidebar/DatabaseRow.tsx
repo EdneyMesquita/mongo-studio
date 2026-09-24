@@ -1,5 +1,6 @@
 import { ChevronRight, Layers } from "lucide-react";
 import { selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
+import type { TabConnection } from "../../store/sessionsStore";
 import type { DatabaseInfo } from "../../types/connection";
 
 // The active connection already paints its whole subtree bg-sidebar-active,
@@ -7,12 +8,21 @@ import type { DatabaseInfo } from "../../types/connection";
 // stands out on any theme: it lightens dark ones and darkens the light one.
 const activeRowClass = "rounded bg-text-default/15";
 
-export function DatabaseRow({ db, sessionId }: { db: DatabaseInfo; sessionId: string }) {
+interface DatabaseRowProps {
+  db: DatabaseInfo;
+  sessionId: string;
+  connection: TabConnection;
+}
+
+export function DatabaseRow({ db, sessionId, connection }: DatabaseRowProps) {
   const expandedDatabase = useSessionsStore((s) => s.expandedDatabase);
   const collections = useSessionsStore((s) => s.collections);
   const collectionsLoading = useSessionsStore((s) => s.collectionsLoading);
   const collectionsError = useSessionsStore((s) => s.collectionsError);
   // Strings, not the tab object, so typing in a query doesn't re-render the tree.
+  const activeConnectionId = useSessionsStore(
+    (s) => selectActiveTab(s)?.connection.id ?? null,
+  );
   const activeDatabase = useSessionsStore((s) => selectActiveTab(s)?.database ?? null);
   const activeTabCollection = useSessionsStore(
     (s) => selectActiveTab(s)?.collection ?? null,
@@ -23,7 +33,10 @@ export function DatabaseRow({ db, sessionId }: { db: DatabaseInfo; sessionId: st
   const isOpen = expandedDatabase === db.name;
   // Collapsing is only visual, so surface the active tab's collection on the
   // database row itself - otherwise it disappears from the sidebar.
-  const activeCollection = activeDatabase === db.name ? activeTabCollection : null;
+  const activeCollection =
+    activeConnectionId === connection.id && activeDatabase === db.name
+      ? activeTabCollection
+      : null;
   const showsActiveInline = !isOpen && activeCollection !== null;
 
   return (
@@ -67,7 +80,7 @@ export function DatabaseRow({ db, sessionId }: { db: DatabaseInfo; sessionId: st
                   ? `${activeRowClass} font-medium text-text-default`
                   : "text-text-muted hover:bg-sidebar-hover"
               }`}
-              onClick={() => openCollection(sessionId, db.name, coll.name)}
+              onClick={() => openCollection(sessionId, connection, db.name, coll.name)}
             >
               {coll.name}
             </button>

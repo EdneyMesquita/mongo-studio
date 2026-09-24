@@ -5,9 +5,18 @@ import type { CollectionStats, QueryResultPage } from "../types/query";
 
 export type QueryMode = "find" | "aggregate";
 
+/** The connection a tab was opened on, as shown on the tab. */
+export interface TabConnection {
+  id: string;
+  name: string;
+  /** Server address with credentials masked, e.g. mongodb://***@host:27017. */
+  summary: string;
+}
+
 /** One open collection, with its own query, results and stats. */
 export interface CollectionTab {
   id: string;
+  connection: TabConnection;
   database: string;
   collection: string;
   stats: CollectionStats | null;
@@ -46,6 +55,7 @@ interface SessionsState {
   /** Focuses the collection's tab, opening one if it has none yet. */
   openCollection: (
     sessionId: string,
+    connection: TabConnection,
     database: string,
     collection: string,
   ) => Promise<void>;
@@ -58,9 +68,13 @@ interface SessionsState {
   reset: () => void;
 }
 
-/** Database names can't contain dots, so this is unique per collection. */
-export function tabIdFor(database: string, collection: string): string {
-  return `${database}.${collection}`;
+/**
+ * Unique per collection per connection: database names can't contain dots,
+ * and the connection id keeps same-named collections on different servers
+ * apart.
+ */
+export function tabIdFor(connectionId: string, database: string, collection: string): string {
+  return `${connectionId}/${database}.${collection}`;
 }
 
 export function selectActiveTab(state: SessionsState): CollectionTab | null {
@@ -91,9 +105,14 @@ function parseJsonArray(text: string): unknown[] {
   return parsed;
 }
 
-function newTab(database: string, collection: string): CollectionTab {
+function newTab(
+  connection: TabConnection,
+  database: string,
+  collection: string,
+): CollectionTab {
   return {
-    id: tabIdFor(database, collection),
+    id: tabIdFor(connection.id, database, collection),
+    connection,
     database,
     collection,
     stats: null,
@@ -167,14 +186,14 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       }
     },
 
-    openCollection: async (sessionId, database, collection) => {
-      const id = tabIdFor(database, collection);
+    openCollection: async (sessionId, connection, database, collection) => {
+      const id = tabIdFor(connection.id, database, collection);
       if (get().tabs.some((t) => t.id === id)) {
         set({ activeTabId: id });
         return;
       }
       set((s) => ({
-        tabs: [...s.tabs, { ...newTab(database, collection), loading: true }],
+        tabs: [...s.tabs, { ...newTab(connection, database, collection), loading: true }],
         activeTabId: id,
       }));
       try {

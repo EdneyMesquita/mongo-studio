@@ -60,7 +60,12 @@ export function ConnectionRow({ profile }: { profile: ConnectionProfileMeta }) {
       {isActive && expanded && session && (
         <div className="ml-4 border-l border-border-subtle/60 pl-2">
           {session.databases.map((db) => (
-            <DatabaseRow key={db.name} db={db} sessionId={session.sessionId} />
+            <DatabaseRow
+              key={db.name}
+              db={db}
+              sessionId={session.sessionId}
+              connection={{ id: profile.id, name: profile.name, summary: profile.summary }}
+            />
           ))}
         </div>
       )}

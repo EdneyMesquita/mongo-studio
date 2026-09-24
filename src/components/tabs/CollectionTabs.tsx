@@ -27,8 +27,8 @@ function TabButton({ tab, active, onContextMenu }: TabButtonProps) {
       role="tab"
       aria-selected={active}
       tabIndex={0}
-      title={`${tab.database}.${tab.collection}`}
-      className={`group flex max-w-[240px] shrink-0 cursor-pointer items-center gap-1.5 border-r border-t-2 border-r-border-subtle py-1.5 pl-3 pr-1.5 text-xs ${
+      title={`${tab.database}.${tab.collection}\n${tab.connection.name} · ${tab.connection.summary}`}
+      className={`group flex max-w-[320px] shrink-0 cursor-pointer items-center gap-1.5 border-r border-t-2 border-r-border-subtle py-1.5 pl-3 pr-1.5 text-xs ${
         active
           ? "border-t-accent bg-editor text-text-default"
           : "border-t-transparent text-text-muted hover:bg-panel-hover hover:text-text-default"
@@ -56,10 +56,13 @@ function TabButton({ tab, active, onContextMenu }: TabButtonProps) {
       <span className="truncate">
         <span className="text-text-faint">{tab.database}.</span>
         {tab.collection}
+        {/* Names the connection too, like mongosh's db@host, so tabs stay
+            unambiguous when two servers hold the same namespace. */}
+        <span className="ml-1 text-text-faint">@ {tab.connection.name}</span>
       </span>
       <button
         type="button"
-        aria-label={`Close ${tab.database}.${tab.collection}`}
+        aria-label={`Close ${tab.database}.${tab.collection} on ${tab.connection.name}`}
         title="Close (middle-click)"
         className={`shrink-0 rounded p-0.5 text-text-faint hover:bg-panel-alt hover:text-text-default focus:opacity-100 ${
           active ? "opacity-100" : "opacity-0 group-hover:opacity-100"
