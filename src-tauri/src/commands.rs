@@ -64,7 +64,12 @@ async fn materialize_profile(
             .map_err(AppError::Secret)?;
         true
     } else {
-        false
+        // Editing a saved connection with the password left blank keeps the
+        // one already stored, rather than silently dropping it.
+        state
+            .connection_store
+            .get(&id)
+            .is_ok_and(|saved| saved.has_password)
     };
 
     let mut tls = input.tls;
@@ -215,10 +220,56 @@ pub async fn test_connection(
     state: State<'_, AppState>,
     input: ConnectionProfileInput,
 ) -> AppResult<ConnectionTestResult> {
-    // Test against an ephemeral profile derived from the form so users can
-    // verify a connection before saving it.
-    let profile = materialize_profile(&state, input).await?;
-    Ok(driver::test_connection(&profile, state.secret_store.as_ref(), &state.known_hosts).await)
+    test_profile(&state, input).await
+}
+
+/// Tests the connection a form describes without touching saved secrets.
+///
+/// Materializing a profile writes its secrets to the store, so doing that
+/// under the profile's own id would overwrite a saved password with
+/// whatever was typed into an edit form that is then cancelled - and a
+/// never-saved connection would leave its secrets behind. Instead the test
+/// runs under a throwaway id, borrowing the saved secrets the form left
+/// blank, and everything stored under that id is removed afterwards.
+async fn test_profile(
+    state: &AppState,
+    mut input: ConnectionProfileInput,
+) -> AppResult<ConnectionTestResult> {
+    let saved = input
+        .id
+        .as_deref()
+        .filter(|id| !id.is_empty())
+        .and_then(|id| state.connection_store.get(id).ok());
+    let temp_id = format!("connection-test-{}", Uuid::new_v4());
+
+    let result = async {
+        if let Some(saved) = &saved {
+            for kind in SecretKind::ALL {
+                if let Some(value) = state
+                    .secret_store
+                    .get(&saved.id, kind)
+                    .map_err(AppError::Secret)?
+                {
+                    state
+                        .secret_store
+                        .set(&temp_id, kind, &value)
+                        .map_err(AppError::Secret)?;
+                }
+            }
+        }
+        input.id = Some(temp_id.clone());
+        let mut profile = materialize_profile(state, input).await?;
+        // A blank password field means the saved one, copied over above.
+        profile.has_password |= saved.as_ref().is_some_and(|s| s.has_password);
+        Ok(
+            driver::test_connection(&profile, state.secret_store.as_ref(), &state.known_hosts)
+                .await,
+        )
+    }
+    .await;
+
+    let _ = state.secret_store.delete_all(&temp_id);
+    result
 }
 
 #[tauri::command]
@@ -553,4 +604,133 @@ pub async fn read_saved_script(
     path: String,
 ) -> AppResult<String> {
     store.read(&path)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+    use std::sync::Mutex;
+
+    use tokio::sync::RwLock;
+
+    use super::*;
+    use crate::connection::ConnectionStore;
+    use crate::secrets::{InMemoryStore, SecretStore};
+    use crate::ssh_tunnel::KnownHosts;
+
+    /// Lets a test keep a handle on the store AppState owns.
+    struct Shared(Arc<InMemoryStore>);
+
+    impl SecretStore for Shared {
+        fn set(&self, id: &str, kind: SecretKind, value: &str) -> Result<(), String> {
+            self.0.set(id, kind, value)
+        }
+        fn get(&self, id: &str, kind: SecretKind) -> Result<Option<String>, String> {
+            self.0.get(id, kind)
+        }
+        fn delete(&self, id: &str, kind: SecretKind) -> Result<(), String> {
+            self.0.delete(id, kind)
+        }
+    }
+
+    fn state() -> (AppState, Arc<InMemoryStore>, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("mongo-studio-commands-{}", Uuid::new_v4()));
+        let secrets = Arc::new(InMemoryStore::new());
+        let state = AppState {
+            connection_store: ConnectionStore::load(&dir).unwrap(),
+            secret_store: Box::new(Shared(secrets.clone())),
+            secret_backend: SecretBackendKind::Keyring,
+            known_hosts: Arc::new(KnownHosts::load(&dir).unwrap()),
+            sessions: RwLock::new(HashMap::new()),
+            running_tasks: Mutex::new(HashMap::new()),
+        };
+        (state, secrets, dir)
+    }
+
+    /// A server that refuses at once, so tests that try to connect fail fast.
+    fn input(id: Option<String>, name: &str, password: Option<&str>) -> ConnectionProfileInput {
+        ConnectionProfileInput {
+            id,
+            name: name.to_string(),
+            source: ConnectionSource::Uri {
+                uri: "mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=200&connectTimeoutMS=200"
+                    .to_string(),
+            },
+            database: None,
+            username: Some("alice".to_string()),
+            password: password.map(str::to_string),
+            tls: TlsOptions::default(),
+            tls_cert_key_passphrase: None,
+            ssh_tunnel: None,
+            ssh_password: None,
+            ssh_key_passphrase: None,
+            advanced: ConnectionAdvancedOptions::default(),
+        }
+    }
+
+    async fn save(state: &AppState, input: ConnectionProfileInput) -> ConnectionProfile {
+        let profile = materialize_profile(state, input).await.unwrap();
+        state.connection_store.upsert(profile).unwrap()
+    }
+
+    #[tokio::test]
+    async fn editing_with_the_password_left_blank_keeps_the_saved_one() {
+        let (state, _, dir) = state();
+        let saved = save(&state, input(None, "prod", Some("s3cret"))).await;
+
+        let edited = save(
+            &state,
+            input(Some(saved.id.clone()), "prod (renamed)", None),
+        )
+        .await;
+
+        assert_eq!(edited.name, "prod (renamed)");
+        assert!(edited.has_password);
+        assert_eq!(
+            state
+                .secret_store
+                .get(&saved.id, SecretKind::Password)
+                .unwrap()
+                .as_deref(),
+            Some("s3cret")
+        );
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[tokio::test]
+    async fn testing_an_edit_leaves_saved_secrets_alone() {
+        let (state, secrets, dir) = state();
+        let saved = save(&state, input(None, "prod", Some("s3cret"))).await;
+        let before = secrets.len();
+
+        // a wrong password typed into the edit form, then tested
+        test_profile(&state, input(Some(saved.id.clone()), "prod", Some("wrong")))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            state
+                .secret_store
+                .get(&saved.id, SecretKind::Password)
+                .unwrap()
+                .as_deref(),
+            Some("s3cret")
+        );
+        assert_eq!(secrets.len(), before, "nothing left under the throwaway id");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[tokio::test]
+    async fn testing_a_new_connection_leaves_no_secrets_behind() {
+        let (state, secrets, dir) = state();
+
+        test_profile(&state, input(None, "draft", Some("pw")))
+            .await
+            .unwrap();
+
+        assert_eq!(secrets.len(), 0);
+        assert!(state.connection_store.list().is_empty());
+        std::fs::remove_dir_all(dir).ok();
+    }
 }
