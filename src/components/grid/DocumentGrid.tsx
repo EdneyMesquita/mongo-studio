@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import type { CollectionTab } from "../../store/sessionsStore";
 import { QueryBar } from "../query/QueryBar";
 import { ExportDialog } from "../export/ExportDialog";
@@ -8,7 +8,9 @@ import { JsonTable } from "../json/JsonTable";
 import { ResultViewToggle } from "../json/ResultViewToggle";
 import { useUiStore } from "../../store/uiStore";
 
-export function DocumentGrid({ tab }: { tab: CollectionTab }) {
+// Memoised because every open tab has a grid mounted: typing in one tab's
+// query must not re-render the others, whose tab objects are unchanged.
+export const DocumentGrid = memo(function DocumentGrid({ tab }: { tab: CollectionTab }) {
   const {
     database: selectedDatabase,
     collection: selectedCollection,
@@ -76,4 +78,4 @@ export function DocumentGrid({ tab }: { tab: CollectionTab }) {
       {exportOpen && <ExportDialog tab={tab} onClose={() => setExportOpen(false)} />}
     </div>
   );
-}
+});
