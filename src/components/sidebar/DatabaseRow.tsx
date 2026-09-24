@@ -1,20 +1,39 @@
 import { ChevronRight, Layers } from "lucide-react";
 import { selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
 import type { TabConnection } from "../../store/sessionsStore";
-import type { DatabaseInfo } from "../../types/connection";
+import type { CollectionInfo, DatabaseInfo } from "../../types/connection";
 
 // The active connection already paints its whole subtree bg-sidebar-active,
 // so the open collection can't reuse that colour. A wash of the text colour
 // stands out on any theme: it lightens dark ones and darkens the light one.
 const activeRowClass = "rounded bg-text-default/15";
 
+/** The name with the part matching the search picked out. */
+function Highlighted({ name, query }: { name: string; query: string }) {
+  const at = query ? name.toLowerCase().indexOf(query) : -1;
+  if (at < 0) return <>{name}</>;
+  return (
+    <>
+      {name.slice(0, at)}
+      <mark className="bg-transparent font-semibold text-text-default">
+        {name.slice(at, at + query.length)}
+      </mark>
+      {name.slice(at + query.length)}
+    </>
+  );
+}
+
 interface DatabaseRowProps {
   db: DatabaseInfo;
   sessionId: string;
   connection: TabConnection;
+  /** The sidebar search, lowercased. */
+  query: string;
+  /** This database's collections matching the search, when some do. */
+  matches: CollectionInfo[] | null;
 }
 
-export function DatabaseRow({ db, sessionId, connection }: DatabaseRowProps) {
+export function DatabaseRow({ db, sessionId, connection, query, matches }: DatabaseRowProps) {
   const expandedDatabase = useSessionsStore((s) => s.expandedDatabase);
   const collections = useSessionsStore((s) => s.collections);
   const collectionsLoading = useSessionsStore((s) => s.collectionsLoading);
@@ -71,7 +90,8 @@ export function DatabaseRow({ db, sessionId, connection }: DatabaseRowProps) {
               <p className="px-1.5 py-1 text-[11px] text-text-faint">No collections</p>
             )
           )}
-          {collections.map((coll) => (
+          {/* A search naming some of them narrows the list to those. */}
+          {(matches ?? collections).map((coll) => (
             <button
               key={coll.name}
               type="button"
@@ -80,9 +100,10 @@ export function DatabaseRow({ db, sessionId, connection }: DatabaseRowProps) {
                   ? `${activeRowClass} font-medium text-text-default`
                   : "text-text-muted hover:bg-sidebar-hover"
               }`}
+              title={coll.name}
               onClick={() => openCollection(sessionId, connection, db.name, coll.name)}
             >
-              {coll.name}
+              {matches ? <Highlighted name={coll.name} query={query} /> : coll.name}
             </button>
           ))}
         </div>

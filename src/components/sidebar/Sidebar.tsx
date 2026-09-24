@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeftRight, FolderPlus, Plus, Search } from "lucide-react";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import { useSidebarLayoutStore } from "../../store/sidebarLayoutStore";
+import { useSessionsStore } from "../../store/sessionsStore";
 import { api } from "../../lib/tauri";
 import type { ConnectionProfile } from "../../types/connection";
 import { ConnectionForm } from "../connections/ConnectionForm";
@@ -9,6 +10,7 @@ import { ConnectionsImportExportDialog } from "../connections/ConnectionsImportE
 import { ConnectionTree } from "./ConnectionTree";
 import { SavedScriptsPanel } from "./SavedScriptsPanel";
 import { ThemeSwitcher } from "./ThemeSwitcher";
+import { useCollectionMatches } from "./useCollectionMatches";
 
 export function Sidebar() {
   const { profiles, profilesLoaded, refreshProfiles, loadSecretBackendInfo, secretBackend } =
@@ -30,6 +32,22 @@ export function Sidebar() {
     }
   }
   const [search, setSearch] = useState("");
+  const collectionMatches = useCollectionMatches(search.trim().toLowerCase());
+
+  // Enter opens the first collection found, so a few letters and Enter get
+  // you to a collection without the mouse.
+  function openFirstMatch() {
+    const profile = profiles.find((p) => p.id === collectionMatches?.connectionId);
+    if (!collectionMatches || !profile) return;
+    useSessionsStore
+      .getState()
+      .openCollection(
+        collectionMatches.sessionId,
+        { id: profile.id, name: profile.name, summary: profile.summary },
+        collectionMatches.database,
+        collectionMatches.collections[0].name,
+      );
+  }
 
   useEffect(() => {
     refreshProfiles();
@@ -97,9 +115,14 @@ export function Sidebar() {
           <Search size={12} className="shrink-0 text-text-faint" />
           <input
             className="w-full bg-transparent text-xs text-text-default placeholder:text-text-faint focus:outline-none"
-            placeholder="Search connections"
+            placeholder="Search connections and collections"
+            aria-label="Search connections and collections"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") openFirstMatch();
+              if (e.key === "Escape") setSearch("");
+            }}
           />
         </div>
       </div>

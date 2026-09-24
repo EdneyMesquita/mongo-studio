@@ -8,6 +8,7 @@ import type { DropTarget, FolderNode, TreeNode } from "../../lib/sidebarTree";
 import { ContextMenu } from "../ui/ContextMenu";
 import { ConnectionRow, INDENT_PX } from "./ConnectionRow";
 import { useTreeDrag } from "./useTreeDrag";
+import { useCollectionMatches } from "./useCollectionMatches";
 import type { DragState } from "./useTreeDrag";
 import type { ConnectionProfileMeta } from "../../types/connection";
 
@@ -161,8 +162,16 @@ export function ConnectionTree({ search, onEdit }: ConnectionTreeProps) {
   const byId = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
   const query = search.trim().toLowerCase();
   const searching = query !== "";
+  const collectionMatches = useCollectionMatches(query);
+  // A connection stays in view when its name matches, or when collections of
+  // its open database do.
   const shown = searching
-    ? filterTree(root, (id) => byId.get(id)?.name.toLowerCase().includes(query) ?? false)
+    ? filterTree(
+        root,
+        (id) =>
+          id === collectionMatches?.connectionId ||
+          (byId.get(id)?.name.toLowerCase().includes(query) ?? false),
+      )
     : root;
 
   function renderNodes(nodes: TreeNode[], depth: number) {
@@ -191,6 +200,10 @@ export function ConnectionTree({ search, onEdit }: ConnectionTreeProps) {
           profile={profile}
           onEdit={onEdit}
           indent={depth}
+          query={query}
+          collectionMatches={
+            collectionMatches?.connectionId === node.id ? collectionMatches : null
+          }
           rowProps={{
             "data-node-id": node.id,
             "data-node-type": "connection",

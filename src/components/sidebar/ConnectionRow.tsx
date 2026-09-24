@@ -4,6 +4,7 @@ import { ChevronRight, Database, MoreHorizontal } from "lucide-react";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import { DatabaseRow } from "./DatabaseRow";
+import type { CollectionMatches } from "./useCollectionMatches";
 import { ContextMenu } from "../ui/ContextMenu";
 import type { ConnectionProfileMeta } from "../../types/connection";
 
@@ -14,11 +15,22 @@ interface ConnectionRowProps {
   indent?: number;
   /** Extra props for the row itself: drag handlers, data attributes. */
   rowProps?: HTMLAttributes<HTMLDivElement> & Record<`data-${string}`, string>;
+  /** The sidebar search, lowercased. */
+  query?: string;
+  /** Collections matching the search, if they belong to this connection. */
+  collectionMatches?: CollectionMatches | null;
 }
 
 export const INDENT_PX = 12;
 
-export function ConnectionRow({ profile, onEdit, indent = 0, rowProps }: ConnectionRowProps) {
+export function ConnectionRow({
+  profile,
+  onEdit,
+  indent = 0,
+  rowProps,
+  query = "",
+  collectionMatches = null,
+}: ConnectionRowProps) {
   const session = useConnectionsStore((s) => s.session);
   const connect = useConnectionsStore((s) => s.connect);
   const disconnect = useConnectionsStore((s) => s.disconnect);
@@ -28,6 +40,8 @@ export function ConnectionRow({ profile, onEdit, indent = 0, rowProps }: Connect
   const closeMenu = useCallback(() => setMenu(null), []);
 
   const isActive = session?.connectionId === profile.id;
+  // a search that found collections here shows them, even if collapsed
+  const showChildren = expanded || collectionMatches !== null;
 
   useEffect(() => {
     if (isActive) setExpanded(true);
@@ -73,7 +87,7 @@ export function ConnectionRow({ profile, onEdit, indent = 0, rowProps }: Connect
           <ChevronRight
             size={13}
             className={`shrink-0 text-text-faint transition-transform ${
-              expanded && isActive ? "rotate-90" : ""
+              showChildren && isActive ? "rotate-90" : ""
             }`}
           />
           <Database size={14} className="shrink-0 text-text-muted" />
@@ -110,7 +124,7 @@ export function ConnectionRow({ profile, onEdit, indent = 0, rowProps }: Connect
           ]}
         />
       )}
-      {isActive && expanded && session && (
+      {isActive && showChildren && session && (
         <div
           className="border-l border-border-subtle/60 pl-2"
           style={{ marginLeft: 16 + indent * INDENT_PX }}
@@ -121,6 +135,10 @@ export function ConnectionRow({ profile, onEdit, indent = 0, rowProps }: Connect
               db={db}
               sessionId={session.sessionId}
               connection={{ id: profile.id, name: profile.name, summary: profile.summary }}
+              query={query}
+              matches={
+                collectionMatches?.database === db.name ? collectionMatches.collections : null
+              }
             />
           ))}
         </div>
