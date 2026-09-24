@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { MouseEvent } from "react";
+import type { HTMLAttributes, MouseEvent } from "react";
 import { ChevronRight, Database, MoreHorizontal } from "lucide-react";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useConnectionsStore } from "../../store/connectionsStore";
@@ -10,9 +10,15 @@ import type { ConnectionProfileMeta } from "../../types/connection";
 interface ConnectionRowProps {
   profile: ConnectionProfileMeta;
   onEdit: (id: string) => void;
+  /** Nesting depth in the folder tree. */
+  indent?: number;
+  /** Extra props for the row itself: drag handlers, data attributes. */
+  rowProps?: HTMLAttributes<HTMLDivElement> & Record<`data-${string}`, string>;
 }
 
-export function ConnectionRow({ profile, onEdit }: ConnectionRowProps) {
+export const INDENT_PX = 12;
+
+export function ConnectionRow({ profile, onEdit, indent = 0, rowProps }: ConnectionRowProps) {
   const session = useConnectionsStore((s) => s.session);
   const connect = useConnectionsStore((s) => s.connect);
   const disconnect = useConnectionsStore((s) => s.disconnect);
@@ -52,9 +58,11 @@ export function ConnectionRow({ profile, onEdit }: ConnectionRowProps) {
   return (
     <div className={isActive ? "bg-sidebar-active" : ""}>
       <div
-        className={`group flex items-center gap-1 px-2 py-1.5 text-sm ${
+        {...rowProps}
+        className={`group flex items-center gap-1 py-1.5 pr-2 text-sm ${
           isActive ? "hover:bg-sidebar-active-hover" : "hover:bg-sidebar-hover"
-        }`}
+        } ${rowProps?.className ?? ""}`}
+        style={{ paddingLeft: 8 + indent * INDENT_PX }}
         onContextMenu={openMenu}
       >
         <button
@@ -80,6 +88,7 @@ export function ConnectionRow({ profile, onEdit }: ConnectionRowProps) {
             menu ? "opacity-100" : "opacity-0 group-hover:opacity-100"
           }`}
           onClick={openMenu}
+          data-no-drag=""
           title="Connection actions"
           aria-label={`Actions for ${profile.name}`}
           aria-haspopup="menu"
@@ -102,7 +111,10 @@ export function ConnectionRow({ profile, onEdit }: ConnectionRowProps) {
         />
       )}
       {isActive && expanded && session && (
-        <div className="ml-4 border-l border-border-subtle/60 pl-2">
+        <div
+          className="border-l border-border-subtle/60 pl-2"
+          style={{ marginLeft: 16 + indent * INDENT_PX }}
+        >
           {session.databases.map((db) => (
             <DatabaseRow
               key={db.name}

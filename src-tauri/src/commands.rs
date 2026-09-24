@@ -20,6 +20,7 @@ use crate::models::{
 use crate::saved_scripts::{SavedScript, SavedScriptsStore};
 use crate::scripting;
 use crate::secrets::SecretKind;
+use crate::sidebar_layout::SidebarLayoutStore;
 use crate::state::AppState;
 
 fn now_iso() -> String {
@@ -632,6 +633,22 @@ pub fn cancel_export(state: State<AppState>, execution_id: String) {
     if let Some(flag) = state.running_tasks.lock().unwrap().get(&execution_id) {
         flag.store(true, Ordering::Relaxed);
     }
+}
+
+/// The sidebar's folder tree, or null before one was saved.
+#[tauri::command]
+pub async fn get_sidebar_layout(
+    store: State<'_, SidebarLayoutStore>,
+) -> AppResult<serde_json::Value> {
+    store.get()
+}
+
+#[tauri::command]
+pub async fn save_sidebar_layout(
+    store: State<'_, SidebarLayoutStore>,
+    layout: serde_json::Value,
+) -> AppResult<()> {
+    store.save(&layout)
 }
 
 #[tauri::command]

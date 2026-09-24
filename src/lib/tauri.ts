@@ -123,6 +123,11 @@ export const api = {
   cancelScript: (executionId: string) =>
     invoke<void>("cancel_script", { executionId }),
 
+  /** The sidebar's folder tree as stored, or null before one was saved. */
+  getSidebarLayout: () => invoke<unknown>("get_sidebar_layout"),
+
+  saveSidebarLayout: (layout: unknown) => invoke<void>("save_sidebar_layout", { layout }),
+
   suggestScriptPath: () => invoke<string>("suggest_script_path"),
 
   /** With a null path the backend picks a random name in the default folder. */
