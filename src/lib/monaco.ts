@@ -3,6 +3,7 @@ import * as monaco from "monaco-editor";
 import EditorWorker from "monaco-editor/editor/editor.worker.js?worker";
 import JsonWorker from "monaco-editor/language/json/json.worker.js?worker";
 import TsWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
+import { registerMongoCompletion } from "./monacoCompletion";
 
 // Bundle Monaco (and its web workers) via Vite instead of letting
 // @monaco-editor/react fetch them from a CDN at runtime - this app needs to
@@ -18,3 +19,4 @@ self.MonacoEnvironment = {
 };
 
 loader.config({ monaco });
+registerMongoCompletion(monaco);

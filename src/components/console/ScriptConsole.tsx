@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Editor from "@monaco-editor/react";
 import { Save, X } from "lucide-react";
 import { useConnectionsStore } from "../../store/connectionsStore";
@@ -17,6 +17,7 @@ import { hasUnsavedEdits, useScriptsStore } from "../../store/scriptsStore";
 import { useThemeStore } from "../../store/themeStore";
 import { isLightTheme } from "../../lib/themes";
 import { ConsoleOutput } from "./ConsoleOutput";
+import { attachCompletion } from "../../lib/monacoCompletion";
 import { ResultViewToggle } from "../json/ResultViewToggle";
 
 export function ScriptConsole() {
@@ -29,6 +30,9 @@ export function ScriptConsole() {
   const consoleSession = useConsoleStore((s) => s.consoles[key]);
   const setScript = useConsoleStore((s) => s.setScript);
   const cancel = useConsoleStore((s) => s.cancel);
+  const detachCompletion = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => detachCompletion.current?.(), []);
   const file = useScriptsStore((s) => s.files[key]);
   const saving = useScriptsStore((s) => s.saving);
   const saveError = useScriptsStore((s) => s.saveError);
@@ -159,6 +163,22 @@ export function ScriptConsole() {
               scrollBeyondLastLine: false,
             }}
             onMount={(editor, monaco) => {
+              // The editor remounts per tab (key={key}); let go of the
+              // previous tab's model before registering this one.
+              detachCompletion.current?.();
+              const model = editor.getModel();
+              if (model) {
+                detachCompletion.current = attachCompletion(model, {
+                  editor: "console",
+                  // the collection comes from db.collection("…") in the text
+                  context: () => {
+                    const { session: current, database } = currentConsoleTarget();
+                    return current && database
+                      ? { sessionId: current.sessionId, database, collection: null }
+                      : null;
+                  },
+                });
+              }
               editor.addCommand(
                 monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
                 handleRun,
