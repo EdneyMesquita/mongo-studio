@@ -32,6 +32,8 @@ interface SidebarLayoutState {
   move: (id: string, target: DropTarget) => void;
 }
 
+let loading: Promise<void> | null = null;
+
 export const useSidebarLayoutStore = create<SidebarLayoutState>((set, get) => {
   /** Applies a new tree and writes it to disk. */
   function commit(root: TreeNode[]) {
@@ -49,14 +51,18 @@ export const useSidebarLayoutStore = create<SidebarLayoutState>((set, get) => {
     renamingId: null,
     error: null,
 
-    load: async () => {
-      try {
-        set({ root: parseLayout(await api.getSidebarLayout()), loaded: true, error: null });
-      } catch (e) {
-        // Still usable - flat, like before folders existed.
-        set({ loaded: true, error: `Couldn't load the sidebar layout: ${String(e)}` });
-      }
-    },
+    // Only the first call reads the file. A second one (StrictMode mounts the
+    // sidebar twice) could otherwise finish after the tree was already
+    // reconciled and saved, and put back the stale, emptier copy it read.
+    load: () =>
+      (loading ??= (async () => {
+        try {
+          set({ root: parseLayout(await api.getSidebarLayout()), loaded: true, error: null });
+        } catch (e) {
+          // Still usable - flat, like before folders existed.
+          set({ loaded: true, error: `Couldn't load the sidebar layout: ${String(e)}` });
+        }
+      })()),
 
     sync: (connectionIds) => {
       if (!get().loaded) return;
