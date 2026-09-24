@@ -5,16 +5,20 @@ import type { CollectionStats, QueryResultPage } from "../types/query";
 
 export type QueryMode = "find" | "aggregate";
 
-interface SessionsState {
-  collections: CollectionInfo[];
-  /**
-   * Which database shows its collections in the sidebar. Kept apart from
-   * `selectedDatabase` so collapsing a database is purely visual and doesn't
-   * throw away the collection currently being browsed.
-   */
-  expandedDatabase: string | null;
-  selectedDatabase: string | null;
-  selectedCollection: string | null;
+/** The connection a tab was opened on, as shown on the tab. */
+export interface TabConnection {
+  id: string;
+  name: string;
+  /** Server address with credentials masked, e.g. mongodb://***@host:27017. */
+  summary: string;
+}
+
+/** One open collection, with its own query, results and stats. */
+export interface CollectionTab {
+  id: string;
+  connection: TabConnection;
+  database: string;
+  collection: string;
   stats: CollectionStats | null;
   results: QueryResultPage | null;
   mode: QueryMode;
@@ -25,22 +29,64 @@ interface SessionsState {
   pipelineText: string;
   loading: boolean;
   error: string | null;
+}
+
+/** The part of a tab the query bar edits. */
+export type TabQueryFields = Pick<
+  CollectionTab,
+  "mode" | "filterText" | "sortText" | "limit" | "skip" | "pipelineText"
+>;
+
+interface SessionsState {
+  /** Collections of `collectionsDatabase`, listed in the sidebar tree. */
+  collections: CollectionInfo[];
+  collectionsDatabase: string | null;
+  collectionsLoading: boolean;
+  collectionsError: string | null;
+  /**
+   * Which database shows its collections in the sidebar. Purely visual:
+   * collapsing a database leaves every tab open on it alone.
+   */
+  expandedDatabase: string | null;
+  tabs: CollectionTab[];
+  activeTabId: string | null;
 
   toggleDatabase: (sessionId: string, database: string) => Promise<void>;
-  selectDatabase: (sessionId: string, database: string) => Promise<void>;
-  selectCollection: (
+  /** Focuses the collection's tab, opening one if it has none yet. */
+  openCollection: (
     sessionId: string,
+    connection: TabConnection,
     database: string,
     collection: string,
   ) => Promise<void>;
-  setMode: (mode: QueryMode) => void;
-  setFilterText: (text: string) => void;
-  setSortText: (text: string) => void;
-  setLimit: (limit: number) => void;
-  setSkip: (skip: number) => void;
-  setPipelineText: (text: string) => void;
-  runQuery: (sessionId: string) => Promise<void>;
+  activateTab: (id: string) => void;
+  closeTab: (id: string) => void;
+  closeOtherTabs: (id: string) => void;
+  closeAllTabs: () => void;
+  updateTab: (id: string, patch: Partial<TabQueryFields>) => void;
+  runQuery: (sessionId: string, id: string) => Promise<void>;
   reset: () => void;
+}
+
+/**
+ * Unique per collection per connection: database names can't contain dots,
+ * and the connection id keeps same-named collections on different servers
+ * apart.
+ */
+export function tabIdFor(connectionId: string, database: string, collection: string): string {
+  return `${connectionId}/${database}.${collection}`;
+}
+
+export function selectActiveTab(state: SessionsState): CollectionTab | null {
+  return state.tabs.find((t) => t.id === state.activeTabId) ?? null;
+}
+
+/**
+ * The database the console should run against: the active tab's, else the
+ * one last opened in the sidebar.
+ */
+export function selectCurrentDatabase(state: SessionsState): string | null {
+  return selectActiveTab(state)?.database ?? state.collectionsDatabase;
 }
 
 function parseJsonObject(text: string): Record<string, unknown> {
@@ -59,134 +105,164 @@ function parseJsonArray(text: string): unknown[] {
   return parsed;
 }
 
-const initialQueryState = {
-  mode: "find" as QueryMode,
-  filterText: "{}",
-  sortText: "",
-  limit: 50,
-  skip: 0,
-  pipelineText: "[\n  { \"$limit\": 50 }\n]",
+function newTab(
+  connection: TabConnection,
+  database: string,
+  collection: string,
+): CollectionTab {
+  return {
+    id: tabIdFor(connection.id, database, collection),
+    connection,
+    database,
+    collection,
+    stats: null,
+    results: null,
+    mode: "find",
+    filterText: "{}",
+    sortText: "",
+    limit: 50,
+    skip: 0,
+    pipelineText: "[\n  { \"$limit\": 50 }\n]",
+    loading: false,
+    error: null,
+  };
+}
+
+const initialState = {
+  collections: [] as CollectionInfo[],
+  collectionsDatabase: null as string | null,
+  collectionsLoading: false,
+  collectionsError: null as string | null,
+  expandedDatabase: null as string | null,
+  tabs: [] as CollectionTab[],
+  activeTabId: null as string | null,
 };
 
-export const useSessionsStore = create<SessionsState>((set, get) => ({
-  collections: [],
-  expandedDatabase: null,
-  selectedDatabase: null,
-  selectedCollection: null,
-  stats: null,
-  results: null,
-  ...initialQueryState,
-  loading: false,
-  error: null,
+export const useSessionsStore = create<SessionsState>((set, get) => {
+  // Requests outlive the tab that made them when it's closed mid-flight;
+  // patching a tab that's gone is simply a no-op.
+  function patchTab(id: string, patch: Partial<CollectionTab>) {
+    set((s) => ({
+      tabs: s.tabs.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+    }));
+  }
 
-  toggleDatabase: async (sessionId, database) => {
-    const { expandedDatabase, selectedDatabase } = get();
-    if (expandedDatabase === database) {
-      set({ expandedDatabase: null });
-      return;
-    }
-    // Reopening the database already loaded: its collections are still in
-    // hand, so just show them again rather than clearing the current query.
-    if (selectedDatabase === database) {
-      set({ expandedDatabase: database });
-      return;
-    }
-    await get().selectDatabase(sessionId, database);
-  },
+  return {
+    ...initialState,
 
-  selectDatabase: async (sessionId, database) => {
-    set({
-      expandedDatabase: database,
-      selectedDatabase: database,
-      selectedCollection: null,
-      stats: null,
-      results: null,
-      loading: true,
-      error: null,
-    });
-    try {
-      const collections = await api.listCollections(sessionId, database);
-      set({ collections, loading: false });
-    } catch (e) {
-      set({ error: String(e), loading: false });
-    }
-  },
-
-  selectCollection: async (sessionId, database, collection) => {
-    set({
-      expandedDatabase: database,
-      selectedDatabase: database,
-      selectedCollection: collection,
-      results: null,
-      loading: true,
-      error: null,
-    });
-    try {
-      const stats = await api.getCollectionStats(sessionId, database, collection);
-      set({ stats, loading: false });
-      await get().runQuery(sessionId);
-    } catch (e) {
-      set({ error: String(e), loading: false });
-    }
-  },
-
-  setMode: (mode) => set({ mode }),
-  setFilterText: (text) => set({ filterText: text }),
-  setSortText: (text) => set({ sortText: text }),
-  setLimit: (limit) => set({ limit }),
-  setSkip: (skip) => set({ skip }),
-  setPipelineText: (text) => set({ pipelineText: text }),
-
-  runQuery: async (sessionId) => {
-    const {
-      selectedDatabase,
-      selectedCollection,
-      mode,
-      filterText,
-      sortText,
-      limit,
-      skip,
-      pipelineText,
-    } = get();
-    if (!selectedDatabase || !selectedCollection) return;
-    set({ loading: true, error: null });
-    try {
-      if (mode === "aggregate") {
-        const pipeline = parseJsonArray(pipelineText);
-        const results = await api.runAggregate(
-          sessionId,
-          selectedDatabase,
-          selectedCollection,
-          pipeline,
-        );
-        set({ results, loading: false });
-      } else {
-        const filter = parseJsonObject(filterText);
-        const sort = sortText.trim() ? parseJsonObject(sortText) : null;
-        const results = await api.runFind(sessionId, selectedDatabase, selectedCollection, {
-          filter,
-          sort,
-          projection: null,
-          limit,
-          skip,
-        });
-        set({ results, loading: false });
+    toggleDatabase: async (sessionId, database) => {
+      const { expandedDatabase, collectionsDatabase } = get();
+      if (expandedDatabase === database) {
+        set({ expandedDatabase: null });
+        return;
       }
-    } catch (e) {
-      set({ error: String(e), loading: false });
-    }
-  },
+      // Reopening the database already loaded: its collections are still in
+      // hand, so just show them again.
+      if (collectionsDatabase === database) {
+        set({ expandedDatabase: database });
+        return;
+      }
+      set({
+        expandedDatabase: database,
+        collectionsDatabase: database,
+        collections: [],
+        collectionsLoading: true,
+        collectionsError: null,
+      });
+      try {
+        const collections = await api.listCollections(sessionId, database);
+        // Another database may have been opened while this one loaded.
+        if (get().collectionsDatabase === database) {
+          set({ collections, collectionsLoading: false });
+        }
+      } catch (e) {
+        if (get().collectionsDatabase !== database) return;
+        // Forget which database is loaded so the next toggle retries.
+        set({
+          collectionsError: String(e),
+          collectionsLoading: false,
+          collectionsDatabase: null,
+        });
+      }
+    },
 
-  reset: () =>
-    set({
-      collections: [],
-      expandedDatabase: null,
-      selectedDatabase: null,
-      selectedCollection: null,
-      stats: null,
-      results: null,
-      ...initialQueryState,
-      loading: false,
-      error: null,
-    }),
-}));
+    openCollection: async (sessionId, connection, database, collection) => {
+      const id = tabIdFor(connection.id, database, collection);
+      if (get().tabs.some((t) => t.id === id)) {
+        set({ activeTabId: id });
+        return;
+      }
+      set((s) => ({
+        tabs: [...s.tabs, { ...newTab(connection, database, collection), loading: true }],
+        activeTabId: id,
+      }));
+      try {
+        const stats = await api.getCollectionStats(sessionId, database, collection);
+        patchTab(id, { stats, loading: false });
+        await get().runQuery(sessionId, id);
+      } catch (e) {
+        patchTab(id, { error: String(e), loading: false });
+      }
+    },
+
+    activateTab: (id) => set({ activeTabId: id }),
+
+    closeTab: (id) =>
+      set((s) => {
+        const index = s.tabs.findIndex((t) => t.id === id);
+        if (index === -1) return s;
+        const tabs = s.tabs.filter((t) => t.id !== id);
+        // Closing the active tab hands focus to its right neighbour, or the
+        // left one when it was last - the way editor tabs behave.
+        const activeTabId =
+          s.activeTabId === id
+            ? (tabs[index] ?? tabs[index - 1])?.id ?? null
+            : s.activeTabId;
+        return { tabs, activeTabId };
+      }),
+
+    closeOtherTabs: (id) =>
+      set((s) =>
+        s.tabs.some((t) => t.id === id)
+          ? { tabs: s.tabs.filter((t) => t.id === id), activeTabId: id }
+          : s,
+      ),
+
+    closeAllTabs: () => set({ tabs: [], activeTabId: null }),
+
+    updateTab: (id, patch) => patchTab(id, patch),
+
+    runQuery: async (sessionId, id) => {
+      const tab = get().tabs.find((t) => t.id === id);
+      if (!tab) return;
+      patchTab(id, { loading: true, error: null });
+      try {
+        if (tab.mode === "aggregate") {
+          const pipeline = parseJsonArray(tab.pipelineText);
+          const results = await api.runAggregate(
+            sessionId,
+            tab.database,
+            tab.collection,
+            pipeline,
+          );
+          patchTab(id, { results, loading: false });
+        } else {
+          const filter = parseJsonObject(tab.filterText);
+          const sort = tab.sortText.trim() ? parseJsonObject(tab.sortText) : null;
+          const results = await api.runFind(sessionId, tab.database, tab.collection, {
+            filter,
+            sort,
+            projection: null,
+            limit: tab.limit,
+            skip: tab.skip,
+          });
+          patchTab(id, { results, loading: false });
+        }
+      } catch (e) {
+        patchTab(id, { error: String(e), loading: false });
+      }
+    },
+
+    reset: () => set(initialState),
+  };
+});

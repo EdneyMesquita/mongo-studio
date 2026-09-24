@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useSessionsStore } from "../../store/sessionsStore";
+import { memo, useState } from "react";
+import type { CollectionTab } from "../../store/sessionsStore";
 import { QueryBar } from "../query/QueryBar";
 import { ExportDialog } from "../export/ExportDialog";
 import { DocumentCard } from "./DocumentCard";
@@ -8,23 +8,23 @@ import { JsonTable } from "../json/JsonTable";
 import { ResultViewToggle } from "../json/ResultViewToggle";
 import { useUiStore } from "../../store/uiStore";
 
-export function DocumentGrid() {
-  const { selectedCollection, selectedDatabase, stats, results, error, loading } =
-    useSessionsStore();
+// Memoised because every open tab has a grid mounted: typing in one tab's
+// query must not re-render the others, whose tab objects are unchanged.
+export const DocumentGrid = memo(function DocumentGrid({ tab }: { tab: CollectionTab }) {
+  const {
+    database: selectedDatabase,
+    collection: selectedCollection,
+    stats,
+    results,
+    error,
+    loading,
+  } = tab;
   const [exportOpen, setExportOpen] = useState(false);
   const resultView = useUiStore((s) => s.resultView);
 
-  if (!selectedCollection || !selectedDatabase) {
-    return (
-      <div className="flex h-full items-center justify-center text-text-muted">
-        Select a collection to browse its documents
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-full flex-col">
-      <QueryBar />
+      <QueryBar tab={tab} />
       <div className="flex items-center justify-between border-b border-border-subtle bg-editor px-3 py-1.5 text-xs text-text-muted">
         <div className="flex items-center gap-3">
           <span className="font-mono text-text-default">
@@ -63,19 +63,28 @@ export function DocumentGrid() {
             <JsonTable
               value={results.documents}
               rootActions={(doc) => (
-                <DocumentActions doc={doc} collectionName={selectedCollection} />
+                <DocumentActions
+                  doc={doc}
+                  collectionName={selectedCollection}
+                  tabId={tab.id}
+                />
               )}
             />
           )
         ) : (
           <div className="flex flex-col gap-2 p-2">
             {results?.documents.map((doc, i) => (
-              <DocumentCard key={i} doc={doc} collectionName={selectedCollection} />
+              <DocumentCard
+                key={i}
+                doc={doc}
+                collectionName={selectedCollection}
+                tabId={tab.id}
+              />
             ))}
           </div>
         )}
       </div>
-      {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}
+      {exportOpen && <ExportDialog tab={tab} onClose={() => setExportOpen(false)} />}
     </div>
   );
-}
+});

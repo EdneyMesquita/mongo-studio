@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useConnectionsStore } from "../../store/connectionsStore";
-import { useSessionsStore } from "../../store/sessionsStore";
+import type { CollectionTab } from "../../store/sessionsStore";
 import { api } from "../../lib/tauri";
 
 interface IndexStatEntry {
@@ -12,9 +12,9 @@ function isIndexStatEntry(value: unknown): value is IndexStatEntry {
   return typeof value === "object" && value !== null;
 }
 
-export function IndexesPanel() {
+export function IndexesPanel({ tab }: { tab: CollectionTab }) {
   const session = useConnectionsStore((s) => s.session);
-  const { selectedDatabase, selectedCollection, stats } = useSessionsStore();
+  const { database: selectedDatabase, collection: selectedCollection, stats } = tab;
   const [statsByName, setStatsByName] = useState<Map<string, IndexStatEntry>>(new Map());
   const [statsError, setStatsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -46,14 +46,6 @@ export function IndexesPanel() {
       cancelled = true;
     };
   }, [session, selectedDatabase, selectedCollection]);
-
-  if (!selectedCollection || !selectedDatabase) {
-    return (
-      <div className="flex h-full items-center justify-center text-text-muted">
-        Select a collection to see its indexes
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-3">

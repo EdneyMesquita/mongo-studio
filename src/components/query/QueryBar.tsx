@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import { useSessionsStore } from "../../store/sessionsStore";
-import type { QueryMode } from "../../store/sessionsStore";
+import type { CollectionTab, QueryMode } from "../../store/sessionsStore";
 import { ExplainDialog } from "../explain/ExplainDialog";
 
 const inputClass =
@@ -12,27 +12,15 @@ const modes: { id: QueryMode; label: string }[] = [
   { id: "aggregate", label: "Aggregate" },
 ];
 
-export function QueryBar() {
+export function QueryBar({ tab }: { tab: CollectionTab }) {
   const session = useConnectionsStore((s) => s.session);
-  const {
-    mode,
-    filterText,
-    sortText,
-    limit,
-    skip,
-    pipelineText,
-    loading,
-    setMode,
-    setFilterText,
-    setSortText,
-    setLimit,
-    setSkip,
-    setPipelineText,
-    runQuery,
-  } = useSessionsStore();
+  const updateTab = useSessionsStore((s) => s.updateTab);
+  const runQuery = useSessionsStore((s) => s.runQuery);
   const [explainOpen, setExplainOpen] = useState(false);
 
   if (!session) return null;
+
+  const { mode, filterText, sortText, limit, skip, pipelineText, loading } = tab;
 
   return (
     <div className="border-b border-border-subtle bg-editor">
@@ -46,7 +34,7 @@ export function QueryBar() {
                 ? "bg-panel text-text-default"
                 : "text-text-muted hover:text-text-default"
             }`}
-            onClick={() => setMode(m.id)}
+            onClick={() => updateTab(tab.id, { mode: m.id })}
           >
             {m.label}
           </button>
@@ -62,7 +50,7 @@ export function QueryBar() {
               <input
                 className={`${inputClass} w-full font-mono`}
                 value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
+                onChange={(e) => updateTab(tab.id, { filterText: e.target.value })}
                 placeholder="{ }"
               />
             </div>
@@ -73,7 +61,7 @@ export function QueryBar() {
               <input
                 className={`${inputClass} w-full font-mono`}
                 value={sortText}
-                onChange={(e) => setSortText(e.target.value)}
+                onChange={(e) => updateTab(tab.id, { sortText: e.target.value })}
                 placeholder="{ _id: -1 }"
               />
             </div>
@@ -85,7 +73,7 @@ export function QueryBar() {
                 type="number"
                 className={`${inputClass} w-20`}
                 value={limit}
-                onChange={(e) => setLimit(Number(e.target.value))}
+                onChange={(e) => updateTab(tab.id, { limit: Number(e.target.value) })}
               />
             </div>
             <div>
@@ -96,7 +84,7 @@ export function QueryBar() {
                 type="number"
                 className={`${inputClass} w-20`}
                 value={skip}
-                onChange={(e) => setSkip(Number(e.target.value))}
+                onChange={(e) => updateTab(tab.id, { skip: Number(e.target.value) })}
               />
             </div>
           </>
@@ -108,7 +96,7 @@ export function QueryBar() {
             <textarea
               className={`${inputClass} h-20 w-full resize-y font-mono`}
               value={pipelineText}
-              onChange={(e) => setPipelineText(e.target.value)}
+              onChange={(e) => updateTab(tab.id, { pipelineText: e.target.value })}
               placeholder='[ { "$match": {} }, { "$limit": 50 } ]'
             />
           </div>
@@ -117,7 +105,7 @@ export function QueryBar() {
           type="button"
           disabled={loading}
           className="rounded bg-run px-3 py-1.5 text-xs text-white hover:bg-run-hover disabled:opacity-50"
-          onClick={() => runQuery(session.sessionId)}
+          onClick={() => runQuery(session.sessionId, tab.id)}
         >
           Run
         </button>
@@ -129,7 +117,7 @@ export function QueryBar() {
           Explain
         </button>
       </div>
-      {explainOpen && <ExplainDialog onClose={() => setExplainOpen(false)} />}
+      {explainOpen && <ExplainDialog tab={tab} onClose={() => setExplainOpen(false)} />}
     </div>
   );
 }

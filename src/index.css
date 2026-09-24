@@ -206,3 +206,13 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-subtle) transparent;
 }
+
+/* For strips that scroll by other means, like the collection tab bar. Kept
+   out of Tailwind's layers on purpose: the unlayered rule above would beat
+   any layered utility, whatever its specificity. */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
