@@ -69,6 +69,17 @@ export const api = {
     query: FindQueryInput,
   ) => invoke<QueryResultPage>("run_find", { sessionId, database, collection, query }),
 
+  /** Sets one field of the document with this _id; returns it as stored. */
+  updateField: (
+    sessionId: string,
+    database: string,
+    collection: string,
+    id: unknown,
+    path: string[],
+    value: unknown,
+  ) =>
+    invoke<unknown>("update_field", { sessionId, database, collection, id, path, value }),
+
   runAggregate: (
     sessionId: string,
     database: string,

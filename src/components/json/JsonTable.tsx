@@ -9,6 +9,7 @@ import {
   plainText,
   relativeTime,
 } from "../../lib/bsonValue";
+import { EditableValue } from "./EditableValue";
 
 const INDENT_PX = 14;
 /** Fields shown inline in a collapsed object's preview before giving up. */
@@ -99,6 +100,9 @@ interface Row {
   value: unknown;
   hasChildren: boolean;
   rootIndex: number | null;
+  /** The document the row belongs to, and the field's path within it. */
+  doc: unknown;
+  fieldPath: string[];
 }
 
 function buildRows(
@@ -108,11 +112,18 @@ function buildRows(
   parentPath: string,
   numbered: boolean,
   rows: Row[],
+  doc: unknown,
+  parentFieldPath: string[],
 ) {
   entries.forEach(([key, value], i) => {
     const path = `${parentPath}/${key}`;
     const children = childEntries(value);
+    // In a result list each top-level row is a document of its own.
+    const rowDoc = numbered ? value : doc;
+    const fieldPath = numbered ? [] : [...parentFieldPath, key];
     rows.push({
+      doc: rowDoc,
+      fieldPath,
       path,
       depth,
       label: numbered ? documentLabel(value, i) : key,
@@ -122,7 +133,7 @@ function buildRows(
       rootIndex: numbered ? i : null,
     });
     if (children !== null && expanded.has(path)) {
-      buildRows(children, expanded, depth + 1, path, false, rows);
+      buildRows(children, expanded, depth + 1, path, false, rows, rowDoc, fieldPath);
     }
   });
 }
@@ -161,7 +172,7 @@ export function JsonTable({ value, rootActions, className = "" }: JsonTableProps
   const topEntries = childEntries(value) ?? [["value", value]];
 
   const rows: Row[] = [];
-  buildRows(topEntries, expanded, 0, "", numbered, rows);
+  buildRows(topEntries, expanded, 0, "", numbered, rows, value, []);
 
   const headCell =
     "sticky top-0 z-10 bg-panel-alt px-2 py-1.5 text-left font-semibold text-text-muted";
@@ -220,9 +231,16 @@ export function JsonTable({ value, rootActions, className = "" }: JsonTableProps
                   title={plainText(row.value)}
                 >
                   {children === null ? (
-                    <div className="truncate">
-                      <ScalarText value={row.value} />
-                    </div>
+                    <EditableValue
+                      value={row.value}
+                      doc={row.doc}
+                      path={row.fieldPath}
+                      block
+                    >
+                      <div className="truncate">
+                        <ScalarText value={row.value} />
+                      </div>
+                    </EditableValue>
                   ) : children.length === 0 ? (
                     <span className="text-text-faint">
                       {Array.isArray(row.value) ? "Array[0]" : "{ }"}

@@ -21,6 +21,12 @@ export interface CollectionTab {
   collection: string;
   stats: CollectionStats | null;
   results: QueryResultPage | null;
+  /**
+   * The mode that produced `results`. Only find results are documents as
+   * stored; aggregate output can be regrouped or computed, so it isn't
+   * editable even when it has an _id.
+   */
+  resultsMode: QueryMode | null;
   mode: QueryMode;
   filterText: string;
   sortText: string;
@@ -65,6 +71,8 @@ interface SessionsState {
   closeAllTabs: () => void;
   updateTab: (id: string, patch: Partial<TabQueryFields>) => void;
   runQuery: (sessionId: string, id: string) => Promise<void>;
+  /** Swaps in a document as stored after an edit, matched on _id. */
+  replaceDocument: (id: string, updated: unknown) => void;
   reset: () => void;
 }
 
@@ -117,6 +125,7 @@ function newTab(
     collection,
     stats: null,
     results: null,
+    resultsMode: null,
     mode: "find",
     filterText: "{}",
     sortText: "",
@@ -245,7 +254,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
             tab.collection,
             pipeline,
           );
-          patchTab(id, { results, loading: false });
+          patchTab(id, { results, resultsMode: "aggregate", loading: false });
         } else {
           const filter = parseJsonObject(tab.filterText);
           const sort = tab.sortText.trim() ? parseJsonObject(tab.sortText) : null;
@@ -256,11 +265,25 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
             limit: tab.limit,
             skip: tab.skip,
           });
-          patchTab(id, { results, loading: false });
+          patchTab(id, { results, resultsMode: "find", loading: false });
         }
       } catch (e) {
         patchTab(id, { error: String(e), loading: false });
       }
+    },
+
+    replaceDocument: (id, updated) => {
+      const tab = get().tabs.find((t) => t.id === id);
+      if (!tab?.results) return;
+      const key = JSON.stringify((updated as { _id?: unknown } | null)?._id);
+      patchTab(id, {
+        results: {
+          ...tab.results,
+          documents: tab.results.documents.map((d) =>
+            JSON.stringify((d as { _id?: unknown } | null)?._id) === key ? updated : d,
+          ),
+        },
+      });
     },
 
     reset: () => set(initialState),
