@@ -2,6 +2,12 @@ import { ChevronRight, Layers } from "lucide-react";
 import { selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
 import type { DatabaseInfo } from "../../types/connection";
 
+// The active connection already paints its whole subtree bg-sidebar-active,
+// so the open collection needs a lighter shade plus an accent bar to stand
+// out from it rather than blend in.
+const activeRowClass =
+  "bg-sidebar-active-hover shadow-[inset_2px_0_0_var(--color-accent)]";
+
 export function DatabaseRow({ db, sessionId }: { db: DatabaseInfo; sessionId: string }) {
   const expandedDatabase = useSessionsStore((s) => s.expandedDatabase);
   const collections = useSessionsStore((s) => s.collections);
@@ -26,9 +32,7 @@ export function DatabaseRow({ db, sessionId }: { db: DatabaseInfo; sessionId: st
       <button
         type="button"
         className={`flex w-full items-center gap-1.5 px-1.5 py-1 text-left text-xs text-text-default ${
-          showsActiveInline
-            ? "bg-sidebar-active hover:bg-sidebar-active-hover"
-            : "hover:bg-sidebar-hover"
+          showsActiveInline ? activeRowClass : "hover:bg-sidebar-hover"
         }`}
         onClick={() => toggleDatabase(sessionId, db.name)}
       >
@@ -61,7 +65,7 @@ export function DatabaseRow({ db, sessionId }: { db: DatabaseInfo; sessionId: st
               type="button"
               className={`block w-full truncate px-1.5 py-1 text-left text-[11px] ${
                 activeCollection === coll.name
-                  ? "bg-sidebar-active font-medium text-text-default hover:bg-sidebar-active-hover"
+                  ? `${activeRowClass} font-medium text-text-default`
                   : "text-text-muted hover:bg-sidebar-hover"
               }`}
               onClick={() => openCollection(sessionId, db.name, coll.name)}
