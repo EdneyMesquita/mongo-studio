@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { bsonLiteral, childEntries, isPlainObject } from "../../lib/bsonValue";
+import { EditableValue } from "./EditableValue";
 
 const INDENT_PX = 14;
 
@@ -34,6 +35,9 @@ function NodeLabel({ name, isIndex }: { name?: string; isIndex: boolean }) {
 
 interface JsonNodeProps {
   value: unknown;
+  /** The tree's root value, and this node's field path from it. */
+  doc: unknown;
+  path: string[];
   depth: number;
   defaultOpenDepth: number;
   isLast: boolean;
@@ -43,6 +47,8 @@ interface JsonNodeProps {
 
 function JsonNode({
   value,
+  doc,
+  path,
   depth,
   defaultOpenDepth,
   isLast,
@@ -61,7 +67,9 @@ function JsonNode({
         style={{ paddingLeft: depth * INDENT_PX + 14 }}
       >
         <NodeLabel name={name} isIndex={isIndex} />
-        <Scalar value={value} />
+        <EditableValue value={value} doc={doc} path={path}>
+          <Scalar value={value} />
+        </EditableValue>
         {!isLast && <span className="text-json-punct">,</span>}
       </div>
     );
@@ -113,6 +121,8 @@ function JsonNode({
               name={key}
               isIndex={isArray}
               value={child}
+              doc={doc}
+              path={[...path, key]}
               depth={depth + 1}
               defaultOpenDepth={defaultOpenDepth}
               isLast={i === entries.length - 1}
@@ -144,6 +154,8 @@ export function JsonTree({
     <div className={`font-mono text-xs leading-[1.5] ${className}`}>
       <JsonNode
         value={value}
+        doc={value}
+        path={[]}
         depth={0}
         defaultOpenDepth={defaultOpenDepth}
         isLast
