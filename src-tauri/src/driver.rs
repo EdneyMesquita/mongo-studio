@@ -309,7 +309,7 @@ pub async fn list_collections(client: &Client, db: &str) -> AppResult<Vec<Collec
         .await?
         .try_collect()
         .await?;
-    Ok(collections
+    let mut collections: Vec<CollectionInfo> = collections
         .into_iter()
         .map(|c| CollectionInfo {
             name: c.name,
@@ -321,7 +321,21 @@ pub async fn list_collections(client: &Client, db: &str) -> AppResult<Vec<Collec
             }
             .to_string(),
         })
-        .collect())
+        .collect();
+    sort_by_name(&mut collections);
+    Ok(collections)
+}
+
+/// Orders collections by name the way people read a list: case doesn't
+/// split `Orders` from `orders_archive`. The server returns them in no
+/// particular order, which gets hard to scan in a database with many.
+fn sort_by_name(collections: &mut [CollectionInfo]) {
+    collections.sort_by(|a, b| {
+        a.name
+            .to_lowercase()
+            .cmp(&b.name.to_lowercase())
+            .then_with(|| a.name.cmp(&b.name))
+    });
 }
 
 pub async fn run_find(
@@ -616,6 +630,22 @@ mod tests {
 
     fn segments(parts: &[&str]) -> Vec<String> {
         parts.iter().map(|p| p.to_string()).collect()
+    }
+
+    #[test]
+    fn collections_sort_by_name_ignoring_case() {
+        let mut collections: Vec<CollectionInfo> = ["users", "Orders", "audit", "orders", "Zones"]
+            .iter()
+            .map(|name| CollectionInfo {
+                name: name.to_string(),
+                collection_type: "collection".to_string(),
+            })
+            .collect();
+
+        sort_by_name(&mut collections);
+
+        let names: Vec<&str> = collections.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["audit", "Orders", "orders", "users", "Zones"]);
     }
 
     #[test]
