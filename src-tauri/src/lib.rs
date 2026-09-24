@@ -46,6 +46,7 @@ pub fn run() {
             commands::get_collection_stats,
             commands::run_find,
             commands::run_aggregate,
+            commands::update_field,
             commands::count_documents,
             commands::run_script,
             commands::cancel_script,
