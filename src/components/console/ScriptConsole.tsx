@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Editor from "@monaco-editor/react";
 import { Save, X } from "lucide-react";
 import { useConnectionsStore } from "../../store/connectionsStore";
@@ -17,6 +17,10 @@ import { hasUnsavedEdits, useScriptsStore } from "../../store/scriptsStore";
 import { useThemeStore } from "../../store/themeStore";
 import { isLightTheme } from "../../lib/themes";
 import { ConsoleOutput } from "./ConsoleOutput";
+import { ConsoleLayoutToggle } from "./ConsoleLayoutToggle";
+import { SplitPane } from "../ui/SplitPane";
+import { DEFAULT_CONSOLE_SPLIT, useUiStore } from "../../store/uiStore";
+import { attachCompletion } from "../../lib/monacoCompletion";
 import { ResultViewToggle } from "../json/ResultViewToggle";
 
 export function ScriptConsole() {
@@ -29,6 +33,12 @@ export function ScriptConsole() {
   const consoleSession = useConsoleStore((s) => s.consoles[key]);
   const setScript = useConsoleStore((s) => s.setScript);
   const cancel = useConsoleStore((s) => s.cancel);
+  const detachCompletion = useRef<(() => void) | null>(null);
+  const layout = useUiStore((s) => s.consoleLayout);
+  const split = useUiStore((s) => s.consoleSplit[s.consoleLayout]);
+  const setSplit = useUiStore((s) => s.setConsoleSplit);
+
+  useEffect(() => () => detachCompletion.current?.(), []);
   const file = useScriptsStore((s) => s.files[key]);
   const saving = useScriptsStore((s) => s.saving);
   const saveError = useScriptsStore((s) => s.saveError);
@@ -110,6 +120,7 @@ export function ScriptConsole() {
           )}
         </span>
         <div className="flex items-center gap-2">
+          <ConsoleLayoutToggle />
           <ResultViewToggle />
           <button
             type="button"
@@ -141,35 +152,58 @@ export function ScriptConsole() {
           )}
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <div className="min-h-[200px] flex-1 md:h-full">
-          <Editor
-            // Remounted per console rather than switched with `path`: the
-            // wrapper applies a new `value` and a new `path` in separate
-            // effects, so on a tab switch it wrote the incoming script into
-            // the outgoing tab's model, cross-wiring the two buffers.
-            key={key}
-            language="javascript"
-            theme={isLightTheme(themeId) ? "light" : "vs-dark"}
-            value={script}
-            onChange={(value) => setScript(key, value ?? "")}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 13,
-              scrollBeyondLastLine: false,
-            }}
-            onMount={(editor, monaco) => {
-              editor.addCommand(
-                monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
-                handleRun,
-              );
-            }}
-          />
-        </div>
-        <div className="min-h-[150px] flex-1 border-t border-border-subtle md:h-full md:w-96 md:border-l md:border-t-0">
-          <ConsoleOutput session={consoleSession} />
-        </div>
-      </div>
+      <SplitPane
+        direction={layout === "side" ? "horizontal" : "vertical"}
+        ratio={split}
+        onRatioChange={(ratio) => setSplit(layout, ratio)}
+        defaultRatio={DEFAULT_CONSOLE_SPLIT}
+        ariaLabel="Resize editor and output"
+        first={
+          <div className="h-full">
+            <Editor
+              // Remounted per console rather than switched with `path`: the
+              // wrapper applies a new `value` and a new `path` in separate
+              // effects, so on a tab switch it wrote the incoming script into
+              // the outgoing tab's model, cross-wiring the two buffers.
+              key={key}
+              language="javascript"
+              theme={isLightTheme(themeId) ? "light" : "vs-dark"}
+              value={script}
+              onChange={(value) => setScript(key, value ?? "")}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 13,
+                scrollBeyondLastLine: false,
+                // follow the divider, not only the window
+                automaticLayout: true,
+              }}
+              onMount={(editor, monaco) => {
+                // The editor remounts per tab (key={key}); let go of the
+                // previous tab's model before registering this one.
+                detachCompletion.current?.();
+                const model = editor.getModel();
+                if (model) {
+                  detachCompletion.current = attachCompletion(model, {
+                    editor: "console",
+                    // the collection comes from db.collection("…") in the text
+                    context: () => {
+                      const { session: current, database } = currentConsoleTarget();
+                      return current && database
+                        ? { sessionId: current.sessionId, database, collection: null }
+                        : null;
+                    },
+                  });
+                }
+                editor.addCommand(
+                  monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
+                  handleRun,
+                );
+              }}
+            />
+          </div>
+        }
+        second={<ConsoleOutput session={consoleSession} />}
+      />
     </div>
   );
 }

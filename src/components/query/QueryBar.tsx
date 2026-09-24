@@ -3,6 +3,7 @@ import { useConnectionsStore } from "../../store/connectionsStore";
 import { useSessionsStore } from "../../store/sessionsStore";
 import type { CollectionTab, QueryMode } from "../../store/sessionsStore";
 import { ExplainDialog } from "../explain/ExplainDialog";
+import { QueryEditor } from "./QueryEditor";
 
 const inputClass =
   "rounded border border-border-subtle bg-panel px-2 py-1 text-xs text-text-default focus:border-accent focus:outline-none";
@@ -21,6 +22,13 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
   if (!session) return null;
 
   const { mode, filterText, sortText, limit, skip, pipelineText, loading } = tab;
+  const submit = () => runQuery(session.sessionId, tab.id);
+  // Completion names come from this tab's collection.
+  const completionContext = () => ({
+    sessionId: session.sessionId,
+    database: tab.database,
+    collection: tab.collection,
+  });
 
   return (
     <div className="border-b border-border-subtle bg-editor">
@@ -47,22 +55,28 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
               <label className="mb-1 block text-[10px] uppercase tracking-wide text-text-muted">
                 Filter (JSON)
               </label>
-              <input
-                className={`${inputClass} w-full font-mono`}
+              <QueryEditor
+                kind="filter"
+                ariaLabel="Filter"
                 value={filterText}
-                onChange={(e) => updateTab(tab.id, { filterText: e.target.value })}
-                placeholder="{ }"
+                onChange={(text) => updateTab(tab.id, { filterText: text })}
+                completionContext={completionContext}
+                onSubmit={submit}
+                placeholder='{ "field": "value" }'
               />
             </div>
             <div className="min-w-[140px]">
               <label className="mb-1 block text-[10px] uppercase tracking-wide text-text-muted">
                 Sort (JSON)
               </label>
-              <input
-                className={`${inputClass} w-full font-mono`}
+              <QueryEditor
+                kind="sort"
+                ariaLabel="Sort"
                 value={sortText}
-                onChange={(e) => updateTab(tab.id, { sortText: e.target.value })}
-                placeholder="{ _id: -1 }"
+                onChange={(text) => updateTab(tab.id, { sortText: text })}
+                completionContext={completionContext}
+                onSubmit={submit}
+                placeholder='{ "_id": -1 }'
               />
             </div>
             <div>
@@ -91,12 +105,16 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
         ) : (
           <div className="min-w-[200px] flex-1">
             <label className="mb-1 block text-[10px] uppercase tracking-wide text-text-muted">
-              Pipeline (JSON array of stages)
+              Pipeline (JSON array of stages) - Ctrl+Enter runs
             </label>
-            <textarea
-              className={`${inputClass} h-20 w-full resize-y font-mono`}
+            <QueryEditor
+              kind="pipeline"
+              ariaLabel="Pipeline"
+              multiline
               value={pipelineText}
-              onChange={(e) => updateTab(tab.id, { pipelineText: e.target.value })}
+              onChange={(text) => updateTab(tab.id, { pipelineText: text })}
+              completionContext={completionContext}
+              onSubmit={submit}
               placeholder='[ { "$match": {} }, { "$limit": 50 } ]'
             />
           </div>
@@ -105,7 +123,7 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
           type="button"
           disabled={loading}
           className="rounded bg-run px-3 py-1.5 text-xs text-white hover:bg-run-hover disabled:opacity-50"
-          onClick={() => runQuery(session.sessionId, tab.id)}
+          onClick={submit}
         >
           Run
         </button>
