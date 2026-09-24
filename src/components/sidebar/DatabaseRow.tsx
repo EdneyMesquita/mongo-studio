@@ -3,10 +3,9 @@ import { selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
 import type { DatabaseInfo } from "../../types/connection";
 
 // The active connection already paints its whole subtree bg-sidebar-active,
-// so the open collection needs a lighter shade plus an accent bar to stand
-// out from it rather than blend in.
-const activeRowClass =
-  "bg-sidebar-active-hover shadow-[inset_2px_0_0_var(--color-accent)]";
+// so the open collection can't reuse that colour. A wash of the text colour
+// stands out on any theme: it lightens dark ones and darkens the light one.
+const activeRowClass = "rounded bg-text-default/15";
 
 export function DatabaseRow({ db, sessionId }: { db: DatabaseInfo; sessionId: string }) {
   const expandedDatabase = useSessionsStore((s) => s.expandedDatabase);
