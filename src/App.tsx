@@ -8,6 +8,7 @@ import { useConnectionsStore } from "./store/connectionsStore";
 import { selectActiveTab, useSessionsStore } from "./store/sessionsStore";
 import { useUiStore } from "./store/uiStore";
 import type { MainTab } from "./store/uiStore";
+import { useSuppressNativeContextMenu } from "./lib/useSuppressNativeContextMenu";
 
 const tabLabels: Record<MainTab, string> = {
   browse: "Browse",
@@ -21,6 +22,7 @@ const emptyMessages: Record<Exclude<MainTab, "console">, string> = {
 };
 
 function App() {
+  useSuppressNativeContextMenu();
   const session = useConnectionsStore((s) => s.session);
   const { mainTab, setMainTab } = useUiStore();
   const tabs = useSessionsStore((s) => s.tabs);
