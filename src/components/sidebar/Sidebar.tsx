@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { ArrowLeftRight, Plus, Search } from "lucide-react";
 import { useConnectionsStore } from "../../store/connectionsStore";
+import { api } from "../../lib/tauri";
+import type { ConnectionProfile } from "../../types/connection";
 import { ConnectionForm } from "../connections/ConnectionForm";
 import { ConnectionsImportExportDialog } from "../connections/ConnectionsImportExportDialog";
 import { ConnectionRow } from "./ConnectionRow";
@@ -12,6 +14,17 @@ export function Sidebar() {
     useConnectionsStore();
   const [showForm, setShowForm] = useState(false);
   const [showImportExport, setShowImportExport] = useState(false);
+  const [editing, setEditing] = useState<ConnectionProfile | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  async function handleEdit(id: string) {
+    setEditError(null);
+    try {
+      setEditing(await api.getConnectionProfile(id));
+    } catch (e) {
+      setEditError(String(e));
+    }
+  }
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -72,6 +85,10 @@ export function Sidebar() {
         </div>
       </div>
 
+      {editError && (
+        <p className="mx-3 mb-2 rounded bg-red-950 p-2 text-xs text-red-300">{editError}</p>
+      )}
+
       <div className="flex-1 overflow-y-auto pb-2">
         {filtered.length === 0 && (
           <p className="px-3 py-2 text-xs text-text-faint">
@@ -81,7 +98,7 @@ export function Sidebar() {
           </p>
         )}
         {filtered.map((profile) => (
-          <ConnectionRow key={profile.id} profile={profile} />
+          <ConnectionRow key={profile.id} profile={profile} onEdit={handleEdit} />
         ))}
       </div>
 
@@ -91,6 +108,14 @@ export function Sidebar() {
         <ConnectionForm
           onSaved={() => setShowForm(false)}
           onCancel={() => setShowForm(false)}
+        />
+      )}
+
+      {editing && (
+        <ConnectionForm
+          editing={editing}
+          onSaved={() => setEditing(null)}
+          onCancel={() => setEditing(null)}
         />
       )}
 

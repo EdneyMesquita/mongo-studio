@@ -72,6 +72,8 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   },
 
   deleteProfile: async (id) => {
+    // Deleting the connection in use would leave a session nothing points to.
+    if (get().session?.connectionId === id) await get().disconnect();
     set({ loading: true, error: null });
     try {
       await api.deleteConnectionProfile(id);

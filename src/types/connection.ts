@@ -171,3 +171,24 @@ export function newProfileInput(): ConnectionProfileInput {
     advanced: emptyAdvancedOptions(),
   };
 }
+
+/**
+ * Form input for editing a saved profile. Secrets never leave the backend,
+ * so they come back blank - and saving a blank one keeps what's stored.
+ */
+export function profileToInput(profile: ConnectionProfile): ConnectionProfileInput {
+  return {
+    id: profile.id,
+    name: profile.name,
+    source: profile.source,
+    database: profile.database,
+    username: profile.username,
+    password: null,
+    tls: profile.tls,
+    tlsCertKeyPassphrase: null,
+    sshTunnel: profile.sshTunnel,
+    sshPassword: null,
+    sshKeyPassphrase: null,
+    advanced: profile.advanced,
+  };
+}

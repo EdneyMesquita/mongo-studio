@@ -5,6 +5,8 @@ import {
   emptyAdvancedOptions,
   emptySshTunnelOptions,
   newProfileInput,
+  profileToInput,
+  type ConnectionProfile,
   type ConnectionProfileInput,
 } from "../../types/connection";
 
@@ -23,12 +25,22 @@ const tabs: { id: ConnectionTab; label: string }[] = [
 ];
 
 interface ConnectionFormProps {
+  /** A saved profile to edit; a new connection when absent. */
+  editing?: ConnectionProfile;
   onSaved: () => void;
   onCancel: () => void;
 }
 
-export function ConnectionForm({ onSaved, onCancel }: ConnectionFormProps) {
-  const [input, setInput] = useState<ConnectionProfileInput>(newProfileInput());
+/** Placeholder for a secret field when editing: blank keeps the saved one. */
+const KEEP_SAVED = "Saved - leave blank to keep";
+
+export function ConnectionForm({ editing, onSaved, onCancel }: ConnectionFormProps) {
+  const [input, setInput] = useState<ConnectionProfileInput>(() =>
+    editing ? profileToInput(editing) : newProfileInput(),
+  );
+  const editingActive = useConnectionsStore(
+    (s) => editing !== undefined && s.session?.connectionId === editing.id,
+  );
   const [tab, setTab] = useState<ConnectionTab>("general");
   const { saveProfile, testConnection, lastTestResult, loading, error } =
     useConnectionsStore();
@@ -70,7 +82,7 @@ export function ConnectionForm({ onSaved, onCancel }: ConnectionFormProps) {
 
   return (
     <Modal
-      title="New connection"
+      title={editing ? `Edit connection - ${editing.name}` : "New connection"}
       width="max-w-2xl"
       onClose={onCancel}
       subheader={
@@ -99,6 +111,12 @@ export function ConnectionForm({ onSaved, onCancel }: ConnectionFormProps) {
       }
       footer={
         <div className="flex flex-col gap-2">
+          {editingActive && (
+            <div className="rounded bg-panel-alt p-2 text-xs text-text-muted">
+              You're connected with this connection. Changes apply the next time you
+              connect.
+            </div>
+          )}
           {lastTestResult && (
             <div
               className={`rounded p-2 text-xs ${
@@ -246,6 +264,7 @@ export function ConnectionForm({ onSaved, onCancel }: ConnectionFormProps) {
                   type="password"
                   value={input.password ?? ""}
                   onChange={(e) => update("password", e.target.value || null)}
+                  placeholder={editing?.hasPassword ? KEEP_SAVED : undefined}
                 />
               </div>
             </div>
@@ -291,6 +310,7 @@ export function ConnectionForm({ onSaved, onCancel }: ConnectionFormProps) {
                 type="password"
                 value={input.tlsCertKeyPassphrase ?? ""}
                 onChange={(e) => update("tlsCertKeyPassphrase", e.target.value || null)}
+                placeholder={editing?.tls.certKeyHasPassphrase ? KEEP_SAVED : undefined}
               />
             </div>
             <label className="flex items-center gap-1 text-xs">
@@ -383,6 +403,7 @@ export function ConnectionForm({ onSaved, onCancel }: ConnectionFormProps) {
                       type="password"
                       value={input.sshPassword ?? ""}
                       onChange={(e) => update("sshPassword", e.target.value || null)}
+                      placeholder={editing?.sshTunnel ? KEEP_SAVED : undefined}
                     />
                   </div>
                 )}
@@ -408,6 +429,9 @@ export function ConnectionForm({ onSaved, onCancel }: ConnectionFormProps) {
                         type="password"
                         value={input.sshKeyPassphrase ?? ""}
                         onChange={(e) => update("sshKeyPassphrase", e.target.value || null)}
+                        placeholder={
+                          editing?.sshTunnel?.privateKeyHasPassphrase ? KEEP_SAVED : undefined
+                        }
                       />
                     </div>
                   </>
