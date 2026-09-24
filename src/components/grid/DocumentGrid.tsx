@@ -63,14 +63,23 @@ export const DocumentGrid = memo(function DocumentGrid({ tab }: { tab: Collectio
             <JsonTable
               value={results.documents}
               rootActions={(doc) => (
-                <DocumentActions doc={doc} collectionName={selectedCollection} />
+                <DocumentActions
+                  doc={doc}
+                  collectionName={selectedCollection}
+                  tabId={tab.id}
+                />
               )}
             />
           )
         ) : (
           <div className="flex flex-col gap-2 p-2">
             {results?.documents.map((doc, i) => (
-              <DocumentCard key={i} doc={doc} collectionName={selectedCollection} />
+              <DocumentCard
+                key={i}
+                doc={doc}
+                collectionName={selectedCollection}
+                tabId={tab.id}
+              />
             ))}
           </div>
         )}

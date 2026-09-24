@@ -1,10 +1,11 @@
-import { useConsoleStore } from "../../store/consoleStore";
+import type { ConsoleSession } from "../../store/consoleStore";
 import { JsonTree } from "../json/JsonTree";
 import { JsonTable } from "../json/JsonTable";
 import { useUiStore } from "../../store/uiStore";
 
-export function ConsoleOutput() {
-  const { logs, result, hasResult, error, running } = useConsoleStore();
+export function ConsoleOutput({ session }: { session: ConsoleSession | undefined }) {
+  const logs = session?.logs ?? [];
+  const { result, hasResult = false, error = null, running = false } = session ?? {};
   const resultView = useUiStore((s) => s.resultView);
 
   return (

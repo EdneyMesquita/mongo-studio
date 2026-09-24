@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, Copy, Pencil } from "lucide-react";
 import { useConsoleStore } from "../../store/consoleStore";
+import { useSessionsStore } from "../../store/sessionsStore";
 import { useUiStore } from "../../store/uiStore";
 import { buildEditScript } from "../../lib/editScript";
 
@@ -10,10 +11,12 @@ const buttonClass =
 interface DocumentActionsProps {
   doc: unknown;
   collectionName: string;
+  /** The tab the document came from, whose console receives the edit. */
+  tabId: string;
 }
 
 /** Copy-as-JSON and edit-in-console, shared by the card and table views. */
-export function DocumentActions({ doc, collectionName }: DocumentActionsProps) {
+export function DocumentActions({ doc, collectionName, tabId }: DocumentActionsProps) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -29,7 +32,8 @@ export function DocumentActions({ doc, collectionName }: DocumentActionsProps) {
   function handleEdit() {
     if (!doc || typeof doc !== "object") return;
     const script = buildEditScript(doc as Record<string, unknown>, collectionName);
-    useConsoleStore.getState().setScript(script);
+    useConsoleStore.getState().setScript(tabId, script);
+    useSessionsStore.getState().activateTab(tabId);
     useUiStore.getState().setMainTab("console");
   }
 
