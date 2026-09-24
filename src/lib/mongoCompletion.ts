@@ -323,6 +323,18 @@ function unique(...lists: Suggestion[][]): Suggestion[] {
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 
 /**
+ * Operators only once a `$` is typed, names only once letters are:
+ * Monaco's fuzzy match would otherwise surface $strLenCP for "st". With
+ * nothing typed yet everything shows, which is how stages get listed right
+ * after a pipeline's opening quote.
+ */
+function byPrefix(items: Suggestion[], typed: string): Suggestion[] {
+  if (typed === "") return items;
+  const wantsOperator = typed.startsWith("$");
+  return items.filter((s) => s.label.startsWith("$") === wantsOperator);
+}
+
+/**
  * How a key is written where the cursor is: bare inside quotes, quoted in
  * JSON, and in JavaScript bare unless it isn't a valid identifier (a dotted
  * path, say).
@@ -392,7 +404,7 @@ export async function suggest(
 
     if (keyPosition) {
       const items = await keyItems(editor, stack, call, target, source);
-      return result(typed.startsWith("$") ? items.filter((s) => s.label.startsWith("$")) : items);
+      return result(byPrefix(items, typed));
     }
     // "$field" references inside aggregation expressions
     const inAggregation = editor === "pipeline" || call?.method === "aggregate";
@@ -424,10 +436,7 @@ export async function suggest(
       await keyItems(editor, stack, call, target, source),
       isJs ? "js" : "json",
     );
-    return {
-      items: typed.startsWith("$") ? items.filter((s) => s.label.startsWith("$")) : items,
-      replaceLength: typed.length,
-    };
+    return { items: byPrefix(items, typed), replaceLength: typed.length };
   }
   return none;
 }
