@@ -141,7 +141,7 @@ impl From<&ConnectionProfile> for ConnectionProfileMeta {
     }
 }
 
-fn redact_uri_summary(uri: &str) -> String {
+pub(crate) fn redact_uri_summary(uri: &str) -> String {
     match uri.find('@') {
         Some(at_idx) => match uri.find("://") {
             Some(scheme_idx) => format!("{}://***@{}", &uri[..scheme_idx], &uri[at_idx + 1..]),
@@ -252,6 +252,24 @@ pub struct ExportQueryInput {
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionsExportSummary {
     pub exported: usize,
+}
+
+/// One connection found in an import file, shown for picking before
+/// anything is saved.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionImportPreview {
+    /// Position in the file; what `import_connections` takes to select it.
+    pub index: usize,
+    pub name: String,
+    /// Where it connects, credentials masked.
+    pub address: String,
+    /// Imports, but needs attention afterwards.
+    pub warning: Option<String>,
+    /// Can't be imported; the reason why.
+    pub error: Option<String>,
+    /// A saved connection already has this name.
+    pub exists: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

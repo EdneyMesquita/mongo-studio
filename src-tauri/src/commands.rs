@@ -11,15 +11,16 @@ use crate::error::{AppError, AppResult};
 use crate::export;
 use crate::models::{
     CollectionInfo, CollectionStats, ConnectionAdvancedOptions, ConnectionHandle,
-    ConnectionProfile, ConnectionProfileInput, ConnectionProfileMeta, ConnectionSource,
-    ConnectionTestResult, ConnectionsExportSummary, ConnectionsImportSummary, DatabaseInfo,
-    ExplainQueryInput, ExplainVerbosity, ExportOptions, ExportQueryInput, ExportSummary,
-    FindQueryInput, QueryResultPage, ScriptResult, SecretBackendInfo, SecretBackendKind,
-    TlsOptions,
+    ConnectionImportPreview, ConnectionProfile, ConnectionProfileInput, ConnectionProfileMeta,
+    ConnectionSource, ConnectionTestResult, ConnectionsExportSummary, ConnectionsImportSummary,
+    DatabaseInfo, ExplainQueryInput, ExplainVerbosity, ExportOptions, ExportQueryInput,
+    ExportSummary, FindQueryInput, QueryResultPage, ScriptResult, SecretBackendInfo,
+    SecretBackendKind, TlsOptions,
 };
 use crate::saved_scripts::{SavedScript, SavedScriptsStore};
 use crate::scripting;
 use crate::secrets::SecretKind;
+use crate::sidebar_layout::SidebarLayoutStore;
 use crate::state::AppState;
 
 fn now_iso() -> String {
@@ -64,7 +65,12 @@ async fn materialize_profile(
             .map_err(AppError::Secret)?;
         true
     } else {
-        false
+        // Editing a saved connection with the password left blank keeps the
+        // one already stored, rather than silently dropping it.
+        state
+            .connection_store
+            .get(&id)
+            .is_ok_and(|saved| saved.has_password)
     };
 
     let mut tls = input.tls;
@@ -162,18 +168,77 @@ pub async fn export_connections(
     Ok(ConnectionsExportSummary { exported })
 }
 
+/// Lists what an import file holds, without saving anything, so the user
+/// can pick which connections to import.
+#[tauri::command]
+pub async fn preview_connections_import(
+    state: State<'_, AppState>,
+    src_path: String,
+) -> AppResult<Vec<ConnectionImportPreview>> {
+    preview_import(&state, &std::fs::read_to_string(&src_path)?)
+}
+
+fn preview_import(state: &AppState, raw: &str) -> AppResult<Vec<ConnectionImportPreview>> {
+    let existing: std::collections::HashSet<String> = state
+        .connection_store
+        .list()
+        .into_iter()
+        .map(|p| p.name)
+        .collect();
+    Ok(connections_io::parse_connections_file(raw)?
+        .into_iter()
+        .enumerate()
+        .map(|(index, entry)| match entry {
+            Ok(entry) => ConnectionImportPreview {
+                index,
+                exists: existing.contains(&entry.name),
+                address: crate::models::redact_uri_summary(&entry.uri),
+                name: entry.name,
+                warning: entry.warning,
+                error: None,
+            },
+            Err(message) => ConnectionImportPreview {
+                index,
+                name: String::new(),
+                address: String::new(),
+                warning: None,
+                error: Some(message),
+                exists: false,
+            },
+        })
+        .collect())
+}
+
+/// Imports the connections at `selected` positions of the file (see
+/// `preview_connections_import`), or all of them when it's absent.
 #[tauri::command]
 pub async fn import_connections(
     state: State<'_, AppState>,
     src_path: String,
+    selected: Option<Vec<usize>>,
 ) -> AppResult<ConnectionsImportSummary> {
-    let raw = std::fs::read_to_string(&src_path)?;
-    let parsed = connections_io::parse_connections_file(&raw)?;
+    import_file(
+        &state,
+        &std::fs::read_to_string(&src_path)?,
+        selected.as_deref(),
+    )
+    .await
+}
+
+async fn import_file(
+    state: &AppState,
+    raw: &str,
+    selected: Option<&[usize]>,
+) -> AppResult<ConnectionsImportSummary> {
+    let parsed = connections_io::parse_connections_file(raw)?;
 
     let mut imported = 0;
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
-    for entry in parsed {
+    for (index, entry) in parsed.into_iter().enumerate() {
+        if selected.is_some_and(|picked| !picked.contains(&index)) {
+            continue;
+        }
         let entry = match entry {
             Ok(entry) => entry,
             Err(message) => {
@@ -198,7 +263,7 @@ pub async fn import_connections(
             ssh_key_passphrase: entry.ssh_key_passphrase,
             advanced: ConnectionAdvancedOptions::default(),
         };
-        let profile = materialize_profile(&state, input).await?;
+        let profile = materialize_profile(state, input).await?;
         state.connection_store.upsert(profile)?;
         imported += 1;
     }
@@ -215,10 +280,56 @@ pub async fn test_connection(
     state: State<'_, AppState>,
     input: ConnectionProfileInput,
 ) -> AppResult<ConnectionTestResult> {
-    // Test against an ephemeral profile derived from the form so users can
-    // verify a connection before saving it.
-    let profile = materialize_profile(&state, input).await?;
-    Ok(driver::test_connection(&profile, state.secret_store.as_ref(), &state.known_hosts).await)
+    test_profile(&state, input).await
+}
+
+/// Tests the connection a form describes without touching saved secrets.
+///
+/// Materializing a profile writes its secrets to the store, so doing that
+/// under the profile's own id would overwrite a saved password with
+/// whatever was typed into an edit form that is then cancelled - and a
+/// never-saved connection would leave its secrets behind. Instead the test
+/// runs under a throwaway id, borrowing the saved secrets the form left
+/// blank, and everything stored under that id is removed afterwards.
+async fn test_profile(
+    state: &AppState,
+    mut input: ConnectionProfileInput,
+) -> AppResult<ConnectionTestResult> {
+    let saved = input
+        .id
+        .as_deref()
+        .filter(|id| !id.is_empty())
+        .and_then(|id| state.connection_store.get(id).ok());
+    let temp_id = format!("connection-test-{}", Uuid::new_v4());
+
+    let result = async {
+        if let Some(saved) = &saved {
+            for kind in SecretKind::ALL {
+                if let Some(value) = state
+                    .secret_store
+                    .get(&saved.id, kind)
+                    .map_err(AppError::Secret)?
+                {
+                    state
+                        .secret_store
+                        .set(&temp_id, kind, &value)
+                        .map_err(AppError::Secret)?;
+                }
+            }
+        }
+        input.id = Some(temp_id.clone());
+        let mut profile = materialize_profile(state, input).await?;
+        // A blank password field means the saved one, copied over above.
+        profile.has_password |= saved.as_ref().is_some_and(|s| s.has_password);
+        Ok(
+            driver::test_connection(&profile, state.secret_store.as_ref(), &state.known_hosts)
+                .await,
+        )
+    }
+    .await;
+
+    let _ = state.secret_store.delete_all(&temp_id);
+    result
 }
 
 #[tauri::command]
@@ -524,6 +635,22 @@ pub fn cancel_export(state: State<AppState>, execution_id: String) {
     }
 }
 
+/// The sidebar's folder tree, or null before one was saved.
+#[tauri::command]
+pub async fn get_sidebar_layout(
+    store: State<'_, SidebarLayoutStore>,
+) -> AppResult<serde_json::Value> {
+    store.get()
+}
+
+#[tauri::command]
+pub async fn save_sidebar_layout(
+    store: State<'_, SidebarLayoutStore>,
+    layout: serde_json::Value,
+) -> AppResult<()> {
+    store.save(&layout)
+}
+
 #[tauri::command]
 pub async fn suggest_script_path(store: State<'_, SavedScriptsStore>) -> AppResult<String> {
     Ok(store.suggest_path()?.to_string_lossy().into_owned())
@@ -553,4 +680,181 @@ pub async fn read_saved_script(
     path: String,
 ) -> AppResult<String> {
     store.read(&path)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+    use std::sync::Mutex;
+
+    use tokio::sync::RwLock;
+
+    use super::*;
+    use crate::connection::ConnectionStore;
+    use crate::secrets::{InMemoryStore, SecretStore};
+    use crate::ssh_tunnel::KnownHosts;
+
+    /// Lets a test keep a handle on the store AppState owns.
+    struct Shared(Arc<InMemoryStore>);
+
+    impl SecretStore for Shared {
+        fn set(&self, id: &str, kind: SecretKind, value: &str) -> Result<(), String> {
+            self.0.set(id, kind, value)
+        }
+        fn get(&self, id: &str, kind: SecretKind) -> Result<Option<String>, String> {
+            self.0.get(id, kind)
+        }
+        fn delete(&self, id: &str, kind: SecretKind) -> Result<(), String> {
+            self.0.delete(id, kind)
+        }
+    }
+
+    fn state() -> (AppState, Arc<InMemoryStore>, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("mongo-studio-commands-{}", Uuid::new_v4()));
+        let secrets = Arc::new(InMemoryStore::new());
+        let state = AppState {
+            connection_store: ConnectionStore::load(&dir).unwrap(),
+            secret_store: Box::new(Shared(secrets.clone())),
+            secret_backend: SecretBackendKind::Keyring,
+            known_hosts: Arc::new(KnownHosts::load(&dir).unwrap()),
+            sessions: RwLock::new(HashMap::new()),
+            running_tasks: Mutex::new(HashMap::new()),
+        };
+        (state, secrets, dir)
+    }
+
+    /// A server that refuses at once, so tests that try to connect fail fast.
+    fn input(id: Option<String>, name: &str, password: Option<&str>) -> ConnectionProfileInput {
+        ConnectionProfileInput {
+            id,
+            name: name.to_string(),
+            source: ConnectionSource::Uri {
+                uri: "mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=200&connectTimeoutMS=200"
+                    .to_string(),
+            },
+            database: None,
+            username: Some("alice".to_string()),
+            password: password.map(str::to_string),
+            tls: TlsOptions::default(),
+            tls_cert_key_passphrase: None,
+            ssh_tunnel: None,
+            ssh_password: None,
+            ssh_key_passphrase: None,
+            advanced: ConnectionAdvancedOptions::default(),
+        }
+    }
+
+    async fn save(state: &AppState, input: ConnectionProfileInput) -> ConnectionProfile {
+        let profile = materialize_profile(state, input).await.unwrap();
+        state.connection_store.upsert(profile).unwrap()
+    }
+
+    const THREE_CONNECTIONS: &str = r#"{
+        "type": "Compass Connections",
+        "version": 1,
+        "connections": [
+            { "id": "a", "connectionOptions": { "connectionString": "mongodb://bob:pw@one.example.net/" }, "favorite": { "name": "One" } },
+            { "id": "b", "connectionOptions": { "connectionString": "mongodb://two.example.net/" }, "favorite": { "name": "prod" } },
+            { "id": "c", "connectionOptions": { "connectionString": "mongodb://three.example.net/" }, "favorite": { "name": "Three" } }
+        ]
+    }"#;
+
+    #[tokio::test]
+    async fn preview_lists_the_file_without_saving_and_flags_existing_names() {
+        let (state, _, dir) = state();
+        save(&state, input(None, "prod", None)).await;
+
+        let preview = preview_import(&state, THREE_CONNECTIONS).unwrap();
+
+        let names: Vec<_> = preview.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["One", "prod", "Three"]);
+        assert_eq!(
+            preview.iter().map(|p| p.exists).collect::<Vec<_>>(),
+            [false, true, false]
+        );
+        assert!(!preview[0].address.contains("pw"), "credentials are masked");
+        assert_eq!(state.connection_store.list().len(), 1, "nothing saved");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[tokio::test]
+    async fn import_takes_only_the_selected_connections() {
+        let (state, _, dir) = state();
+
+        let summary = import_file(&state, THREE_CONNECTIONS, Some(&[0, 2]))
+            .await
+            .unwrap();
+
+        assert_eq!(summary.imported, 2);
+        let mut names: Vec<_> = state
+            .connection_store
+            .list()
+            .into_iter()
+            .map(|p| p.name)
+            .collect();
+        names.sort();
+        assert_eq!(names, ["One", "Three"]);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[tokio::test]
+    async fn editing_with_the_password_left_blank_keeps_the_saved_one() {
+        let (state, _, dir) = state();
+        let saved = save(&state, input(None, "prod", Some("s3cret"))).await;
+
+        let edited = save(
+            &state,
+            input(Some(saved.id.clone()), "prod (renamed)", None),
+        )
+        .await;
+
+        assert_eq!(edited.name, "prod (renamed)");
+        assert!(edited.has_password);
+        assert_eq!(
+            state
+                .secret_store
+                .get(&saved.id, SecretKind::Password)
+                .unwrap()
+                .as_deref(),
+            Some("s3cret")
+        );
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[tokio::test]
+    async fn testing_an_edit_leaves_saved_secrets_alone() {
+        let (state, secrets, dir) = state();
+        let saved = save(&state, input(None, "prod", Some("s3cret"))).await;
+        let before = secrets.len();
+
+        // a wrong password typed into the edit form, then tested
+        test_profile(&state, input(Some(saved.id.clone()), "prod", Some("wrong")))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            state
+                .secret_store
+                .get(&saved.id, SecretKind::Password)
+                .unwrap()
+                .as_deref(),
+            Some("s3cret")
+        );
+        assert_eq!(secrets.len(), before, "nothing left under the throwaway id");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[tokio::test]
+    async fn testing_a_new_connection_leaves_no_secrets_behind() {
+        let (state, secrets, dir) = state();
+
+        test_profile(&state, input(None, "draft", Some("pw")))
+            .await
+            .unwrap();
+
+        assert_eq!(secrets.len(), 0);
+        assert!(state.connection_store.list().is_empty());
+        std::fs::remove_dir_all(dir).ok();
+    }
 }

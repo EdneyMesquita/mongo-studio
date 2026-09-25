@@ -9,12 +9,14 @@ mod models;
 mod saved_scripts;
 mod scripting;
 mod secrets;
+mod sidebar_layout;
 mod ssh_tunnel;
 mod state;
 
 use tauri::Manager;
 
 use saved_scripts::SavedScriptsStore;
+use sidebar_layout::SidebarLayoutStore;
 use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -30,6 +32,9 @@ pub fn run() {
             let scripts = SavedScriptsStore::load(&config_dir, &app.path().home_dir()?)
                 .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
             app.manage(scripts);
+            let layout = SidebarLayoutStore::load(&config_dir)
+                .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
+            app.manage(layout);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -56,6 +61,9 @@ pub fn run() {
             commands::explain_query,
             commands::export_connections,
             commands::import_connections,
+            commands::preview_connections_import,
+            commands::get_sidebar_layout,
+            commands::save_sidebar_layout,
             commands::suggest_script_path,
             commands::save_script,
             commands::list_saved_scripts,

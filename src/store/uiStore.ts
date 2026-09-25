@@ -19,9 +19,13 @@ interface UiState {
   /** The editor's share of the console, remembered per layout. */
   consoleSplit: Record<ConsoleLayout, number>;
   setConsoleSplit: (layout: ConsoleLayout, ratio: number) => void;
+  /** Sidebar width in px. */
+  sidebarWidth: number;
+  setSidebarWidth: (width: number) => void;
 }
 
 export const DEFAULT_CONSOLE_SPLIT = 0.6;
+export const DEFAULT_SIDEBAR_WIDTH = 256;
 
 export const useUiStore = create<UiState>()(
   persist(
@@ -35,12 +39,18 @@ export const useUiStore = create<UiState>()(
       consoleSplit: { side: DEFAULT_CONSOLE_SPLIT, stacked: DEFAULT_CONSOLE_SPLIT },
       setConsoleSplit: (layout, ratio) =>
         set((s) => ({ consoleSplit: { ...s.consoleSplit, [layout]: ratio } })),
+      sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
+      setSidebarWidth: (width) => set({ sidebarWidth: width }),
     }),
     {
       name: "mongo-studio-ui",
-      // Only the console arrangement is a lasting preference; which tab is
-      // open resets on launch as it always has.
-      partialize: (s) => ({ consoleLayout: s.consoleLayout, consoleSplit: s.consoleSplit }),
+      // Only layout sizes are lasting preferences; which tab is open resets
+      // on launch as it always has.
+      partialize: (s) => ({
+        consoleLayout: s.consoleLayout,
+        consoleSplit: s.consoleSplit,
+        sidebarWidth: s.sidebarWidth,
+      }),
     },
   ),
 );

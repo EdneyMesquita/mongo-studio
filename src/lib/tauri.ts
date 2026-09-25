@@ -5,6 +5,7 @@ import type {
   ConnectionProfile,
   ConnectionProfileInput,
   ConnectionProfileMeta,
+  ConnectionImportPreview,
   ConnectionTestResult,
   ConnectionsExportSummary,
   ConnectionsImportSummary,
@@ -50,8 +51,12 @@ export const api = {
       includeSecrets,
     }),
 
-  importConnections: (srcPath: string) =>
-    invoke<ConnectionsImportSummary>("import_connections", { srcPath }),
+  previewConnectionsImport: (srcPath: string) =>
+    invoke<ConnectionImportPreview[]>("preview_connections_import", { srcPath }),
+
+  /** Imports the connections at `selected` positions of the file. */
+  importConnections: (srcPath: string, selected: number[]) =>
+    invoke<ConnectionsImportSummary>("import_connections", { srcPath, selected }),
 
   listDatabases: (sessionId: string) =>
     invoke<DatabaseInfo[]>("list_databases", { sessionId }),
@@ -117,6 +122,11 @@ export const api = {
 
   cancelScript: (executionId: string) =>
     invoke<void>("cancel_script", { executionId }),
+
+  /** The sidebar's folder tree as stored, or null before one was saved. */
+  getSidebarLayout: () => invoke<unknown>("get_sidebar_layout"),
+
+  saveSidebarLayout: (layout: unknown) => invoke<void>("save_sidebar_layout", { layout }),
 
   suggestScriptPath: () => invoke<string>("suggest_script_path"),
 

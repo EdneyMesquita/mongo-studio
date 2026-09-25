@@ -1,20 +1,65 @@
-import { useEffect, useState } from "react";
-import { ChevronRight, Database, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import type { HTMLAttributes, MouseEvent } from "react";
+import { ChevronRight, Database, MoreHorizontal } from "lucide-react";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import { DatabaseRow } from "./DatabaseRow";
+import type { CollectionMatches } from "./useCollectionMatches";
+import { ContextMenu } from "../ui/ContextMenu";
 import type { ConnectionProfileMeta } from "../../types/connection";
 
-export function ConnectionRow({ profile }: { profile: ConnectionProfileMeta }) {
+interface ConnectionRowProps {
+  profile: ConnectionProfileMeta;
+  onEdit: (id: string) => void;
+  /** Nesting depth in the folder tree. */
+  indent?: number;
+  /** Extra props for the row itself: drag handlers, data attributes. */
+  rowProps?: HTMLAttributes<HTMLDivElement> & Record<`data-${string}`, string>;
+  /** The sidebar search, lowercased. */
+  query?: string;
+  /** Collections matching the search, if they belong to this connection. */
+  collectionMatches?: CollectionMatches | null;
+}
+
+export const INDENT_PX = 12;
+
+export function ConnectionRow({
+  profile,
+  onEdit,
+  indent = 0,
+  rowProps,
+  query = "",
+  collectionMatches = null,
+}: ConnectionRowProps) {
   const session = useConnectionsStore((s) => s.session);
   const connect = useConnectionsStore((s) => s.connect);
+  const disconnect = useConnectionsStore((s) => s.disconnect);
   const deleteProfile = useConnectionsStore((s) => s.deleteProfile);
   const [expanded, setExpanded] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
 
   const isActive = session?.connectionId === profile.id;
+  // a search that found collections here shows them, even if collapsed
+  const showChildren = expanded || collectionMatches !== null;
 
   useEffect(() => {
     if (isActive) setExpanded(true);
   }, [isActive]);
+
+  function openMenu(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenu({ x: e.clientX, y: e.clientY });
+  }
+
+  async function handleDelete() {
+    const confirmed = await ask(
+      `Delete the connection "${profile.name}"? Its saved passwords are removed too.`,
+      { title: "Delete connection", kind: "warning", okLabel: "Delete", cancelLabel: "Cancel" },
+    );
+    if (confirmed) await deleteProfile(profile.id);
+  }
 
   function handleToggle() {
     if (isActive) {
@@ -27,9 +72,12 @@ export function ConnectionRow({ profile }: { profile: ConnectionProfileMeta }) {
   return (
     <div className={isActive ? "bg-sidebar-active" : ""}>
       <div
-        className={`group flex items-center gap-1 px-2 py-1.5 text-sm ${
+        {...rowProps}
+        className={`group flex items-center gap-1 py-1.5 pr-2 text-sm ${
           isActive ? "hover:bg-sidebar-active-hover" : "hover:bg-sidebar-hover"
-        }`}
+        } ${rowProps?.className ?? ""}`}
+        style={{ paddingLeft: 8 + indent * INDENT_PX }}
+        onContextMenu={openMenu}
       >
         <button
           type="button"
@@ -39,7 +87,7 @@ export function ConnectionRow({ profile }: { profile: ConnectionProfileMeta }) {
           <ChevronRight
             size={13}
             className={`shrink-0 text-text-faint transition-transform ${
-              expanded && isActive ? "rotate-90" : ""
+              showChildren && isActive ? "rotate-90" : ""
             }`}
           />
           <Database size={14} className="shrink-0 text-text-muted" />
@@ -50,21 +98,47 @@ export function ConnectionRow({ profile }: { profile: ConnectionProfileMeta }) {
         </button>
         <button
           type="button"
-          className="hidden shrink-0 text-text-faint hover:text-red-400 group-hover:inline"
-          onClick={() => deleteProfile(profile.id)}
-          title="Delete connection"
+          className={`shrink-0 rounded text-text-faint hover:text-text-default focus:opacity-100 ${
+            menu ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          }`}
+          onClick={openMenu}
+          data-no-drag=""
+          title="Connection actions"
+          aria-label={`Actions for ${profile.name}`}
+          aria-haspopup="menu"
         >
-          <Trash2 size={13} />
+          <MoreHorizontal size={14} />
         </button>
       </div>
-      {isActive && expanded && session && (
-        <div className="ml-4 border-l border-border-subtle/60 pl-2">
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={closeMenu}
+          items={[
+            isActive
+              ? { label: "Disconnect", onSelect: () => disconnect() }
+              : { label: "Connect", onSelect: () => connect(profile.id) },
+            { label: "Edit connection...", onSelect: () => onEdit(profile.id) },
+            { label: "Delete connection...", onSelect: handleDelete },
+          ]}
+        />
+      )}
+      {isActive && showChildren && session && (
+        <div
+          className="border-l border-border-subtle/60 pl-2"
+          style={{ marginLeft: 16 + indent * INDENT_PX }}
+        >
           {session.databases.map((db) => (
             <DatabaseRow
               key={db.name}
               db={db}
               sessionId={session.sessionId}
               connection={{ id: profile.id, name: profile.name, summary: profile.summary }}
+              query={query}
+              matches={
+                collectionMatches?.database === db.name ? collectionMatches.collections : null
+              }
             />
           ))}
         </div>

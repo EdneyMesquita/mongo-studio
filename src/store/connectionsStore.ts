@@ -18,6 +18,8 @@ interface ActiveSession {
 
 interface ConnectionsState {
   profiles: ConnectionProfileMeta[];
+  /** Set once the list has loaded: an empty list before that means "unknown". */
+  profilesLoaded: boolean;
   loading: boolean;
   error: string | null;
   session: ActiveSession | null;
@@ -35,6 +37,7 @@ interface ConnectionsState {
 
 export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   profiles: [],
+  profilesLoaded: false,
   loading: false,
   error: null,
   session: null,
@@ -45,7 +48,7 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const profiles = await api.listConnectionProfiles();
-      set({ profiles, loading: false });
+      set({ profiles, profilesLoaded: true, loading: false });
     } catch (e) {
       set({ error: String(e), loading: false });
     }
@@ -72,6 +75,8 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   },
 
   deleteProfile: async (id) => {
+    // Deleting the connection in use would leave a session nothing points to.
+    if (get().session?.connectionId === id) await get().disconnect();
     set({ loading: true, error: null });
     try {
       await api.deleteConnectionProfile(id);

@@ -20,7 +20,7 @@ pub enum SecretKind {
 }
 
 impl SecretKind {
-    const ALL: [SecretKind; 4] = [
+    pub(crate) const ALL: [SecretKind; 4] = [
         SecretKind::Password,
         SecretKind::TlsCertKeyPassphrase,
         SecretKind::SshPassword,
@@ -238,6 +238,11 @@ impl InMemoryStore {
         Self {
             map: RwLock::new(HashMap::new()),
         }
+    }
+
+    /// How many secrets are stored, to catch ones left behind.
+    pub fn len(&self) -> usize {
+        self.map.read().unwrap().len()
     }
 }
 
