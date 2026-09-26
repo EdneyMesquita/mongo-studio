@@ -15,6 +15,7 @@ export interface TabConnection {
 
 /** One open collection, with its own query, results and stats. */
 export interface CollectionTab {
+  kind: "collection";
   id: string;
   connection: TabConnection;
   database: string;
@@ -36,6 +37,23 @@ export interface CollectionTab {
   loading: boolean;
   error: string | null;
 }
+
+/**
+ * A script console on its own, bound to one database of one connection.
+ * Scripts can reach any collection of that database.
+ */
+export interface ConsoleTab {
+  kind: "console";
+  id: string;
+  connection: TabConnection;
+  database: string;
+  /** The collection it was opened from, which its first script queries. */
+  collection: string | null;
+  /** Numbers consoles on the same database apart: 1, 2, ... */
+  number: number;
+}
+
+export type Tab = CollectionTab | ConsoleTab;
 
 /** The part of a tab the query bar edits. */
 export type TabQueryFields = Pick<
@@ -67,7 +85,7 @@ interface SessionsState {
   databaseTree: Record<string, DatabaseTreeState>;
   /** The database last opened in the sidebar. */
   lastDatabase: DatabaseRef | null;
-  tabs: CollectionTab[];
+  tabs: Tab[];
   activeTabId: string | null;
 
   toggleDatabase: (connectionId: string, sessionId: string, database: string) => Promise<void>;
@@ -78,6 +96,8 @@ interface SessionsState {
     database: string,
     collection: string,
   ) => Promise<void>;
+  /** Opens a new console on the database, however many it already has. */
+  openConsole: (connection: TabConnection, database: string, collection: string | null) => void;
   activateTab: (id: string) => void;
   closeTab: (id: string) => void;
   closeOtherTabs: (id: string) => void;
@@ -99,22 +119,13 @@ export function tabIdFor(connectionId: string, database: string, collection: str
   return `${connectionId}/${database}.${collection}`;
 }
 
-export function selectActiveTab(state: SessionsState): CollectionTab | null {
+export function selectActiveTab(state: SessionsState): Tab | null {
   return state.tabs.find((t) => t.id === state.activeTabId) ?? null;
 }
 
 /** Key of a database in `databaseTree`: database names can't contain "/". */
 export function databaseKey(connectionId: string, database: string): string {
   return `${connectionId}/${database}`;
-}
-
-/**
- * The database the console should run against: the active tab's, else the
- * one last opened in the sidebar.
- */
-export function selectCurrentDatabase(state: SessionsState): DatabaseRef | null {
-  const tab = selectActiveTab(state);
-  return tab ? { connectionId: tab.connection.id, database: tab.database } : state.lastDatabase;
 }
 
 function parseJsonObject(text: string): Record<string, unknown> {
@@ -139,6 +150,7 @@ function newTab(
   collection: string,
 ): CollectionTab {
   return {
+    kind: "collection",
     id: tabIdFor(connection.id, database, collection),
     connection,
     database,
@@ -160,7 +172,7 @@ function newTab(
 const initialState = {
   databaseTree: {} as Record<string, DatabaseTreeState>,
   lastDatabase: null as DatabaseRef | null,
-  tabs: [] as CollectionTab[],
+  tabs: [] as Tab[],
   activeTabId: null as string | null,
 };
 
@@ -175,10 +187,15 @@ const closedDatabase: DatabaseTreeState = {
 export const useSessionsStore = create<SessionsState>((set, get) => {
   // Requests outlive the tab that made them when it's closed mid-flight;
   // patching a tab that's gone is simply a no-op.
-  function patchTab(id: string, patch: Partial<CollectionTab>) {
+  function patchTab(id: string, patch: Partial<Omit<CollectionTab, "kind">>) {
     set((s) => ({
-      tabs: s.tabs.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+      tabs: s.tabs.map((t) => (t.id === id && t.kind === "collection" ? { ...t, ...patch } : t)),
     }));
+  }
+
+  function collectionTab(id: string): CollectionTab | null {
+    const tab = get().tabs.find((t) => t.id === id);
+    return tab?.kind === "collection" ? tab : null;
   }
 
   return {
@@ -234,6 +251,23 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       }
     },
 
+    openConsole: (connection, database, collection) => {
+      const numbers = get()
+        .tabs.filter(
+          (t) => t.kind === "console" && t.connection.id === connection.id && t.database === database,
+        )
+        .map((t) => (t as ConsoleTab).number);
+      const tab: ConsoleTab = {
+        kind: "console",
+        id: `console:${crypto.randomUUID()}`,
+        connection,
+        database,
+        collection,
+        number: Math.max(0, ...numbers) + 1,
+      };
+      set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
+    },
+
     activateTab: (id) => set({ activeTabId: id }),
 
     closeTab: (id) =>
@@ -262,7 +296,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
     updateTab: (id, patch) => patchTab(id, patch),
 
     runQuery: async (sessionId, id) => {
-      const tab = get().tabs.find((t) => t.id === id);
+      const tab = collectionTab(id);
       if (!tab) return;
       patchTab(id, { loading: true, error: null });
       try {
@@ -293,7 +327,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
     },
 
     replaceDocument: (id, updated) => {
-      const tab = get().tabs.find((t) => t.id === id);
+      const tab = collectionTab(id);
       if (!tab?.results) return;
       const key = JSON.stringify((updated as { _id?: unknown } | null)?._id);
       patchTab(id, {

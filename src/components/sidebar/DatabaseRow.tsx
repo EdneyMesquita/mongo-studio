@@ -1,7 +1,10 @@
+import { useCallback, useState } from "react";
+import type { MouseEvent } from "react";
 import { ChevronRight, Layers } from "lucide-react";
 import { databaseKey, selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
 import type { TabConnection } from "../../store/sessionsStore";
 import type { CollectionInfo, DatabaseInfo } from "../../types/connection";
+import { ContextMenu } from "../ui/ContextMenu";
 
 // The active connection already paints its whole subtree bg-sidebar-active,
 // so the open collection can't reuse that colour. A wash of the text colour
@@ -40,11 +43,25 @@ export function DatabaseRow({ db, sessionId, connection, query, matches }: Datab
     (s) => selectActiveTab(s)?.connection.id ?? null,
   );
   const activeDatabase = useSessionsStore((s) => selectActiveTab(s)?.database ?? null);
-  const activeTabCollection = useSessionsStore(
-    (s) => selectActiveTab(s)?.collection ?? null,
-  );
+  // a console tab's collection is only where it started, not what it shows
+  const activeTabCollection = useSessionsStore((s) => {
+    const tab = selectActiveTab(s);
+    return tab?.kind === "collection" ? tab.collection : null;
+  });
   const toggleDatabase = useSessionsStore((s) => s.toggleDatabase);
   const openCollection = useSessionsStore((s) => s.openCollection);
+  const openConsole = useSessionsStore((s) => s.openConsole);
+  // Right-click menu, on the database row or one of its collections.
+  const [menu, setMenu] = useState<{ x: number; y: number; collection: string | null } | null>(
+    null,
+  );
+  const closeMenu = useCallback(() => setMenu(null), []);
+
+  function openMenu(e: MouseEvent, collection: string | null) {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenu({ x: e.clientX, y: e.clientY, collection });
+  }
 
   const isOpen = (tree?.expanded ?? false) || matches !== null;
   const collections = tree?.collections ?? [];
@@ -66,6 +83,7 @@ export function DatabaseRow({ db, sessionId, connection, query, matches }: Datab
           showsActiveInline ? activeRowClass : "hover:bg-sidebar-hover"
         }`}
         onClick={() => toggleDatabase(connection.id, sessionId, db.name)}
+        onContextMenu={(e) => openMenu(e, null)}
       >
         <ChevronRight
           size={12}
@@ -102,11 +120,39 @@ export function DatabaseRow({ db, sessionId, connection, query, matches }: Datab
               }`}
               title={coll.name}
               onClick={() => openCollection(sessionId, connection, db.name, coll.name)}
+              onContextMenu={(e) => openMenu(e, coll.name)}
             >
               {matches ? <Highlighted name={coll.name} query={query} /> : coll.name}
             </button>
           ))}
         </div>
+      )}
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={closeMenu}
+          items={
+            menu.collection === null
+              ? [
+                  {
+                    label: `Open console on ${db.name}`,
+                    onSelect: () => openConsole(connection, db.name, null),
+                  },
+                ]
+              : [
+                  {
+                    label: "Open collection",
+                    onSelect: () =>
+                      openCollection(sessionId, connection, db.name, menu.collection!),
+                  },
+                  {
+                    label: `Open console on ${db.name}`,
+                    onSelect: () => openConsole(connection, db.name, menu.collection),
+                  },
+                ]
+          }
+        />
       )}
     </div>
   );
