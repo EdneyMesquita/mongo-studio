@@ -21,6 +21,7 @@ import { ConsoleLayoutToggle } from "./ConsoleLayoutToggle";
 import { SplitPane } from "../ui/SplitPane";
 import { DEFAULT_CONSOLE_SPLIT, useUiStore } from "../../store/uiStore";
 import { attachCompletion } from "../../lib/monacoCompletion";
+import { addEditorCommand } from "../../lib/monaco";
 import { ResultViewToggle } from "../json/ResultViewToggle";
 
 export function ScriptConsole() {
@@ -194,10 +195,7 @@ export function ScriptConsole() {
                     },
                   });
                 }
-                editor.addCommand(
-                  monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
-                  handleRun,
-                );
+                addEditorCommand(editor, monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, handleRun);
               }}
             />
           </div>
