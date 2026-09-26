@@ -78,7 +78,7 @@ function TabButton({ tab, active, onContextMenu }: TabButtonProps) {
   );
 }
 
-/** One tab per open collection, across every database of the connection. */
+/** One tab per open collection, across every database of every connection. */
 export function CollectionTabs() {
   const tabs = useSessionsStore((s) => s.tabs);
   const activeTabId = useSessionsStore((s) => s.activeTabId);

@@ -43,21 +43,34 @@ export type TabQueryFields = Pick<
   "mode" | "filterText" | "sortText" | "limit" | "skip" | "pipelineText"
 >;
 
-interface SessionsState {
-  /** Collections of `collectionsDatabase`, listed in the sidebar tree. */
+/** A database's row in the sidebar: open or not, and its collections. */
+export interface DatabaseTreeState {
+  expanded: boolean;
   collections: CollectionInfo[];
-  collectionsDatabase: string | null;
-  collectionsLoading: boolean;
-  collectionsError: string | null;
+  /** Whether `collections` has been fetched; reopening reuses it. */
+  loaded: boolean;
+  loading: boolean;
+  error: string | null;
+}
+
+/** A database on a connection. */
+export interface DatabaseRef {
+  connectionId: string;
+  database: string;
+}
+
+interface SessionsState {
   /**
-   * Which database shows its collections in the sidebar. Purely visual:
+   * Every database row's state, by `databaseKey`. Purely visual:
    * collapsing a database leaves every tab open on it alone.
    */
-  expandedDatabase: string | null;
+  databaseTree: Record<string, DatabaseTreeState>;
+  /** The database last opened in the sidebar. */
+  lastDatabase: DatabaseRef | null;
   tabs: CollectionTab[];
   activeTabId: string | null;
 
-  toggleDatabase: (sessionId: string, database: string) => Promise<void>;
+  toggleDatabase: (connectionId: string, sessionId: string, database: string) => Promise<void>;
   /** Focuses the collection's tab, opening one if it has none yet. */
   openCollection: (
     sessionId: string,
@@ -73,7 +86,8 @@ interface SessionsState {
   runQuery: (sessionId: string, id: string) => Promise<void>;
   /** Swaps in a document as stored after an edit, matched on _id. */
   replaceDocument: (id: string, updated: unknown) => void;
-  reset: () => void;
+  /** Forgets a connection going away: its tabs and its sidebar state. */
+  closeConnection: (connectionId: string) => void;
 }
 
 /**
@@ -89,12 +103,18 @@ export function selectActiveTab(state: SessionsState): CollectionTab | null {
   return state.tabs.find((t) => t.id === state.activeTabId) ?? null;
 }
 
+/** Key of a database in `databaseTree`: database names can't contain "/". */
+export function databaseKey(connectionId: string, database: string): string {
+  return `${connectionId}/${database}`;
+}
+
 /**
  * The database the console should run against: the active tab's, else the
  * one last opened in the sidebar.
  */
-export function selectCurrentDatabase(state: SessionsState): string | null {
-  return selectActiveTab(state)?.database ?? state.collectionsDatabase;
+export function selectCurrentDatabase(state: SessionsState): DatabaseRef | null {
+  const tab = selectActiveTab(state);
+  return tab ? { connectionId: tab.connection.id, database: tab.database } : state.lastDatabase;
 }
 
 function parseJsonObject(text: string): Record<string, unknown> {
@@ -138,13 +158,18 @@ function newTab(
 }
 
 const initialState = {
-  collections: [] as CollectionInfo[],
-  collectionsDatabase: null as string | null,
-  collectionsLoading: false,
-  collectionsError: null as string | null,
-  expandedDatabase: null as string | null,
+  databaseTree: {} as Record<string, DatabaseTreeState>,
+  lastDatabase: null as DatabaseRef | null,
   tabs: [] as CollectionTab[],
   activeTabId: null as string | null,
+};
+
+const closedDatabase: DatabaseTreeState = {
+  expanded: false,
+  collections: [],
+  loaded: false,
+  loading: false,
+  error: null,
 };
 
 export const useSessionsStore = create<SessionsState>((set, get) => {
@@ -159,39 +184,34 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
   return {
     ...initialState,
 
-    toggleDatabase: async (sessionId, database) => {
-      const { expandedDatabase, collectionsDatabase } = get();
-      if (expandedDatabase === database) {
-        set({ expandedDatabase: null });
+    toggleDatabase: async (connectionId, sessionId, database) => {
+      const key = databaseKey(connectionId, database);
+      const patchDatabase = (patch: Partial<DatabaseTreeState>) =>
+        set((s) => ({
+          databaseTree: {
+            ...s.databaseTree,
+            [key]: { ...(s.databaseTree[key] ?? closedDatabase), ...patch },
+          },
+        }));
+      const current = get().databaseTree[key] ?? closedDatabase;
+      if (current.expanded) {
+        patchDatabase({ expanded: false });
         return;
       }
-      // Reopening the database already loaded: its collections are still in
-      // hand, so just show them again.
-      if (collectionsDatabase === database) {
-        set({ expandedDatabase: database });
+      set({ lastDatabase: { connectionId, database } });
+      // Reopening a database already listed: show its collections again.
+      if (current.loaded || current.loading) {
+        patchDatabase({ expanded: true });
         return;
       }
-      set({
-        expandedDatabase: database,
-        collectionsDatabase: database,
-        collections: [],
-        collectionsLoading: true,
-        collectionsError: null,
-      });
+      patchDatabase({ expanded: true, loading: true, error: null });
       try {
         const collections = await api.listCollections(sessionId, database);
-        // Another database may have been opened while this one loaded.
-        if (get().collectionsDatabase === database) {
-          set({ collections, collectionsLoading: false });
-        }
+        // Gone if the connection closed meanwhile.
+        if (get().databaseTree[key]) patchDatabase({ collections, loaded: true, loading: false });
       } catch (e) {
-        if (get().collectionsDatabase !== database) return;
-        // Forget which database is loaded so the next toggle retries.
-        set({
-          collectionsError: String(e),
-          collectionsLoading: false,
-          collectionsDatabase: null,
-        });
+        // Not loaded, so the next open retries.
+        if (get().databaseTree[key]) patchDatabase({ error: String(e), loading: false });
       }
     },
 
@@ -286,6 +306,20 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       });
     },
 
-    reset: () => set(initialState),
+    closeConnection: (connectionId) =>
+      set((s) => {
+        const prefix = databaseKey(connectionId, "");
+        const tabs = s.tabs.filter((t) => t.connection.id !== connectionId);
+        const activeGone = !tabs.some((t) => t.id === s.activeTabId);
+        return {
+          tabs,
+          activeTabId: activeGone ? (tabs[tabs.length - 1]?.id ?? null) : s.activeTabId,
+          databaseTree: Object.fromEntries(
+            Object.entries(s.databaseTree).filter(([key]) => !key.startsWith(prefix)),
+          ),
+          lastDatabase:
+            s.lastDatabase?.connectionId === connectionId ? null : s.lastDatabase,
+        };
+      }),
   };
 });

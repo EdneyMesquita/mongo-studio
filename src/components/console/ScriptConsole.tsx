@@ -2,11 +2,7 @@ import { useEffect, useRef } from "react";
 import Editor from "@monaco-editor/react";
 import { Save, X } from "lucide-react";
 import { useConnectionsStore } from "../../store/connectionsStore";
-import {
-  selectActiveTab,
-  selectCurrentDatabase,
-  useSessionsStore,
-} from "../../store/sessionsStore";
+import { selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
 import {
   NO_TAB_CONSOLE,
   currentConsoleTarget,
@@ -25,9 +21,11 @@ import { addEditorCommand } from "../../lib/monaco";
 import { ResultViewToggle } from "../json/ResultViewToggle";
 
 export function ScriptConsole() {
-  const session = useConnectionsStore((s) => s.session);
   const activeTab = useSessionsStore(selectActiveTab);
-  const currentDatabase = useSessionsStore(selectCurrentDatabase);
+  // Re-render when any of these change; the values come from
+  // currentConsoleTarget, which the callbacks below read too.
+  useConnectionsStore((s) => s.sessions);
+  useSessionsStore((s) => s.lastDatabase);
   const themeId = useThemeStore((s) => s.themeId);
 
   const key = activeTab?.id ?? NO_TAB_CONSOLE;
@@ -59,6 +57,7 @@ export function ScriptConsole() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  const { session, database } = currentConsoleTarget();
   if (!session) {
     return (
       <div className="flex h-full items-center justify-center text-text-muted">
@@ -67,7 +66,6 @@ export function ScriptConsole() {
     );
   }
 
-  const database = currentDatabase ?? session.databases[0]?.name ?? null;
   const untouched = defaultScript(database, activeTab?.collection ?? null);
   const script = consoleSession?.script ?? untouched;
   const running = consoleSession?.running ?? false;

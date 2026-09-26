@@ -1,5 +1,5 @@
 import { ChevronRight, Layers } from "lucide-react";
-import { selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
+import { databaseKey, selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
 import type { TabConnection } from "../../store/sessionsStore";
 import type { CollectionInfo, DatabaseInfo } from "../../types/connection";
 
@@ -29,15 +29,12 @@ interface DatabaseRowProps {
   connection: TabConnection;
   /** The sidebar search, lowercased. */
   query: string;
-  /** This database's collections matching the search, when some do. */
+  /** This database's collections matching the search, when some do; it opens to show them. */
   matches: CollectionInfo[] | null;
 }
 
 export function DatabaseRow({ db, sessionId, connection, query, matches }: DatabaseRowProps) {
-  const expandedDatabase = useSessionsStore((s) => s.expandedDatabase);
-  const collections = useSessionsStore((s) => s.collections);
-  const collectionsLoading = useSessionsStore((s) => s.collectionsLoading);
-  const collectionsError = useSessionsStore((s) => s.collectionsError);
+  const tree = useSessionsStore((s) => s.databaseTree[databaseKey(connection.id, db.name)]);
   // Strings, not the tab object, so typing in a query doesn't re-render the tree.
   const activeConnectionId = useSessionsStore(
     (s) => selectActiveTab(s)?.connection.id ?? null,
@@ -49,7 +46,10 @@ export function DatabaseRow({ db, sessionId, connection, query, matches }: Datab
   const toggleDatabase = useSessionsStore((s) => s.toggleDatabase);
   const openCollection = useSessionsStore((s) => s.openCollection);
 
-  const isOpen = expandedDatabase === db.name;
+  const isOpen = (tree?.expanded ?? false) || matches !== null;
+  const collections = tree?.collections ?? [];
+  const collectionsLoading = tree?.loading ?? false;
+  const collectionsError = tree?.error ?? null;
   // Collapsing is only visual, so surface the active tab's collection on the
   // database row itself - otherwise it disappears from the sidebar.
   const activeCollection =
@@ -65,7 +65,7 @@ export function DatabaseRow({ db, sessionId, connection, query, matches }: Datab
         className={`flex w-full items-center gap-1.5 px-1.5 py-1 text-left text-xs text-text-default ${
           showsActiveInline ? activeRowClass : "hover:bg-sidebar-hover"
         }`}
-        onClick={() => toggleDatabase(sessionId, db.name)}
+        onClick={() => toggleDatabase(connection.id, sessionId, db.name)}
       >
         <ChevronRight
           size={12}

@@ -33,14 +33,21 @@ count;
  * once, like Monaco commands.
  */
 export function currentConsoleTarget() {
-  const session = useConnectionsStore.getState().session;
-  const sessions = useSessionsStore.getState();
-  const tab = selectActiveTab(sessions);
-  const database = selectCurrentDatabase(sessions) ?? session?.databases[0]?.name ?? null;
+  const { sessions } = useConnectionsStore.getState();
+  const state = useSessionsStore.getState();
+  const tab = selectActiveTab(state);
+  const current = selectCurrentDatabase(state);
+  let session = current ? sessions[current.connectionId] : undefined;
+  let database = current?.database ?? null;
+  if (!session) {
+    // nothing picked yet: the first connection's first database
+    session = Object.values(sessions)[0];
+    database = session?.databases[0]?.name ?? null;
+  }
   const key = tab?.id ?? NO_TAB_CONSOLE;
   const stored = useConsoleStore.getState().consoles[key]?.script;
   return {
-    session,
+    session: session ?? null,
     database,
     key,
     script: stored ?? defaultScript(database, tab?.collection ?? null),

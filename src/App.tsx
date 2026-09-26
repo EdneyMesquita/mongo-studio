@@ -23,27 +23,34 @@ const emptyMessages: Record<Exclude<MainTab, "console">, string> = {
 
 function App() {
   useSuppressNativeContextMenu();
-  const session = useConnectionsStore((s) => s.session);
+  const sessions = useConnectionsStore((s) => s.sessions);
   const { mainTab, setMainTab } = useUiStore();
   const tabs = useSessionsStore((s) => s.tabs);
   const activeTab = useSessionsStore(selectActiveTab);
 
-  const view: MainTab = !session ? "browse" : mainTab;
+  const connected = Object.keys(sessions).length;
+  const view: MainTab = connected === 0 ? "browse" : mainTab;
+  // The status bar speaks for the active tab's server when there is one.
+  const activeSession = activeTab ? sessions[activeTab.connection.id] : undefined;
 
   return (
     <AppShell
       sidebar={<Sidebar />}
       statusBar={
         <span>
-          {session
-            ? `Connected${session.serverVersion ? ` · MongoDB ${session.serverVersion}` : ""}`
-            : "Not connected"}
+          {activeTab && activeSession
+            ? `Connected to ${activeTab.connection.name}${
+                activeSession.serverVersion ? ` · MongoDB ${activeSession.serverVersion}` : ""
+              }${connected > 1 ? ` · ${connected} connections open` : ""}`
+            : connected > 0
+              ? `${connected} connection${connected === 1 ? "" : "s"} open`
+              : "Not connected"}
         </span>
       }
     >
       <div className="flex h-full flex-col">
-        {session && <CollectionTabs />}
-        {session && (
+        {connected > 0 && <CollectionTabs />}
+        {connected > 0 && (
           <div className="flex gap-1 border-b border-border-subtle bg-editor px-2 pt-1.5">
             {(["browse", "indexes", "console"] as const).map((t) => (
               <button
