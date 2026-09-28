@@ -1,7 +1,7 @@
 # Mongo Studio
 
 An open-source, cross-platform MongoDB GUI client built with Tauri (Rust) and React. Think NoSQLBooster/Compass, but self-hosted and hackable.
-<img width="2784" height="1784" alt="image" src="https://github.com/user-attachments/assets/4a75614e-0aa0-4e48-b51e-71b372e9cc75" />
+<img width="1392" height="892" alt="Screenshot 2026-09-28 at 07 17 49" src="https://github.com/user-attachments/assets/eed74248-2327-468b-a297-569b10b0483b" />
 
 
 ## Features
