@@ -1,97 +1,69 @@
-import { useEffect, useState } from "react";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import type { CollectionTab } from "../../store/sessionsStore";
-import { api } from "../../lib/tauri";
+import { useIndexStats } from "./useIndexStats";
+import { IndexRow } from "./IndexRow";
 
-interface IndexStatEntry {
-  name?: string;
-  accesses?: { ops?: number; since?: string };
-}
+const columns = ["Name", "Keys", "Properties", "Usage", "Since"];
 
-function isIndexStatEntry(value: unknown): value is IndexStatEntry {
-  return typeof value === "object" && value !== null;
-}
-
+/**
+ * A collection's indexes: keys, properties and how often each was used
+ * since the server started (`$indexStats`, which may be refused).
+ */
 export function IndexesPanel({ tab }: { tab: CollectionTab }) {
   const session = useConnectionsStore((s) => s.sessions[tab.connection.id]);
-  const { database: selectedDatabase, collection: selectedCollection, stats } = tab;
-  const [statsByName, setStatsByName] = useState<Map<string, IndexStatEntry>>(new Map());
-  const [statsError, setStatsError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!session || !selectedDatabase || !selectedCollection) return;
-    let cancelled = false;
-    setLoading(true);
-    setStatsError(null);
-    api
-      .listIndexStats(session.sessionId, selectedDatabase, selectedCollection)
-      .then((entries) => {
-        if (cancelled) return;
-        const map = new Map<string, IndexStatEntry>();
-        for (const entry of entries) {
-          if (isIndexStatEntry(entry) && typeof entry.name === "string") {
-            map.set(entry.name, entry);
-          }
-        }
-        setStatsByName(map);
-      })
-      .catch((e) => {
-        if (!cancelled) setStatsError(String(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [session, selectedDatabase, selectedCollection]);
+  const { database, collection, stats } = tab;
+  const { usageByName, loading, error } = useIndexStats(session?.sessionId, database, collection);
+  const indexes = stats?.indexes ?? [];
+  const maxOps = Math.max(0, ...[...usageByName.values()].map((u) => u.ops ?? 0));
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="font-mono text-xs text-text-default">
-          {selectedDatabase}.{selectedCollection}
+    <div className="flex h-full min-h-0 flex-col bg-editor">
+      <div className="flex h-[34px] flex-none items-center gap-3 border-b border-line pr-2.5 pl-3 text-sm text-fg-2">
+        <span className="truncate">
+          <span className="font-medium text-fg tabular-nums">{indexes.length}</span>{" "}
+          {indexes.length === 1 ? "index" : "indexes"} on{" "}
+          <span className="font-data text-fg">
+            {database}.{collection}
+          </span>
         </span>
-        {loading && <span className="text-xs text-text-faint">Loading usage stats…</span>}
+        <span className="flex-1" />
+        <span className="shrink-0 text-xs text-fg-3 max-sm:hidden">
+          {loading ? "Loading usage stats…" : "Usage since the server last started"}
+        </span>
       </div>
-      {statsError && (
-        <div className="mb-2 rounded bg-amber-950 p-2 text-xs text-amber-300">
-          Index usage stats unavailable: {statsError}
-        </div>
+      {error && (
+        <p className="flex-none border-b border-line-soft px-3 py-1.5 text-xs text-warn">
+          Index usage stats unavailable: {error}
+        </p>
       )}
-      <div className="overflow-x-auto rounded border border-border-subtle">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-panel-alt text-text-muted">
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className="w-full border-collapse text-left">
+          <thead>
             <tr>
-              <th className="px-2 py-1.5 font-medium">Name</th>
-              <th className="px-2 py-1.5 font-medium">Key</th>
-              <th className="px-2 py-1.5 font-medium">Unique</th>
-              <th className="px-2 py-1.5 font-medium">Ops since restart</th>
+              {columns.map((column) => (
+                <th
+                  key={column}
+                  scope="col"
+                  className="sticky top-0 h-[30px] border-b border-line-soft bg-panel px-3.5 text-sm font-medium whitespace-nowrap text-fg-2"
+                >
+                  {column}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {stats?.indexes.map((index) => {
-              const usage = statsByName.get(index.name);
-              return (
-                <tr key={index.name} className="border-t border-border-subtle">
-                  <td className="px-2 py-1.5 text-text-default">{index.name}</td>
-                  <td className="px-2 py-1.5 font-mono text-text-muted">
-                    {JSON.stringify(index.key)}
-                  </td>
-                  <td className="px-2 py-1.5 text-text-muted">{index.unique ? "yes" : ""}</td>
-                  <td className="px-2 py-1.5 text-text-muted">
-                    {usage?.accesses?.ops?.toLocaleString() ?? "—"}
-                  </td>
-                </tr>
-              );
-            })}
+            {indexes.map((index) => (
+              <IndexRow
+                key={index.name}
+                index={index}
+                usage={usageByName.get(index.name)}
+                maxOps={maxOps}
+              />
+            ))}
           </tbody>
         </table>
+        {indexes.length === 0 && <p className="px-3.5 py-3 text-sm text-fg-3">No indexes.</p>}
       </div>
-      {(!stats || stats.indexes.length === 0) && (
-        <p className="mt-2 text-xs text-text-faint">No indexes.</p>
-      )}
     </div>
   );
 }

@@ -28,6 +28,8 @@ export interface CollectionTab {
    * editable even when it has an _id.
    */
   resultsMode: QueryMode | null;
+  /** How long the query behind `results` took, round trip included, in ms. */
+  queryMs: number | null;
   mode: QueryMode;
   filterText: string;
   sortText: string;
@@ -158,6 +160,7 @@ function newTab(
     stats: null,
     results: null,
     resultsMode: null,
+    queryMs: null,
     mode: "find",
     filterText: "{}",
     sortText: "",
@@ -299,6 +302,8 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       const tab = collectionTab(id);
       if (!tab) return;
       patchTab(id, { loading: true, error: null });
+      const started = performance.now();
+      const elapsed = () => Math.round(performance.now() - started);
       try {
         if (tab.mode === "aggregate") {
           const pipeline = parseJsonArray(tab.pipelineText);
@@ -308,7 +313,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
             tab.collection,
             pipeline,
           );
-          patchTab(id, { results, resultsMode: "aggregate", loading: false });
+          patchTab(id, { results, resultsMode: "aggregate", queryMs: elapsed(), loading: false });
         } else {
           const filter = parseJsonObject(tab.filterText);
           const sort = tab.sortText.trim() ? parseJsonObject(tab.sortText) : null;
@@ -319,7 +324,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
             limit: tab.limit,
             skip: tab.skip,
           });
-          patchTab(id, { results, resultsMode: "find", loading: false });
+          patchTab(id, { results, resultsMode: "find", queryMs: elapsed(), loading: false });
         }
       } catch (e) {
         patchTab(id, { error: String(e), loading: false });

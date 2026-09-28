@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
 import { DEFAULT_SIDEBAR_WIDTH, useUiStore } from "../../store/uiStore";
 
@@ -14,19 +14,21 @@ export function clampSidebarWidth(width: number) {
   return Math.round(Math.min(maxWidth(), Math.max(MIN_WIDTH, width)));
 }
 
-/** The draggable right edge of the sidebar. */
+/** The draggable right edge of the side panel. */
 export function SidebarResizer() {
   const width = useUiStore((s) => s.sidebarWidth);
   const setWidth = useUiStore((s) => s.setSidebarWidth);
   // Width at press time and pointer offset, so the edge tracks the pointer
   // from wherever it was grabbed.
   const start = useRef<{ x: number; width: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
     if (e.button !== 0) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     start.current = { x: e.clientX, width };
+    setDragging(true);
     document.body.style.userSelect = "none";
     document.body.style.cursor = "col-resize";
   }
@@ -41,6 +43,7 @@ export function SidebarResizer() {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
     start.current = null;
+    setDragging(false);
     document.body.style.userSelect = "";
     document.body.style.cursor = "";
   }
@@ -58,15 +61,16 @@ export function SidebarResizer() {
   return (
     <div
       role="separator"
-      aria-label="Resize sidebar"
+      aria-label="Resize side panel"
       aria-orientation="vertical"
       aria-valuenow={width}
       aria-valuemin={MIN_WIDTH}
       tabIndex={0}
       title="Drag to resize - double-click to reset"
-      // A 7px grab area straddling the sidebar's border, highlighted on
-      // hover and keyboard focus.
-      className="absolute inset-y-0 -right-[4px] z-20 w-[7px] cursor-col-resize transition-colors hover:bg-accent/60 focus:outline-none focus-visible:bg-accent"
+      data-dragging={dragging || undefined}
+      // A 6px grab area straddling the panel's border; a 2px accent line
+      // shows on hover, keyboard focus and while dragging.
+      className="absolute inset-y-0 -right-[3px] z-20 w-1.5 cursor-col-resize focus:outline-none after:absolute after:inset-y-0 after:left-0.5 after:w-0.5 after:bg-accent after:opacity-0 after:transition-opacity after:duration-150 hover:after:opacity-100 focus-visible:after:opacity-100 data-dragging:after:opacity-100"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

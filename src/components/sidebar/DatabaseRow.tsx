@@ -1,42 +1,25 @@
-import { useCallback, useState } from "react";
-import type { MouseEvent } from "react";
-import { ChevronRight, Layers } from "lucide-react";
+import { Layers } from "lucide-react";
 import { databaseKey, selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
 import type { TabConnection } from "../../store/sessionsStore";
 import type { CollectionInfo, DatabaseInfo } from "../../types/connection";
-import { ContextMenu } from "../ui/ContextMenu";
-
-// The active connection already paints its whole subtree bg-sidebar-active,
-// so the open collection can't reuse that colour. A wash of the text colour
-// stands out on any theme: it lightens dark ones and darkens the light one.
-const activeRowClass = "rounded bg-text-default/15";
-
-/** The name with the part matching the search picked out. */
-function Highlighted({ name, query }: { name: string; query: string }) {
-  const at = query ? name.toLowerCase().indexOf(query) : -1;
-  if (at < 0) return <>{name}</>;
-  return (
-    <>
-      {name.slice(0, at)}
-      <mark className="bg-transparent font-semibold text-text-default">
-        {name.slice(at, at + query.length)}
-      </mark>
-      {name.slice(at + query.length)}
-    </>
-  );
-}
+import { RowContextMenu } from "@/components/common/ActionMenu";
+import { CollectionRow } from "./CollectionRow";
+import { TreeNote } from "./TreeNote";
+import { TreeRow } from "./TreeRow";
+import { databaseMenuEntries } from "./treeMenus";
 
 interface DatabaseRowProps {
   db: DatabaseInfo;
   sessionId: string;
   connection: TabConnection;
+  depth: number;
   /** The sidebar search, lowercased. */
   query: string;
   /** This database's collections matching the search, when some do; it opens to show them. */
   matches: CollectionInfo[] | null;
 }
 
-export function DatabaseRow({ db, sessionId, connection, query, matches }: DatabaseRowProps) {
+export function DatabaseRow({ db, sessionId, connection, depth, query, matches }: DatabaseRowProps) {
   const tree = useSessionsStore((s) => s.databaseTree[databaseKey(connection.id, db.name)]);
   // Strings, not the tab object, so typing in a query doesn't re-render the tree.
   const activeConnectionId = useSessionsStore(
@@ -51,17 +34,6 @@ export function DatabaseRow({ db, sessionId, connection, query, matches }: Datab
   const toggleDatabase = useSessionsStore((s) => s.toggleDatabase);
   const openCollection = useSessionsStore((s) => s.openCollection);
   const openConsole = useSessionsStore((s) => s.openConsole);
-  // Right-click menu, on the database row or one of its collections.
-  const [menu, setMenu] = useState<{ x: number; y: number; collection: string | null } | null>(
-    null,
-  );
-  const closeMenu = useCallback(() => setMenu(null), []);
-
-  function openMenu(e: MouseEvent, collection: string | null) {
-    e.preventDefault();
-    e.stopPropagation();
-    setMenu({ x: e.clientX, y: e.clientY, collection });
-  }
 
   const isOpen = (tree?.expanded ?? false) || matches !== null;
   const collections = tree?.collections ?? [];
@@ -76,84 +48,56 @@ export function DatabaseRow({ db, sessionId, connection, query, matches }: Datab
   const showsActiveInline = !isOpen && activeCollection !== null;
 
   return (
-    <div>
-      <button
-        type="button"
-        className={`flex w-full items-center gap-1.5 px-1.5 py-1 text-left text-xs text-text-default ${
-          showsActiveInline ? activeRowClass : "hover:bg-sidebar-hover"
-        }`}
-        onClick={() => toggleDatabase(connection.id, sessionId, db.name)}
-        onContextMenu={(e) => openMenu(e, null)}
+    <>
+      <RowContextMenu
+        entries={() =>
+          databaseMenuEntries({
+            database: db.name,
+            connectionName: connection.name,
+            onOpenConsole: () => openConsole(connection, db.name, null),
+          })
+        }
       >
-        <ChevronRight
-          size={12}
-          className={`shrink-0 text-text-faint transition-transform ${isOpen ? "rotate-90" : ""}`}
+        <TreeRow
+          depth={depth}
+          expanded={isOpen}
+          selected={showsActiveInline}
+          icon={<Layers className="size-3.5 shrink-0 text-fg-2" aria-hidden />}
+          label={
+            <>
+              {db.name}
+              {showsActiveInline && <span className="text-fg-2"> · {activeCollection}</span>}
+            </>
+          }
+          onActivate={() => toggleDatabase(connection.id, sessionId, db.name)}
         />
-        <Layers size={12} className="shrink-0 text-text-muted" />
-        <span className={showsActiveInline ? "shrink-0" : "truncate"}>{db.name}</span>
-        {showsActiveInline && (
-          <span className="truncate text-[11px] text-text-muted">
-            · {activeCollection}
-          </span>
-        )}
-      </button>
+      </RowContextMenu>
       {isOpen && (
-        <div className="ml-4 border-l border-border-subtle/40 pl-2">
+        <div role="group">
           {collectionsError ? (
-            <p className="px-1.5 py-1 text-[11px] text-red-400">{collectionsError}</p>
+            <TreeNote depth={depth + 1} tone="danger">
+              {collectionsError}
+            </TreeNote>
           ) : collectionsLoading ? (
-            <p className="px-1.5 py-1 text-[11px] text-text-faint">Loading…</p>
+            <TreeNote depth={depth + 1}>Loading…</TreeNote>
           ) : (
-            collections.length === 0 && (
-              <p className="px-1.5 py-1 text-[11px] text-text-faint">No collections</p>
-            )
+            collections.length === 0 && <TreeNote depth={depth + 1}>No collections</TreeNote>
           )}
           {/* A search naming some of them narrows the list to those. */}
           {(matches ?? collections).map((coll) => (
-            <button
+            <CollectionRow
               key={coll.name}
-              type="button"
-              className={`block w-full truncate px-1.5 py-1 text-left text-[11px] ${
-                activeCollection === coll.name
-                  ? `${activeRowClass} font-medium text-text-default`
-                  : "text-text-muted hover:bg-sidebar-hover"
-              }`}
-              title={coll.name}
-              onClick={() => openCollection(sessionId, connection, db.name, coll.name)}
-              onContextMenu={(e) => openMenu(e, coll.name)}
-            >
-              {matches ? <Highlighted name={coll.name} query={query} /> : coll.name}
-            </button>
+              collection={coll}
+              database={db.name}
+              depth={depth + 1}
+              selected={activeCollection === coll.name}
+              query={query}
+              onOpen={() => openCollection(sessionId, connection, db.name, coll.name)}
+              onOpenConsole={() => openConsole(connection, db.name, coll.name)}
+            />
           ))}
         </div>
       )}
-      {menu && (
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          onClose={closeMenu}
-          items={
-            menu.collection === null
-              ? [
-                  {
-                    label: `Open console on ${db.name}`,
-                    onSelect: () => openConsole(connection, db.name, null),
-                  },
-                ]
-              : [
-                  {
-                    label: "Open collection",
-                    onSelect: () =>
-                      openCollection(sessionId, connection, db.name, menu.collection!),
-                  },
-                  {
-                    label: `Open console on ${db.name}`,
-                    onSelect: () => openConsole(connection, db.name, menu.collection),
-                  },
-                ]
-          }
-        />
-      )}
-    </div>
+    </>
   );
 }

@@ -78,24 +78,6 @@
   --color-input: var(--t-field-line);
   --color-ring: var(--t-accent);
 
-  /* Legacy names, kept only while components move to the tokens above.
-     Nothing new may use them; they go once no component does. */
-  --color-panel-alt: var(--t-hover);
-  --color-panel-hover: var(--t-hover);
-  --color-border-subtle: var(--t-line);
-  --color-text-default: var(--t-fg);
-  --color-text-muted: var(--t-fg-2);
-  --color-text-faint: var(--t-fg-3);
-  --color-run: var(--t-accent);
-  --color-run-hover: var(--t-accent-hover);
-  --color-sidebar: var(--t-panel);
-  --color-sidebar-active: var(--t-sel);
-  --color-sidebar-active-hover: var(--t-sel);
-  --color-sidebar-hover: var(--t-row-hover);
-  --color-status-green: var(--t-ok);
-  --color-json-boolean: var(--t-json-keyword);
-  --color-json-null: var(--t-json-keyword);
-
   --radius-xs: 3px;
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -177,11 +159,14 @@
 }
 
 /* ------------------------------------------------------------ base */
+/* 13px on body, not html: Tailwind's spacing is in rem and must stay 16px-based. */
 html,
 body {
   background-color: var(--color-editor);
   color: var(--color-fg);
   font-family: var(--font-sans);
+}
+body {
   font-size: 13px;
   line-height: 1.45;
   font-feature-settings: "cv11", "ss01";
@@ -193,9 +178,12 @@ body {
   color: var(--color-fg);
 }
 
-:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -1px;
+/* In the base layer so a component's own outline utilities win. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -1px;
+  }
 }
 
 * {

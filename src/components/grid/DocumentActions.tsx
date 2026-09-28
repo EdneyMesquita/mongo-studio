@@ -1,29 +1,66 @@
-import { useState } from "react";
-import { Check, Copy, Pencil } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { Check, Copy, SquareTerminal } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useConsoleStore } from "../../store/consoleStore";
 import { useSessionsStore } from "../../store/sessionsStore";
 import { useUiStore } from "../../store/uiStore";
 import { buildEditScript } from "../../lib/editScript";
-
-const buttonClass =
-  "rounded border border-border-subtle bg-panel-alt p-1 text-text-muted hover:bg-panel-hover hover:text-text-default";
 
 interface DocumentActionsProps {
   doc: unknown;
   collectionName: string;
   /** The tab the document came from, whose console receives the edit. */
   tabId: string;
+  /** Button size: the inspector header's, or a tree row's. */
+  size?: "icon" | "icon-xs";
 }
 
-/** Copy-as-JSON and edit-in-console, shared by the card and table views. */
-export function DocumentActions({ doc, collectionName, tabId }: DocumentActionsProps) {
+function Action({
+  label,
+  size,
+  onClick,
+  children,
+}: {
+  label: string;
+  size: "icon" | "icon-xs";
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size={size}
+          aria-label={label}
+          className={size === "icon" ? "[&_svg]:size-3.5" : undefined}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Copy-as-JSON and edit-in-console, for the inspector and the tree view. */
+export function DocumentActions({ doc, collectionName, tabId, size = "icon" }: DocumentActionsProps) {
   const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
 
   async function handleCopy() {
     try {
       await navigator.clipboard.writeText(JSON.stringify(doc, null, 2));
       setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), 1200);
     } catch {
       // clipboard access denied - nothing more we can do here
     }
@@ -39,22 +76,12 @@ export function DocumentActions({ doc, collectionName, tabId }: DocumentActionsP
 
   return (
     <>
-      <button
-        type="button"
-        className={buttonClass}
-        onClick={handleCopy}
-        title="Copy document as JSON"
-      >
-        {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
-      </button>
-      <button
-        type="button"
-        className={buttonClass}
-        onClick={handleEdit}
-        title="Edit in console"
-      >
-        <Pencil size={13} />
-      </button>
+      <Action label={copied ? "Copied" : "Copy as JSON"} size={size} onClick={handleCopy}>
+        {copied ? <Check className="text-ok" /> : <Copy />}
+      </Action>
+      <Action label="Edit in console (updateOne)" size={size} onClick={handleEdit}>
+        <SquareTerminal />
+      </Action>
     </>
   );
 }

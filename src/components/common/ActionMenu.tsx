@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { MoreHorizontal } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -93,12 +94,21 @@ interface RowContextMenuProps {
 
 /** Right-click menu for a row, tab or any element. */
 export function RowContextMenu({ entries, children, onOpenChange }: RowContextMenuProps) {
+  // Content mounts only while open, so entries() runs per opening, not per render.
+  const [open, setOpen] = useState(false);
   return (
-    <ContextMenu onOpenChange={onOpenChange}>
+    <ContextMenu
+      onOpenChange={(next) => {
+        setOpen(next);
+        onOpenChange?.(next);
+      }}
+    >
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent>
-        <Entries entries={entries()} parts={contextParts} />
-      </ContextMenuContent>
+      {open && (
+        <ContextMenuContent>
+          <Entries entries={entries()} parts={contextParts} />
+        </ContextMenuContent>
+      )}
     </ContextMenu>
   );
 }
@@ -115,8 +125,9 @@ interface ActionMenuButtonProps {
 
 /** The "…" button that opens the same actions as a row's right-click menu. */
 export function ActionMenuButton({ entries, label, className, trigger, align = "start" }: ActionMenuButtonProps) {
+  const [open, setOpen] = useState(false);
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         {trigger ?? (
           <Button
@@ -131,9 +142,11 @@ export function ActionMenuButton({ entries, label, className, trigger, align = "
           </Button>
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align={align}>
-        <Entries entries={entries()} parts={dropdownParts} />
-      </DropdownMenuContent>
+      {open && (
+        <DropdownMenuContent align={align}>
+          <Entries entries={entries()} parts={dropdownParts} />
+        </DropdownMenuContent>
+      )}
     </DropdownMenu>
   );
 }

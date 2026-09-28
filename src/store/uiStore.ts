@@ -40,6 +40,9 @@ interface UiState {
   setInspectorWidth: (width: number) => void;
   connectionDialog: ConnectionDialog;
   setConnectionDialog: (dialog: ConnectionDialog) => void;
+  /** The import / export connections dialog. */
+  importExportOpen: boolean;
+  setImportExportOpen: (open: boolean) => void;
   /** The Ctrl+K quick-open palette. */
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
@@ -56,7 +59,7 @@ export const useUiStore = create<UiState>()(
       setMainTab: (tab) => set({ mainTab: tab }),
       resultView: "grid",
       setResultView: (view) => set({ resultView: view }),
-      consoleLayout: "side",
+      consoleLayout: "stacked",
       setConsoleLayout: (layout) => set({ consoleLayout: layout }),
       consoleSplit: { side: DEFAULT_CONSOLE_SPLIT, stacked: DEFAULT_CONSOLE_SPLIT },
       setConsoleSplit: (layout, ratio) =>
@@ -70,6 +73,8 @@ export const useUiStore = create<UiState>()(
       setInspectorWidth: (width) => set({ inspectorWidth: width }),
       connectionDialog: null,
       setConnectionDialog: (dialog) => set({ connectionDialog: dialog }),
+      importExportOpen: false,
+      setImportExportOpen: (open) => set({ importExportOpen: open }),
       paletteOpen: false,
       setPaletteOpen: (open) => set({ paletteOpen: open }),
     }),

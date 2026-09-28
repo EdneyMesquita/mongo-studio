@@ -1,19 +1,25 @@
-import { useCallback, useEffect, useState } from "react";
-import type { HTMLAttributes, MouseEvent } from "react";
-import { ChevronRight, Database, Loader2, MoreHorizontal } from "lucide-react";
+import { useEffect, useState } from "react";
+import type { HTMLAttributes } from "react";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useConnectionsStore } from "../../store/connectionsStore";
-import { DatabaseRow } from "./DatabaseRow";
-import type { CollectionMatches } from "./useCollectionMatches";
 import { databaseKey } from "../../store/sessionsStore";
-import { ContextMenu } from "../ui/ContextMenu";
+import { useUiStore } from "../../store/uiStore";
 import type { ConnectionProfileMeta } from "../../types/connection";
+import { RowContextMenu } from "@/components/common/ActionMenu";
+import { ConnectionChip } from "@/components/ui/ConnectionChip";
+import { connectionColor } from "@/lib/connectionColor";
+import { ConnectionStatus } from "./ConnectionStatus";
+import { DatabaseRow } from "./DatabaseRow";
+import { Highlighted } from "./Highlighted";
+import { RowMenuButton } from "./RowMenuButton";
+import { TreeRow } from "./TreeRow";
+import { connectionMenuEntries } from "./treeMenus";
+import type { CollectionMatches } from "./useCollectionMatches";
 
 interface ConnectionRowProps {
   profile: ConnectionProfileMeta;
-  onEdit: (id: string) => void;
   /** Nesting depth in the folder tree. */
-  indent?: number;
+  depth?: number;
   /** Extra props for the row itself: drag handlers, data attributes. */
   rowProps?: HTMLAttributes<HTMLDivElement> & Record<`data-${string}`, string>;
   /** The sidebar search, lowercased. */
@@ -22,12 +28,9 @@ interface ConnectionRowProps {
   collectionMatches?: CollectionMatches | null;
 }
 
-export const INDENT_PX = 12;
-
 export function ConnectionRow({
   profile,
-  onEdit,
-  indent = 0,
+  depth = 0,
   rowProps,
   query = "",
   collectionMatches = null,
@@ -39,8 +42,6 @@ export function ConnectionRow({
   const disconnect = useConnectionsStore((s) => s.disconnect);
   const deleteProfile = useConnectionsStore((s) => s.deleteProfile);
   const [expanded, setExpanded] = useState(false);
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const closeMenu = useCallback(() => setMenu(null), []);
 
   const isActive = session !== undefined;
   // a search that found collections here shows them, even if collapsed
@@ -49,12 +50,6 @@ export function ConnectionRow({
   useEffect(() => {
     if (isActive) setExpanded(true);
   }, [isActive]);
-
-  function openMenu(e: MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    setMenu({ x: e.clientX, y: e.clientY });
-  }
 
   async function handleDelete() {
     const confirmed = await ask(
@@ -72,88 +67,52 @@ export function ConnectionRow({
     }
   }
 
+  const entries = () =>
+    connectionMenuEntries({
+      connected: isActive,
+      onConnect: () => connect(profile.id),
+      onDisconnect: () => disconnect(profile.id),
+      onEdit: () => useUiStore.getState().setConnectionDialog({ mode: "edit", id: profile.id }),
+      onDelete: handleDelete,
+    });
+
   return (
-    <div className={isActive ? "bg-sidebar-active" : ""}>
-      <div
-        {...rowProps}
-        className={`group flex items-center gap-1 py-1.5 pr-2 text-sm ${
-          isActive ? "hover:bg-sidebar-active-hover" : "hover:bg-sidebar-hover"
-        } ${rowProps?.className ?? ""}`}
-        style={{ paddingLeft: 8 + indent * INDENT_PX }}
-        onContextMenu={openMenu}
-      >
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-          onClick={handleToggle}
-        >
-          <ChevronRight
-            size={13}
-            className={`shrink-0 text-text-faint transition-transform ${
-              showChildren && isActive ? "rotate-90" : ""
-            }`}
-          />
-          <Database size={14} className="shrink-0 text-text-muted" />
-          <span className="truncate text-text-default">{profile.name}</span>
-          {isActive && (
-            <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-status-green" />
-          )}
-          {connecting && (
-            <Loader2
-              size={12}
-              className="ml-auto shrink-0 animate-spin text-text-faint"
-              aria-label="Connecting"
-            />
-          )}
-        </button>
-        <button
-          type="button"
-          className={`shrink-0 rounded text-text-faint hover:text-text-default focus:opacity-100 ${
-            menu ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-          }`}
-          onClick={openMenu}
-          data-no-drag=""
-          title="Connection actions"
-          aria-label={`Actions for ${profile.name}`}
-          aria-haspopup="menu"
-        >
-          <MoreHorizontal size={14} />
-        </button>
-      </div>
-      {connectError && !isActive && (
-        <p
-          className="line-clamp-3 pb-1.5 pr-2 text-[11px] text-red-400"
-          style={{ paddingLeft: 26 + indent * INDENT_PX }}
-          title={connectError}
-        >
-          {connectError}
-        </p>
-      )}
-      {menu && (
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          onClose={closeMenu}
-          items={[
-            isActive
-              ? { label: "Disconnect", onSelect: () => disconnect(profile.id) }
-              : { label: "Connect", onSelect: () => connect(profile.id) },
-            { label: "Edit connection...", onSelect: () => onEdit(profile.id) },
-            { label: "Delete connection...", onSelect: handleDelete },
-          ]}
+    <>
+      <RowContextMenu entries={entries}>
+        <TreeRow
+          {...rowProps}
+          depth={depth}
+          expanded={isActive ? showChildren : undefined}
+          icon={
+            <ConnectionChip name={profile.name} color={connectionColor(profile.id, profile.color)} />
+          }
+          labelClassName="font-medium"
+          label={<Highlighted name={profile.name} query={query} />}
+          trailing={
+            <>
+              <ConnectionStatus
+                name={profile.name}
+                connected={isActive}
+                connecting={connecting}
+                serverVersion={session?.serverVersion ?? null}
+                error={isActive ? undefined : connectError}
+                onRetry={() => connect(profile.id)}
+              />
+              <RowMenuButton entries={entries} label={`Actions for ${profile.name}`} />
+            </>
+          }
+          onActivate={handleToggle}
         />
-      )}
-      {isActive && showChildren && session && (
-        <div
-          className="border-l border-border-subtle/60 pl-2"
-          style={{ marginLeft: 16 + indent * INDENT_PX }}
-        >
+      </RowContextMenu>
+      {isActive && showChildren && (
+        <div role="group">
           {session.databases.map((db) => (
             <DatabaseRow
               key={db.name}
               db={db}
               sessionId={session.sessionId}
               connection={{ id: profile.id, name: profile.name, summary: profile.summary }}
+              depth={depth + 1}
               query={query}
               matches={
                 collectionMatches?.byDatabase.get(databaseKey(profile.id, db.name)) ?? null
@@ -162,6 +121,6 @@ export function ConnectionRow({
           ))}
         </div>
       )}
-    </div>
+    </>
   );
 }

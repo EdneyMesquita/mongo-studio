@@ -1,9 +1,14 @@
-import { useEffect, useState } from "react";
-import { ChevronRight, FileCode, RefreshCw } from "lucide-react";
+import { useEffect } from "react";
+import { RefreshCw } from "lucide-react";
 import { useScriptsStore } from "../../store/scriptsStore";
 import { useSessionsStore } from "../../store/sessionsStore";
+import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
+import { PanelHeader } from "./PanelHeader";
+import { PanelNotice } from "./PanelNotice";
+import { SavedScriptRow } from "./SavedScriptRow";
 
-/** Console scripts saved to disk, pinned to the bottom of the sidebar. */
+/** The Saved scripts tool window: console scripts saved to disk. */
 export function SavedScriptsPanel() {
   const saved = useScriptsStore((s) => s.saved);
   // highlight the file open in the console on screen - the active tab's
@@ -14,71 +19,49 @@ export function SavedScriptsPanel() {
   const listError = useScriptsStore((s) => s.listError);
   const refresh = useScriptsStore((s) => s.refresh);
   const open = useScriptsStore((s) => s.open);
-  const [expanded, setExpanded] = useState(true);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
   return (
-    // Capped so a long list can't push the connections off screen.
-    <div className="flex max-h-[45%] shrink-0 flex-col border-t border-border-subtle">
-      <div className="flex items-center justify-between px-3 py-1.5">
-        <button
-          type="button"
-          aria-expanded={expanded}
-          className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-text-muted hover:text-text-default"
-          onClick={() => setExpanded((e) => !e)}
-        >
-          <ChevronRight
-            size={12}
-            className={`transition-transform ${expanded ? "rotate-90" : ""}`}
-          />
-          Saved scripts ({saved.length})
-        </button>
-        <button
-          type="button"
-          className="rounded p-1 text-text-muted hover:bg-sidebar-hover hover:text-text-default"
-          onClick={() => refresh()}
+    <div className="flex h-full min-h-0 flex-col bg-panel">
+      <PanelHeader title="Saved scripts">
+        <Button
+          variant="ghost"
+          size="icon"
           title="Refresh"
           aria-label="Refresh saved scripts"
+          onClick={() => refresh()}
         >
-          <RefreshCw size={12} />
-        </button>
-      </div>
+          <RefreshCw className="size-3.5" />
+        </Button>
+      </PanelHeader>
 
-      {expanded && (
-        <div className="min-h-0 overflow-y-auto pb-2">
-          {listError && (
-            <p className="px-3 py-1 text-xs text-red-400" title={listError}>
-              {listError}
-            </p>
-          )}
-          {saved.length === 0 ? (
-            <p className="px-3 py-1 text-xs text-text-faint">
-              Press Ctrl+S (⌘S) in the console to save a script. Scripts saved without
-              picking a location go to ~/mongo-studio-scripts.
-            </p>
-          ) : (
-            saved.map((script) => (
-              <button
-                key={script.path}
-                type="button"
-                title={script.path}
-                className={`flex w-full items-center gap-1.5 px-3 py-1 text-left text-xs ${
-                  script.path === currentPath
-                    ? "bg-text-default/15 text-text-default"
-                    : "text-text-muted hover:bg-sidebar-hover hover:text-text-default"
-                }`}
-                onClick={() => open(script)}
-              >
-                <FileCode size={12} className="shrink-0 text-text-faint" />
-                <span className="truncate">{script.name}</span>
-              </button>
-            ))
-          )}
-        </div>
-      )}
+      {listError && <PanelNotice tone="danger">{listError}</PanelNotice>}
+
+      <div className="min-h-0 flex-1 overflow-y-auto pb-3">
+        {saved.length === 0 ? (
+          <p className="px-3 py-1.5 text-sm text-fg-3">No saved scripts yet.</p>
+        ) : (
+          <div role="list" aria-label="Saved scripts">
+            {saved.map((script) => (
+              <div role="listitem" key={script.path}>
+                <SavedScriptRow
+                  script={script}
+                  current={script.path === currentPath}
+                  onOpen={() => open(script)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="px-3 py-2.5 text-sm leading-normal text-fg-3">
+          Opening a script starts a console on the database in view. <Kbd>Ctrl S</Kbd> saves the
+          console you are in; scripts saved without a location land in{" "}
+          <span className="font-data">~/mongo-studio-scripts</span>.
+        </p>
+      </div>
     </div>
   );
 }
