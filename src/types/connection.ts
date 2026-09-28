@@ -47,6 +47,8 @@ export interface ConnectionAdvancedOptions {
 export interface ConnectionProfile {
   id: string;
   name: string;
+  /** Identity color from CONNECTION_COLORS; null picks one from the id. */
+  color?: string | null;
   source: ConnectionSource;
   database: string | null;
   username: string | null;
@@ -61,6 +63,7 @@ export interface ConnectionProfile {
 export interface ConnectionProfileInput {
   id?: string | null;
   name: string;
+  color?: string | null;
   source: ConnectionSource;
   database: string | null;
   username: string | null;
@@ -76,6 +79,7 @@ export interface ConnectionProfileInput {
 export interface ConnectionProfileMeta {
   id: string;
   name: string;
+  color?: string | null;
   summary: string;
   database: string | null;
 }
@@ -173,6 +177,7 @@ export function newProfileInput(): ConnectionProfileInput {
   return {
     id: null,
     name: "",
+    color: null,
     source: { kind: "uri", uri: "" },
     database: null,
     username: null,
@@ -194,6 +199,7 @@ export function profileToInput(profile: ConnectionProfile): ConnectionProfileInp
   return {
     id: profile.id,
     name: profile.name,
+    color: profile.color ?? null,
     source: profile.source,
     database: profile.database,
     username: profile.username,

@@ -4,7 +4,7 @@ import type { ResultView } from "../../store/uiStore";
 
 const options: { id: ResultView; label: string; Icon: typeof ListTree }[] = [
   { id: "tree", label: "Tree view", Icon: ListTree },
-  { id: "table", label: "Table view", Icon: Table2 },
+  { id: "grid", label: "Grid view", Icon: Table2 },
 ];
 
 /** Switches every result pane at once - Browse and the console share it. */

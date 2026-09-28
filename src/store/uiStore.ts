@@ -3,8 +3,17 @@ import { persist } from "zustand/middleware";
 
 export type MainTab = "browse" | "indexes" | "console";
 
-/** How query and script results are rendered: JSON tree, or Key/Value/Type table. */
-export type ResultView = "tree" | "table";
+/**
+ * How query and script results are rendered: a document grid with the
+ * selected document in an inspector beside it, a JSON tree, or raw JSON.
+ */
+export type ResultView = "grid" | "tree" | "json";
+
+/** Which tool window the side panel shows, or null when it's hidden. */
+export type SidePanel = "explorer" | "scripts" | null;
+
+/** The connection dialog: a new connection, or editing a saved one. */
+export type ConnectionDialog = { mode: "new" } | { mode: "edit"; id: string } | null;
 
 /** The console's editor and output: side by side, or editor above output. */
 export type ConsoleLayout = "side" | "stacked";
@@ -22,17 +31,30 @@ interface UiState {
   /** Sidebar width in px. */
   sidebarWidth: number;
   setSidebarWidth: (width: number) => void;
+  sidePanel: SidePanel;
+  /** Shows a tool window; showing the one already open hides the panel. */
+  toggleSidePanel: (panel: Exclude<SidePanel, null>) => void;
+  setSidePanel: (panel: SidePanel) => void;
+  /** The inspector beside the document grid, in px. */
+  inspectorWidth: number;
+  setInspectorWidth: (width: number) => void;
+  connectionDialog: ConnectionDialog;
+  setConnectionDialog: (dialog: ConnectionDialog) => void;
+  /** The Ctrl+K quick-open palette. */
+  paletteOpen: boolean;
+  setPaletteOpen: (open: boolean) => void;
 }
 
 export const DEFAULT_CONSOLE_SPLIT = 0.6;
-export const DEFAULT_SIDEBAR_WIDTH = 256;
+export const DEFAULT_SIDEBAR_WIDTH = 280;
+export const DEFAULT_INSPECTOR_WIDTH = 380;
 
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
       mainTab: "browse",
       setMainTab: (tab) => set({ mainTab: tab }),
-      resultView: "tree",
+      resultView: "grid",
       setResultView: (view) => set({ resultView: view }),
       consoleLayout: "side",
       setConsoleLayout: (layout) => set({ consoleLayout: layout }),
@@ -41,6 +63,15 @@ export const useUiStore = create<UiState>()(
         set((s) => ({ consoleSplit: { ...s.consoleSplit, [layout]: ratio } })),
       sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
       setSidebarWidth: (width) => set({ sidebarWidth: width }),
+      sidePanel: "explorer",
+      toggleSidePanel: (panel) => set((s) => ({ sidePanel: s.sidePanel === panel ? null : panel })),
+      setSidePanel: (panel) => set({ sidePanel: panel }),
+      inspectorWidth: DEFAULT_INSPECTOR_WIDTH,
+      setInspectorWidth: (width) => set({ inspectorWidth: width }),
+      connectionDialog: null,
+      setConnectionDialog: (dialog) => set({ connectionDialog: dialog }),
+      paletteOpen: false,
+      setPaletteOpen: (open) => set({ paletteOpen: open }),
     }),
     {
       name: "mongo-studio-ui",
@@ -50,7 +81,16 @@ export const useUiStore = create<UiState>()(
         consoleLayout: s.consoleLayout,
         consoleSplit: s.consoleSplit,
         sidebarWidth: s.sidebarWidth,
+        inspectorWidth: s.inspectorWidth,
+        resultView: s.resultView,
       }),
+      version: 1,
+      // Views from before the redesign: "table" became the grid.
+      migrate: (state) => {
+        const s = state as { resultView?: string };
+        if (s.resultView !== "tree" && s.resultView !== "json") s.resultView = "grid";
+        return s as never;
+      },
     },
   ),
 );

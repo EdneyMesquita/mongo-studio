@@ -31,7 +31,7 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
+      className="animate-fade fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6 [:root[data-theme=light]_&]:bg-[#1e1f22]/30"
       // mousedown (not click) so a drag that starts inside and ends on the
       // backdrop doesn't close the dialog
       onMouseDown={(e) => {
@@ -39,29 +39,25 @@ export function Modal({
       }}
     >
       <div
-        className={`flex max-h-full w-full ${width} flex-col overflow-hidden rounded-lg border border-border-subtle bg-panel shadow-xl`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={`animate-pop flex max-h-full w-full ${width} flex-col overflow-hidden rounded-xl border border-line bg-editor shadow-overlay`}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-border-subtle px-4 py-3">
-          <h2 className="text-sm font-semibold text-text-default">{title}</h2>
-          <button
-            type="button"
-            className="rounded p-1 text-text-muted hover:bg-panel-hover hover:text-text-default"
-            onClick={onClose}
-            title="Close"
-          >
-            <X size={15} />
+        <div className="flex h-12 shrink-0 items-center justify-between gap-2.5 border-b border-line pl-[18px] pr-2.5">
+          <h2 className="text-lg font-semibold text-fg">{title}</h2>
+          <button type="button" className="btn-icon" onClick={onClose} title="Close" aria-label="Close">
+            <X size={16} />
           </button>
         </div>
 
-        {subheader && (
-          <div className="shrink-0 border-b border-border-subtle">{subheader}</div>
-        )}
+        {subheader && <div className="shrink-0 border-b border-line">{subheader}</div>}
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-[22px] py-[18px]">{children}</div>
 
         {footer && (
-          <div className="shrink-0 border-t border-border-subtle px-4 py-3">
-            {footer}
+          <div className="flex min-h-14 shrink-0 items-center border-t border-line pl-[18px] pr-3.5">
+            <div className="w-full">{footer}</div>
           </div>
         )}
       </div>

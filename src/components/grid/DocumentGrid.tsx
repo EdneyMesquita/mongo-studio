@@ -85,7 +85,7 @@ export const DocumentGrid = memo(function DocumentGrid({ tab }: { tab: Collectio
           {results?.documents.length === 0 && (
             <p className="p-3 text-xs text-text-faint">No documents match this query.</p>
           )}
-          {resultView === "table" ? (
+          {resultView === "grid" ? (
             results &&
             results.documents.length > 0 && (
               <JsonTable

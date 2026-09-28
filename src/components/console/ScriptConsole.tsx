@@ -6,7 +6,7 @@ import type { Tab } from "../../store/sessionsStore";
 import { currentConsoleTarget, defaultScript, useConsoleStore } from "../../store/consoleStore";
 import { hasUnsavedEdits, useScriptsStore } from "../../store/scriptsStore";
 import { useThemeStore } from "../../store/themeStore";
-import { isLightTheme } from "../../lib/themes";
+import { monacoTheme } from "../../lib/themes";
 import { ConsoleOutput } from "./ConsoleOutput";
 import { ConsoleLayoutToggle } from "./ConsoleLayoutToggle";
 import { SplitPane } from "../ui/SplitPane";
@@ -150,7 +150,7 @@ export function ScriptConsole({ tab }: { tab: Tab }) {
               // the outgoing tab's model, cross-wiring the two buffers.
               key={key}
               language="javascript"
-              theme={isLightTheme(themeId) ? "light" : "vs-dark"}
+              theme={monacoTheme(themeId)}
               value={script}
               onChange={(value) => setScript(key, value ?? "")}
               options={{

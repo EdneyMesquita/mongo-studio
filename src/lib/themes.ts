@@ -1,31 +1,32 @@
+export type ThemeId = "dark" | "light";
+
 export interface ThemeOption {
-  id: string;
+  id: ThemeId;
   name: string;
-  swatch: string;
-  isLight: boolean;
 }
 
+/** One identity in a dark and a light version (DESIGN.md: Twin Themes). */
 export const THEMES: ThemeOption[] = [
-  { id: "compass", name: "Compass", swatch: "#3d1e35", isLight: false },
-  { id: "dark-modern", name: "Dark Modern", swatch: "#0e639c", isLight: false },
-  { id: "monokai", name: "Monokai", swatch: "#ae81ff", isLight: false },
-  { id: "dracula", name: "Dracula", swatch: "#bd93f9", isLight: false },
-  { id: "solarized-dark", name: "Solarized Dark", swatch: "#268bd2", isLight: false },
-  { id: "light", name: "Light", swatch: "#0066b8", isLight: true },
+  { id: "dark", name: "Dark" },
+  { id: "light", name: "Light" },
 ];
 
 const STORAGE_KEY = "mongo-studio-theme";
-const DEFAULT_THEME = "compass";
+const DEFAULT_THEME: ThemeId = "dark";
 
-export function getStoredTheme(): string {
+/**
+ * The saved theme. Themes from before the redesign (Compass, Dark Modern,
+ * Monokai, Dracula, Solarized) map to dark, the old "light" to light.
+ */
+export function getStoredTheme(): ThemeId {
   try {
-    return localStorage.getItem(STORAGE_KEY) ?? DEFAULT_THEME;
+    return localStorage.getItem(STORAGE_KEY) === "light" ? "light" : DEFAULT_THEME;
   } catch {
     return DEFAULT_THEME;
   }
 }
 
-export function applyTheme(themeId: string) {
+export function applyTheme(themeId: ThemeId) {
   document.documentElement.dataset.theme = themeId;
   try {
     localStorage.setItem(STORAGE_KEY, themeId);
@@ -34,6 +35,11 @@ export function applyTheme(themeId: string) {
   }
 }
 
-export function isLightTheme(themeId: string): boolean {
-  return THEMES.find((t) => t.id === themeId)?.isLight ?? false;
+export function isLightTheme(themeId: ThemeId): boolean {
+  return themeId === "light";
+}
+
+/** The Monaco theme registered for an app theme (see lib/monaco.ts). */
+export function monacoTheme(themeId: ThemeId): string {
+  return themeId === "light" ? "mongo-studio-light" : "mongo-studio-dark";
 }

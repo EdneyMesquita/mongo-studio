@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import Editor from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
 import { useThemeStore } from "../../store/themeStore";
-import { isLightTheme } from "../../lib/themes";
+import { monacoTheme } from "../../lib/themes";
 import { attachCompletion } from "../../lib/monacoCompletion";
 import { addEditorCommand } from "../../lib/monaco";
 import type { CompletionContext } from "../../lib/monacoCompletion";
@@ -89,7 +89,7 @@ export function QueryEditor({
     >
       <Editor
         language="json"
-        theme={isLightTheme(themeId) ? "light" : "vs-dark"}
+        theme={monacoTheme(themeId)}
         value={value}
         onChange={(next) => onChange(next ?? "")}
         onMount={handleMount}

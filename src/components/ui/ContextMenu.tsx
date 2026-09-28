@@ -1,17 +1,26 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import type { LucideIcon } from "lucide-react";
 
 export interface ContextMenuItem {
   label: string;
   onSelect: () => void;
   disabled?: boolean;
+  icon?: LucideIcon;
+  /** Shortcut hint shown at the right, e.g. "Ctrl N". */
+  shortcut?: string;
+  /** Destructive: red, filling red on hover. */
+  danger?: boolean;
 }
+
+/** A menu row: an action, a rule between groups, or a group heading. */
+export type ContextMenuEntry = ContextMenuItem | { separator: true } | { heading: string };
 
 interface ContextMenuProps {
   /** Viewport coordinates of the click that opened the menu. */
   x: number;
   y: number;
-  items: ContextMenuItem[];
+  items: ContextMenuEntry[];
   onClose: () => void;
 }
 
@@ -69,7 +78,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
     <div
       ref={ref}
       role="menu"
-      className="fixed z-[60] min-w-[180px] rounded-md border border-border-subtle bg-panel-alt py-1 shadow-xl"
+      className="surface-overlay animate-pop fixed z-[60] min-w-[220px] rounded-lg p-1"
       style={position}
       onContextMenu={(e) => e.preventDefault()}
       onKeyDown={(e) => {
@@ -82,21 +91,51 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
         }
       }}
     >
-      {items.map((item) => (
-        <button
-          key={item.label}
-          type="button"
-          role="menuitem"
-          disabled={item.disabled}
-          className="block w-full px-3 py-1.5 text-left text-xs text-text-default hover:bg-panel-hover focus:bg-panel-hover focus:outline-none disabled:cursor-default disabled:text-text-faint disabled:hover:bg-transparent"
-          onClick={() => {
-            onClose();
-            item.onSelect();
-          }}
-        >
-          {item.label}
-        </button>
-      ))}
+      {items.map((item, i) => {
+        if ("separator" in item) {
+          return <hr key={`sep-${i}`} className="mx-0.5 my-1 border-0 border-t border-line" />;
+        }
+        if ("heading" in item) {
+          return (
+            <div key={`head-${i}`} className="truncate px-2 pb-1 pt-1.5 text-xs text-fg-3">
+              {item.heading}
+            </div>
+          );
+        }
+        const Icon = item.icon;
+        return (
+          <button
+            key={item.label}
+            type="button"
+            role="menuitem"
+            disabled={item.disabled}
+            className={`group flex h-7 w-full items-center gap-2 rounded-[5px] px-2 text-left outline-none disabled:cursor-default disabled:text-fg-3 ${
+              item.danger
+                ? "text-danger enabled:hover:bg-danger enabled:hover:text-white enabled:focus-visible:bg-danger enabled:focus-visible:text-white"
+                : "text-fg enabled:hover:bg-accent enabled:hover:text-on-accent enabled:focus-visible:bg-accent enabled:focus-visible:text-on-accent"
+            }`}
+            onClick={() => {
+              onClose();
+              item.onSelect();
+            }}
+          >
+            {Icon ? (
+              <Icon
+                size={14}
+                className={`shrink-0 ${item.danger ? "" : "text-fg-2"} group-enabled:group-hover:text-current group-focus-visible:text-current`}
+              />
+            ) : (
+              <span className="w-3.5 shrink-0" />
+            )}
+            <span className="flex-1 truncate">{item.label}</span>
+            {item.shortcut && (
+              <span className="ml-4 text-xs text-fg-3 group-enabled:group-hover:text-current group-focus-visible:text-current">
+                {item.shortcut}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>,
     document.body,
   );

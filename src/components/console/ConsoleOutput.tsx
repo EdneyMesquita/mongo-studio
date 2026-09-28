@@ -28,7 +28,7 @@ export function ConsoleOutput({ session }: { session: ConsoleSession | undefined
       )}
       {hasResult && (
         <div className="mt-2 rounded bg-panel">
-          {resultView === "table" ? (
+          {resultView === "grid" ? (
             <JsonTable value={result} />
           ) : (
             <JsonTree value={result} className="p-2" />
