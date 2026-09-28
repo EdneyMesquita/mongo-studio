@@ -507,6 +507,77 @@ pub async fn delete_one(
     Ok(serde_json::json!({ "deletedCount": result.deleted_count }))
 }
 
+/// Inserts every document of a JSON array; `insertedIds` keeps their order.
+pub async fn insert_many(
+    client: &Client,
+    db: &str,
+    collection: &str,
+    documents: serde_json::Value,
+) -> AppResult<serde_json::Value> {
+    let serde_json::Value::Array(items) = documents else {
+        return Err(AppError::InvalidInput(
+            "insertMany expects an array of documents".to_string(),
+        ));
+    };
+    if items.is_empty() {
+        return Err(AppError::InvalidInput(
+            "insertMany needs at least one document".to_string(),
+        ));
+    }
+    let documents = items
+        .into_iter()
+        .map(json_to_document)
+        .collect::<AppResult<Vec<_>>>()?;
+    let result = client
+        .database(db)
+        .collection::<Document>(collection)
+        .insert_many(documents)
+        .await?;
+    let mut ids: Vec<_> = result.inserted_ids.into_iter().collect();
+    ids.sort_by_key(|(index, _)| *index);
+    let inserted_ids: Vec<_> = ids.into_iter().map(|(_, id)| bson_to_json(id)).collect();
+    Ok(serde_json::json!({
+        "insertedCount": inserted_ids.len(),
+        "insertedIds": inserted_ids,
+    }))
+}
+
+pub async fn update_many(
+    client: &Client,
+    db: &str,
+    collection: &str,
+    filter: serde_json::Value,
+    update: serde_json::Value,
+) -> AppResult<serde_json::Value> {
+    let filter = json_to_document(filter)?;
+    let update = json_to_document(update)?;
+    let result = client
+        .database(db)
+        .collection::<Document>(collection)
+        .update_many(filter, update)
+        .await?;
+    Ok(serde_json::json!({
+        "matchedCount": result.matched_count,
+        "modifiedCount": result.modified_count,
+        "upsertedId": result.upserted_id.map(bson_to_json),
+    }))
+}
+
+pub async fn delete_many(
+    client: &Client,
+    db: &str,
+    collection: &str,
+    filter: serde_json::Value,
+) -> AppResult<serde_json::Value> {
+    let filter = json_to_document(filter)?;
+    let result = client
+        .database(db)
+        .collection::<Document>(collection)
+        .delete_many(filter)
+        .await?;
+    Ok(serde_json::json!({ "deletedCount": result.deleted_count }))
+}
+
 pub async fn get_collection_stats(
     client: &Client,
     db: &str,
