@@ -139,6 +139,46 @@ mod tests {
     use super::*;
 
     #[test]
+    fn loads_profiles_saved_before_colors_existed() {
+        let dir = std::env::temp_dir().join(format!("mongo-studio-store-{}", Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("connections.json"),
+            r#"[{
+                "id": "old",
+                "name": "Old",
+                "source": { "kind": "uri", "uri": "mongodb://localhost:27017" },
+                "database": null,
+                "username": null,
+                "hasPassword": false,
+                "tls": {
+                    "enabled": false, "caFile": null, "certKeyFile": null,
+                    "certKeyHasPassphrase": false,
+                    "allowInvalidCertificates": false, "allowInvalidHostnames": false
+                },
+                "sshTunnel": null,
+                "advanced": {
+                    "appName": null, "connectTimeoutMs": null,
+                    "serverSelectionTimeoutMs": null, "maxPoolSize": null,
+                    "minPoolSize": null, "replicaSet": null, "readPreference": null,
+                    "retryWrites": null, "directConnection": null,
+                    "authMechanism": null, "authSource": null
+                },
+                "createdAt": "1",
+                "updatedAt": "1"
+            }]"#,
+        )
+        .unwrap();
+
+        let store = ConnectionStore::load(&dir).unwrap();
+
+        let profile = store.get("old").unwrap();
+        assert_eq!(profile.name, "Old");
+        assert_eq!(profile.color, None);
+        fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
     fn extracts_credentials_from_srv_uri() {
         let uri = "mongodb+srv://exampleuser:examplepass@cluster0.abcde.mongodb.net/mydb?authSource=admin&retryWrites=true";
         let (stripped, user, pass) = extract_uri_credentials(uri);

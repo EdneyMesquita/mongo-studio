@@ -433,6 +433,7 @@ mod tests {
         ConnectionProfile {
             id: id.to_string(),
             name: "My cluster".to_string(),
+            color: None,
             source: ConnectionSource::Uri {
                 uri: "mongodb://cluster0.example.net/mydb".to_string(),
             },
