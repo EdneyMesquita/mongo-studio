@@ -10,7 +10,7 @@ use crate::driver;
 use crate::error::{AppError, AppResult};
 use crate::export;
 use crate::models::{
-    CollectionInfo, CollectionStats, ConnectionAdvancedOptions, ConnectionHandle,
+    validate_color, CollectionInfo, CollectionStats, ConnectionAdvancedOptions, ConnectionHandle,
     ConnectionImportPreview, ConnectionProfile, ConnectionProfileInput, ConnectionProfileMeta,
     ConnectionSource, ConnectionTestResult, ConnectionsExportSummary, ConnectionsImportSummary,
     DatabaseInfo, ExplainQueryInput, ExplainVerbosity, ExportOptions, ExportQueryInput,
@@ -39,6 +39,8 @@ async fn materialize_profile(
     state: &AppState,
     input: ConnectionProfileInput,
 ) -> AppResult<ConnectionProfile> {
+    // Before any secret is written, so a bad color leaves nothing behind.
+    validate_color(input.color.as_deref())?;
     let id = input.id.clone().unwrap_or_default();
     let id = if id.is_empty() {
         Uuid::new_v4().to_string()
@@ -108,6 +110,7 @@ async fn materialize_profile(
     Ok(ConnectionProfile {
         id,
         name: input.name,
+        color: input.color,
         source,
         database: input.database,
         username,
@@ -252,6 +255,7 @@ async fn import_file(
         let input = ConnectionProfileInput {
             id: None,
             name: entry.name,
+            color: None,
             source: ConnectionSource::Uri { uri: entry.uri },
             database: None,
             username: entry.username,
@@ -578,7 +582,7 @@ pub fn cancel_script(state: State<AppState>, execution_id: String) {
 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-pub async fn export_to_csv(
+pub async fn export_query(
     state: State<'_, AppState>,
     app: AppHandle,
     session_id: String,
@@ -612,7 +616,7 @@ pub async fn export_to_csv(
         );
     };
 
-    let result = export::export_to_csv(
+    let result = export::export_query(
         &client,
         &database,
         &collection,
@@ -626,6 +630,20 @@ pub async fn export_to_csv(
 
     state.running_tasks.lock().unwrap().remove(&execution_id);
     result
+}
+
+/// Writes a value the frontend already holds, such as a console result.
+#[tauri::command]
+pub async fn export_value(
+    value: serde_json::Value,
+    options: ExportOptions,
+    dest_path: String,
+) -> AppResult<ExportSummary> {
+    tokio::task::spawn_blocking(move || {
+        export::export_value(&value, &options, std::path::Path::new(&dest_path))
+    })
+    .await
+    .map_err(|e| AppError::InvalidInput(format!("export failed: {e}")))?
 }
 
 #[tauri::command]
@@ -729,6 +747,7 @@ mod tests {
         ConnectionProfileInput {
             id,
             name: name.to_string(),
+            color: None,
             source: ConnectionSource::Uri {
                 uri: "mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=200&connectTimeoutMS=200"
                     .to_string(),
@@ -795,6 +814,46 @@ mod tests {
             .collect();
         names.sort();
         assert_eq!(names, ["One", "Three"]);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[tokio::test]
+    async fn a_saved_color_round_trips_through_get_and_list() {
+        let (state, _, dir) = state();
+        let mut with_color = input(None, "prod", None);
+        with_color.color = Some("#E5484D".to_string());
+
+        let saved = save(&state, with_color).await;
+
+        let fetched = state.connection_store.get(&saved.id).unwrap();
+        assert_eq!(fetched.color.as_deref(), Some("#E5484D"));
+        let meta: Vec<_> = state
+            .connection_store
+            .list()
+            .iter()
+            .map(ConnectionProfileMeta::from)
+            .collect();
+        assert_eq!(meta[0].color.as_deref(), Some("#E5484D"));
+        let json = serde_json::to_value(&meta[0]).unwrap();
+        assert_eq!(json["color"], "#E5484D");
+
+        // back to automatic
+        let mut cleared = input(Some(saved.id.clone()), "prod", None);
+        cleared.color = None;
+        assert_eq!(save(&state, cleared).await.color, None);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[tokio::test]
+    async fn saving_rejects_a_color_that_is_not_hex() {
+        let (state, secrets, dir) = state();
+        for bad in ["red", "#E5484", "#E5484DFF", "E5484D1", "#GGGGGG", ""] {
+            let mut bad_input = input(None, "prod", Some("pw"));
+            bad_input.color = Some(bad.to_string());
+            let err = materialize_profile(&state, bad_input).await.unwrap_err();
+            assert!(matches!(err, AppError::InvalidInput(_)), "{bad}: {err}");
+        }
+        assert_eq!(secrets.len(), 0, "no secrets written for a rejected save");
         std::fs::remove_dir_all(dir).ok();
     }
 

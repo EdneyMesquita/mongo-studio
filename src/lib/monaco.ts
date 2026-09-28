@@ -21,6 +21,85 @@ self.MonacoEnvironment = {
 loader.config({ monaco });
 registerMongoCompletion(monaco);
 
+// Editor themes in the app's own colors (DESIGN.md tokens), so the console
+// and the query fields read as part of the window rather than as VS Code.
+monaco.editor.defineTheme("mongo-studio-dark", {
+  base: "vs-dark",
+  inherit: true,
+  rules: [
+    { token: "comment", foreground: "7A7E85", fontStyle: "italic" },
+    { token: "keyword", foreground: "CF8E6D" },
+    { token: "string", foreground: "6AAB73" },
+    { token: "string.key.json", foreground: "C77DBB" },
+    { token: "string.value.json", foreground: "6AAB73" },
+    { token: "number", foreground: "2AACB8" },
+    { token: "keyword.json", foreground: "CF8E6D" },
+    { token: "delimiter", foreground: "8C8F96" },
+    { token: "identifier", foreground: "DFE1E5" },
+    { token: "type", foreground: "56A8F5" },
+  ],
+  colors: {
+    "editor.background": "#1E1F22",
+    "editor.foreground": "#DFE1E5",
+    "editorLineNumber.foreground": "#6F737A",
+    "editorLineNumber.activeForeground": "#DFE1E5",
+    "editor.lineHighlightBackground": "#26282C",
+    "editor.lineHighlightBorder": "#00000000",
+    "editor.selectionBackground": "#2E436E",
+    "editor.inactiveSelectionBackground": "#25324A",
+    "editorCursor.foreground": "#DFE1E5",
+    "editorIndentGuide.background1": "#2F3135",
+    "editorWidget.background": "#2B2D30",
+    "editorWidget.border": "#393B40",
+    "editorSuggestWidget.background": "#2B2D30",
+    "editorSuggestWidget.border": "#393B40",
+    "editorSuggestWidget.selectedBackground": "#2E436E",
+    "editorHoverWidget.background": "#2B2D30",
+    "editorHoverWidget.border": "#393B40",
+    "scrollbarSlider.background": "#595D6466",
+    "scrollbarSlider.hoverBackground": "#595D64AA",
+    "focusBorder": "#3574F0",
+  },
+});
+monaco.editor.defineTheme("mongo-studio-light", {
+  base: "vs",
+  inherit: true,
+  rules: [
+    { token: "comment", foreground: "8C8C8C", fontStyle: "italic" },
+    { token: "keyword", foreground: "0033B3" },
+    { token: "string", foreground: "067D17" },
+    { token: "string.key.json", foreground: "871094" },
+    { token: "string.value.json", foreground: "067D17" },
+    { token: "number", foreground: "1750EB" },
+    { token: "keyword.json", foreground: "0033B3" },
+    { token: "delimiter", foreground: "6E7180" },
+    { token: "identifier", foreground: "1E1F22" },
+    { token: "type", foreground: "00627A" },
+  ],
+  colors: {
+    "editor.background": "#FFFFFF",
+    "editor.foreground": "#1E1F22",
+    "editorLineNumber.foreground": "#8A8E9C",
+    "editorLineNumber.activeForeground": "#1E1F22",
+    "editor.lineHighlightBackground": "#F4F6FA",
+    "editor.lineHighlightBorder": "#00000000",
+    "editor.selectionBackground": "#D5E1FF",
+    "editor.inactiveSelectionBackground": "#E8EEFD",
+    "editorCursor.foreground": "#1E1F22",
+    "editorIndentGuide.background1": "#EFF0F3",
+    "editorWidget.background": "#FFFFFF",
+    "editorWidget.border": "#E4E6EB",
+    "editorSuggestWidget.background": "#FFFFFF",
+    "editorSuggestWidget.border": "#E4E6EB",
+    "editorSuggestWidget.selectedBackground": "#D5E1FF",
+    "editorHoverWidget.background": "#FFFFFF",
+    "editorHoverWidget.border": "#E4E6EB",
+    "scrollbarSlider.background": "#8A8E9C55",
+    "scrollbarSlider.hoverBackground": "#8A8E9C99",
+    "focusBorder": "#3574F0",
+  },
+});
+
 let ownKeys = 0;
 
 /**

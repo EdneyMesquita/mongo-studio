@@ -1,5 +1,13 @@
-import { useEffect, type ReactNode } from "react";
-import { X } from "lucide-react";
+import type { ReactNode } from "react";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 interface ModalProps {
   title: string;
@@ -13,58 +21,22 @@ interface ModalProps {
   width?: string;
 }
 
-export function Modal({
-  title,
-  onClose,
-  children,
-  subheader,
-  footer,
-  width = "max-w-md",
-}: ModalProps) {
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
+/**
+ * A dialog that is open while mounted: header, optional subheader, a
+ * scrolling body and an optional footer. Built on the Radix dialog, so it
+ * traps focus, closes on Escape and outside click, and restores focus.
+ */
+export function Modal({ title, onClose, children, subheader, footer, width = "max-w-md" }: ModalProps) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
-      // mousedown (not click) so a drag that starts inside and ends on the
-      // backdrop doesn't close the dialog
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        className={`flex max-h-full w-full ${width} flex-col overflow-hidden rounded-lg border border-border-subtle bg-panel shadow-xl`}
-      >
-        <div className="flex shrink-0 items-center justify-between border-b border-border-subtle px-4 py-3">
-          <h2 className="text-sm font-semibold text-text-default">{title}</h2>
-          <button
-            type="button"
-            className="rounded p-1 text-text-muted hover:bg-panel-hover hover:text-text-default"
-            onClick={onClose}
-            title="Close"
-          >
-            <X size={15} />
-          </button>
-        </div>
-
-        {subheader && (
-          <div className="shrink-0 border-b border-border-subtle">{subheader}</div>
-        )}
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
-
-        {footer && (
-          <div className="shrink-0 border-t border-border-subtle px-4 py-3">
-            {footer}
-          </div>
-        )}
-      </div>
-    </div>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className={cn(width)} aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        {subheader && <div className="shrink-0 border-b border-line">{subheader}</div>}
+        <DialogBody>{children}</DialogBody>
+        {footer && <DialogFooter>{footer}</DialogFooter>}
+      </DialogContent>
+    </Dialog>
   );
 }

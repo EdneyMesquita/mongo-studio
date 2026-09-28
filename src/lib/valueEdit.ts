@@ -68,6 +68,28 @@ export function editText(value: unknown, kind: EditKind): string {
   }
 }
 
+/** What an editor of this kind accepts, for its tooltip and placeholder. */
+export function editHint(kind: EditKind): string {
+  switch (kind) {
+    case "string":
+      return "Text";
+    case "number":
+      return "A number";
+    case "boolean":
+      return "true or false";
+    case "null":
+      return "A JSON value: \"text\", 12, true or null";
+    case "date":
+      return "An ISO date, e.g. 2026-09-23T14:30:00Z";
+    case "objectId":
+      return "24 hex characters";
+    case "decimal":
+      return "A decimal number";
+    case "long":
+      return "A whole number";
+  }
+}
+
 export type ParsedEdit = { ok: true; value: unknown } | { ok: false; error: string };
 
 const DECIMAL = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;

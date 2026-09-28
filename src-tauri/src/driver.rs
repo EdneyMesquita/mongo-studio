@@ -695,6 +695,7 @@ mod live_tests {
         let profile = ConnectionProfile {
             id: profile_id,
             name: "live test".to_string(),
+            color: None,
             source: ConnectionSource::Uri { uri: stripped_uri },
             database: None,
             username,

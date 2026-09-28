@@ -138,7 +138,8 @@ export const api = {
 
   readSavedScript: (path: string) => invoke<string>("read_saved_script", { path }),
 
-  exportToCsv: (
+  /** Streams a whole find or aggregation to a file. */
+  exportQuery: (
     sessionId: string,
     database: string,
     collection: string,
@@ -147,7 +148,7 @@ export const api = {
     destPath: string,
     executionId: string,
   ) =>
-    invoke<ExportSummary>("export_to_csv", {
+    invoke<ExportSummary>("export_query", {
       sessionId,
       database,
       collection,
@@ -156,6 +157,10 @@ export const api = {
       destPath,
       executionId,
     }),
+
+  /** Writes a value already in hand, such as a console result, to a file. */
+  exportValue: (value: unknown, options: ExportOptions, destPath: string) =>
+    invoke<ExportSummary>("export_value", { value, options, destPath }),
 
   cancelExport: (executionId: string) =>
     invoke<void>("cancel_export", { executionId }),

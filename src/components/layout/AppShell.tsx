@@ -4,13 +4,25 @@ import { useUiStore } from "../../store/uiStore";
 import { SidebarResizer, clampSidebarWidth } from "./SidebarResizer";
 
 interface AppShellProps {
-  sidebar?: ReactNode;
-  statusBar?: ReactNode;
-  children?: ReactNode;
+  /** The main toolbar across the top. */
+  toolbar: ReactNode;
+  /** The tool stripe on the left edge. */
+  stripe: ReactNode;
+  /** The side panel's content; its box hides when no tool window is open. */
+  sidePanel: ReactNode;
+  statusBar: ReactNode;
+  /** The editor area. */
+  children: ReactNode;
 }
 
-export function AppShell({ sidebar, statusBar, children }: AppShellProps) {
+/**
+ * The IDE frame (DESIGN.md Layout): toolbar, tool stripe, resizable side
+ * panel, editor and status bar. Under 960px the side panel floats over the
+ * editor instead of pushing it aside.
+ */
+export function AppShell({ toolbar, stripe, sidePanel, statusBar, children }: AppShellProps) {
   const sidebarWidth = useUiStore((s) => s.sidebarWidth);
+  const panelOpen = useUiStore((s) => s.sidePanel !== null);
 
   // A width saved on a bigger screen, or a window shrunk since, mustn't
   // leave the sidebar taking over the main area.
@@ -26,20 +38,23 @@ export function AppShell({ sidebar, statusBar, children }: AppShellProps) {
   }, []);
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-editor text-text-default">
-      <div className="flex min-h-0 flex-1">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-editor text-fg">
+      {toolbar}
+      <div className="relative flex min-h-0 flex-1">
+        {stripe}
+        {/* Kept mounted while hidden, so the panels keep their state. */}
         <aside
-          className="relative shrink-0 border-r border-border-subtle bg-sidebar"
+          className={`relative flex shrink-0 flex-col border-r border-seam bg-panel max-[960px]:absolute max-[960px]:inset-y-0 max-[960px]:left-10 max-[960px]:z-30 max-[960px]:shadow-overlay ${
+            panelOpen ? "" : "hidden"
+          }`}
           style={{ width: sidebarWidth }}
         >
-          <div className="h-full overflow-y-auto">{sidebar}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto">{sidePanel}</div>
           <SidebarResizer />
         </aside>
-        <main className="min-w-0 flex-1 overflow-auto bg-editor">{children}</main>
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-editor">{children}</main>
       </div>
-      <footer className="flex h-6 shrink-0 items-center border-t border-border-subtle bg-accent px-3 text-[11px] text-white">
-        {statusBar}
-      </footer>
+      {statusBar}
     </div>
   );
 }

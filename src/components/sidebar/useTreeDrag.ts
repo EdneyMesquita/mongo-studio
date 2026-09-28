@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { canMove, findFolder, locate } from "../../lib/sidebarTree";
 import type { DropTarget, TreeNode } from "../../lib/sidebarTree";
+import { lockCursor, unlockCursor } from "../../lib/dragCursor";
 
 /** Where a drop would land, relative to the row under the pointer. */
 export interface DropIndicator {
@@ -70,7 +71,7 @@ export function useTreeDrag(
     pending.current = null;
     setDrag(null);
     document.body.style.userSelect = "";
-    document.body.style.cursor = "";
+    unlockCursor();
   }, []);
 
   useEffect(() => {
@@ -104,7 +105,7 @@ export function useTreeDrag(
         return;
       }
       document.body.style.userSelect = "none";
-      document.body.style.cursor = "grabbing";
+      lockCursor("grabbing");
       let indicator = indicatorAt(e.clientX, e.clientY, start.nodeId);
       if (indicator && !dropTargetFor(getRoot(), start.nodeId, indicator)) indicator = null;
       setDrag({ nodeId: start.nodeId, label: start.label, x: e.clientX, y: e.clientY, indicator });

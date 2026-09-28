@@ -133,7 +133,8 @@ export function dateIso(value: unknown): string | null {
   if (typeof date === "string") return date;
   if (isPlainObject(date) && typeof date.$numberLong === "string") {
     const ms = Number(date.$numberLong);
-    return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+    // past +-8.64e15 ms a Date is invalid and toISOString() throws
+    return Number.isFinite(ms) && Math.abs(ms) <= 8.64e15 ? new Date(ms).toISOString() : null;
   }
   return null;
 }

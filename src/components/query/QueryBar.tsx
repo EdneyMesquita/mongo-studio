@@ -1,27 +1,33 @@
-import { useState } from "react";
+import { Play } from "lucide-react";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import { useSessionsStore } from "../../store/sessionsStore";
 import type { CollectionTab, QueryMode } from "../../store/sessionsStore";
-import { ExplainDialog } from "../explain/ExplainDialog";
+import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import type { SegmentOption } from "@/components/ui/segmented-control";
+import { cn } from "@/lib/utils";
 import { QueryEditor } from "./QueryEditor";
+import { QueryNumberField } from "./QueryNumberField";
 
-const inputClass =
-  "rounded border border-border-subtle bg-panel px-2 py-1 text-xs text-text-default focus:border-accent focus:outline-none";
-
-const modes: { id: QueryMode; label: string }[] = [
-  { id: "find", label: "Find" },
-  { id: "aggregate", label: "Aggregate" },
+const modes: SegmentOption<QueryMode>[] = [
+  { value: "find", label: "Find" },
+  { value: "aggregate", label: "Aggregate" },
 ];
 
+/**
+ * The collection tab's query: Find (filter, sort, limit, skip) or an
+ * Aggregate pipeline, and the bar's one primary action, Run.
+ */
 export function QueryBar({ tab }: { tab: CollectionTab }) {
   const session = useConnectionsStore((s) => s.sessions[tab.connection.id]);
   const updateTab = useSessionsStore((s) => s.updateTab);
   const runQuery = useSessionsStore((s) => s.runQuery);
-  const [explainOpen, setExplainOpen] = useState(false);
 
   if (!session) return null;
 
   const { mode, filterText, sortText, limit, skip, pipelineText, loading } = tab;
+  const aggregate = mode === "aggregate";
   const submit = () => runQuery(session.sessionId, tab.id);
   // Completion names come from this tab's collection.
   const completionContext = () => ({
@@ -31,111 +37,77 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
   });
 
   return (
-    <div className="border-b border-border-subtle bg-editor">
-      <div className="flex gap-1 px-2 pt-1.5">
-        {modes.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            className={`rounded-t px-2.5 py-1 text-[11px] ${
-              mode === m.id
-                ? "bg-panel text-text-default"
-                : "text-text-muted hover:text-text-default"
-            }`}
-            onClick={() => updateTab(tab.id, { mode: m.id })}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
-      <div className="flex flex-wrap items-end gap-2 bg-panel p-2">
-        {mode === "find" ? (
-          <>
-            <div className="min-w-[200px] flex-1">
-              <label className="mb-1 block text-[10px] uppercase tracking-wide text-text-muted">
-                Filter (JSON)
-              </label>
-              <QueryEditor
-                kind="filter"
-                ariaLabel="Filter"
-                value={filterText}
-                onChange={(text) => updateTab(tab.id, { filterText: text })}
-                completionContext={completionContext}
-                onSubmit={submit}
-                placeholder='{ "field": "value" }'
-              />
-            </div>
-            <div className="min-w-[140px]">
-              <label className="mb-1 block text-[10px] uppercase tracking-wide text-text-muted">
-                Sort (JSON)
-              </label>
-              <QueryEditor
-                kind="sort"
-                ariaLabel="Sort"
-                value={sortText}
-                onChange={(text) => updateTab(tab.id, { sortText: text })}
-                completionContext={completionContext}
-                onSubmit={submit}
-                placeholder='{ "_id": -1 }'
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] uppercase tracking-wide text-text-muted">
-                Limit
-              </label>
-              <input
-                type="number"
-                className={`${inputClass} w-20`}
-                value={limit}
-                onChange={(e) => updateTab(tab.id, { limit: Number(e.target.value) })}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] uppercase tracking-wide text-text-muted">
-                Skip
-              </label>
-              <input
-                type="number"
-                className={`${inputClass} w-20`}
-                value={skip}
-                onChange={(e) => updateTab(tab.id, { skip: Number(e.target.value) })}
-              />
-            </div>
-          </>
-        ) : (
-          <div className="min-w-[200px] flex-1">
-            <label className="mb-1 block text-[10px] uppercase tracking-wide text-text-muted">
-              Pipeline (JSON array of stages) - Ctrl+Enter runs
-            </label>
-            <QueryEditor
-              kind="pipeline"
-              ariaLabel="Pipeline"
-              multiline
-              value={pipelineText}
-              onChange={(text) => updateTab(tab.id, { pipelineText: text })}
-              completionContext={completionContext}
-              onSubmit={submit}
-              placeholder='[ { "$match": {} }, { "$limit": 50 } ]'
-            />
-          </div>
-        )}
-        <button
-          type="button"
-          disabled={loading}
-          className="rounded bg-run px-3 py-1.5 text-xs text-white hover:bg-run-hover disabled:opacity-50"
-          onClick={submit}
-        >
-          Run
-        </button>
-        <button
-          type="button"
-          className="rounded border border-border-subtle px-3 py-1.5 text-xs text-text-default hover:bg-panel-hover"
-          onClick={() => setExplainOpen(true)}
-        >
-          Explain
-        </button>
-      </div>
-      {explainOpen && <ExplainDialog tab={tab} onClose={() => setExplainOpen(false)} />}
+    <div
+      className={cn(
+        "flex flex-none flex-wrap gap-2 border-b border-line px-2.5 py-2",
+        aggregate ? "items-start" : "items-center",
+      )}
+    >
+      <SegmentedControl
+        aria-label="Query mode"
+        value={mode}
+        onChange={(next) => updateTab(tab.id, { mode: next })}
+        options={modes}
+        className={aggregate ? "mt-px" : undefined}
+      />
+      {aggregate ? (
+        <QueryEditor
+          kind="pipeline"
+          ariaLabel="Pipeline"
+          multiline
+          value={pipelineText}
+          onChange={(text) => updateTab(tab.id, { pipelineText: text })}
+          completionContext={completionContext}
+          onSubmit={submit}
+          placeholder='[ { "$match": {} }, { "$limit": 50 } ]'
+          className="min-w-[200px] flex-1 max-sm:order-first max-sm:basis-full"
+        />
+      ) : (
+        <>
+          <QueryEditor
+            kind="filter"
+            label="filter"
+            ariaLabel="Filter"
+            value={filterText}
+            onChange={(text) => updateTab(tab.id, { filterText: text })}
+            completionContext={completionContext}
+            onSubmit={submit}
+            placeholder='{ "field": "value" }'
+            className="min-w-[200px] flex-1 max-sm:order-first max-sm:basis-full"
+          />
+          <QueryEditor
+            kind="sort"
+            label="sort"
+            ariaLabel="Sort"
+            value={sortText}
+            onChange={(text) => updateTab(tab.id, { sortText: text })}
+            completionContext={completionContext}
+            onSubmit={submit}
+            placeholder='{ "_id": -1 }'
+            className="min-w-[120px] flex-[0_1_190px] max-[960px]:basis-[130px] max-sm:flex-1"
+          />
+          <QueryNumberField
+            label="limit"
+            value={limit}
+            onChange={(value) => updateTab(tab.id, { limit: value })}
+          />
+          <QueryNumberField
+            label="skip"
+            value={skip}
+            onChange={(value) => updateTab(tab.id, { skip: value })}
+          />
+        </>
+      )}
+      <Button
+        variant="primary"
+        disabled={loading}
+        onClick={submit}
+        className={aggregate ? "mt-px" : undefined}
+      >
+        <Play />
+        Run
+        <Kbd>{aggregate ? "Ctrl ⏎" : "⏎"}</Kbd>
+      </Button>
     </div>
   );
 }

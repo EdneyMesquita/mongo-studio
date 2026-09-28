@@ -1,5 +1,7 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
+import { cn } from "@/lib/utils";
+import { lockCursor, unlockCursor } from "../../lib/dragCursor";
 
 interface SplitPaneProps {
   /** "horizontal" puts the panes side by side; "vertical" stacks them. */
@@ -35,6 +37,7 @@ export function SplitPane({
   const ratioRef = useRef(ratio);
   ratioRef.current = ratio;
   const horizontal = direction === "horizontal";
+  const [dragging, setDragging] = useState(false);
 
   function setRatio(next: number) {
     ratioRef.current = next;
@@ -55,8 +58,9 @@ export function SplitPane({
     // Captured, so the drag keeps tracking over the editor and outside the
     // window, and the editor doesn't start selecting text underneath.
     e.currentTarget.setPointerCapture(e.pointerId);
+    setDragging(true);
     document.body.style.userSelect = "none";
-    document.body.style.cursor = horizontal ? "col-resize" : "row-resize";
+    lockCursor(horizontal ? "col-resize" : "row-resize");
   }
 
   function onPointerMove(e: PointerEvent<HTMLDivElement>) {
@@ -72,8 +76,9 @@ export function SplitPane({
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
+    setDragging(false);
     document.body.style.userSelect = "";
-    document.body.style.cursor = "";
+    unlockCursor();
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
@@ -91,7 +96,7 @@ export function SplitPane({
   return (
     <div
       ref={containerRef}
-      className={`flex min-h-0 flex-1 ${horizontal ? "flex-row" : "flex-col"}`}
+      className={cn("flex min-h-0 flex-1", horizontal ? "flex-row" : "flex-col")}
     >
       <div className="min-h-0 min-w-0" style={{ flex: `0 0 ${ratio * 100}%` }}>
         {first}
@@ -105,24 +110,20 @@ export function SplitPane({
         aria-valuemax={100}
         tabIndex={0}
         title="Drag to resize - double-click to reset"
-        className={`group relative shrink-0 bg-border-subtle focus:outline-none ${
-          horizontal ? "w-px cursor-col-resize" : "h-px cursor-row-resize"
-        }`}
+        // A 5px grab area whose leading edge is the 1px rule; tinted on
+        // hover, drag and keyboard focus.
+        data-dragging={dragging || undefined}
+        className={cn(
+          "shrink-0 border-line transition-colors duration-150 hover:bg-accent/35 focus-visible:bg-accent/35 focus-visible:outline-none data-dragging:bg-accent/35",
+          horizontal ? "w-[5px] cursor-col-resize border-l" : "h-[5px] cursor-row-resize border-t",
+        )}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onDoubleClick={() => setRatio(clamp(defaultRatio))}
         onKeyDown={onKeyDown}
-      >
-        {/* A wider invisible grab area around the 1px line, highlighted on
-            hover, drag and keyboard focus. */}
-        <span
-          className={`absolute z-10 transition-colors group-hover:bg-accent group-focus-visible:bg-accent ${
-            horizontal ? "inset-y-0 -left-[3px] w-[7px]" : "inset-x-0 -top-[3px] h-[7px]"
-          }`}
-        />
-      </div>
+      />
       <div className="min-h-0 min-w-0 flex-1">{second}</div>
     </div>
   );

@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::error::{AppError, AppResult};
+
 pub type ConnectionId = String;
 pub type SessionId = String;
 
@@ -80,6 +82,10 @@ pub struct ConnectionAdvancedOptions {
 pub struct ConnectionProfile {
     pub id: ConnectionId,
     pub name: String,
+    /// Identity color as `#RRGGBB`; `None` lets the UI pick one from the id.
+    /// Defaulted so files saved before it existed still load.
+    #[serde(default)]
+    pub color: Option<String>,
     pub source: ConnectionSource,
     pub database: Option<String>,
     pub username: Option<String>,
@@ -99,6 +105,9 @@ pub struct ConnectionProfile {
 pub struct ConnectionProfileInput {
     pub id: Option<ConnectionId>,
     pub name: String,
+    /// `#RRGGBB` or `None` for automatic; checked by `validate_color`.
+    #[serde(default)]
+    pub color: Option<String>,
     pub source: ConnectionSource,
     pub database: Option<String>,
     pub username: Option<String>,
@@ -116,6 +125,7 @@ pub struct ConnectionProfileInput {
 pub struct ConnectionProfileMeta {
     pub id: ConnectionId,
     pub name: String,
+    pub color: Option<String>,
     pub summary: String,
     pub database: Option<String>,
 }
@@ -135,9 +145,27 @@ impl From<&ConnectionProfile> for ConnectionProfileMeta {
         Self {
             id: profile.id.clone(),
             name: profile.name.clone(),
+            color: profile.color.clone(),
             summary,
             database: profile.database.clone(),
         }
+    }
+}
+
+/// A connection color is either absent or a `#RRGGBB` hex string.
+pub(crate) fn validate_color(color: Option<&str>) -> AppResult<()> {
+    match color {
+        None => Ok(()),
+        Some(c)
+            if c.len() == 7
+                && c.starts_with('#')
+                && c[1..].chars().all(|ch| ch.is_ascii_hexdigit()) =>
+        {
+            Ok(())
+        }
+        Some(c) => Err(AppError::InvalidInput(format!(
+            "connection color must be a #RRGGBB hex value, got \"{c}\""
+        ))),
     }
 }
 
@@ -297,9 +325,23 @@ pub enum ExportNestedMode {
     Stringify,
 }
 
+/// The file an export writes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExportFormat {
+    /// One row per document, one column per field (see ExportNestedMode).
+    #[default]
+    Csv,
+    /// A JSON array of the documents in relaxed Extended JSON, as stored.
+    Json,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportOptions {
+    #[serde(default)]
+    pub format: ExportFormat,
+    /// CSV only: how nested fields become columns.
     pub nested_mode: ExportNestedMode,
     /// How many leading documents to sample for column inference. Columns
     /// for fields that only appear later in a very heterogeneous collection

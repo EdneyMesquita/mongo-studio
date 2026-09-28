@@ -1,218 +1,278 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
 
+/* shadcn/ui's dark: variant follows the app theme attribute. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Design tokens: see DESIGN.md. One identity, a dark and a light version
+   with the same token names; every color comes from these variables. */
 @theme {
+  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Type scale: chrome lives on 13 / 12 / 11px, data is 12.5px mono. */
+  --text-2xs: 10.5px;
+  --text-2xs--line-height: 1.3;
+  --text-xs: 11px;
+  --text-xs--line-height: 1.45;
+  --text-sm: 12px;
+  --text-sm--line-height: 1.45;
+  --text-base: 13px;
+  --text-base--line-height: 1.45;
+  --text-data: 12.5px;
+  --text-data--line-height: 20px;
+  --text-lg: 15px;
+  --text-lg--line-height: 1.3;
+  --text-xl: 22px;
+  --text-xl--line-height: 1.2;
+
   --color-editor: var(--t-editor);
   --color-panel: var(--t-panel);
-  --color-panel-alt: var(--t-panel-alt);
-  --color-panel-hover: var(--t-panel-hover);
-  --color-border-subtle: var(--t-border-subtle);
-  --color-text-default: var(--t-text-default);
-  --color-text-muted: var(--t-text-muted);
-  --color-text-faint: var(--t-text-faint);
+  --color-seam: var(--t-seam);
+  --color-line: var(--t-line);
+  --color-line-soft: var(--t-line-soft);
+  --color-hover: var(--t-hover);
+  --color-row-hover: var(--t-row-hover);
+  --color-sel: var(--t-sel);
+  --color-sel-soft: var(--t-sel-soft);
+  --color-field: var(--t-field);
+  --color-field-line: var(--t-field-line);
+  --color-fg: var(--t-fg);
+  --color-fg-2: var(--t-fg-2);
+  --color-fg-3: var(--t-fg-3);
   --color-accent: var(--t-accent);
   --color-accent-hover: var(--t-accent-hover);
-  --color-run: var(--t-run);
-  --color-run-hover: var(--t-run-hover);
-  --color-sidebar: var(--t-sidebar);
-  --color-sidebar-active: var(--t-sidebar-active);
-  --color-sidebar-active-hover: var(--t-sidebar-active-hover);
-  --color-sidebar-hover: var(--t-sidebar-hover);
-  --color-status-green: var(--t-status-green);
+  --color-accent-text: var(--t-accent-text);
+  --color-on-accent: #ffffff;
+  --color-ok: var(--t-ok);
+  --color-warn: var(--t-warn);
+  --color-danger: var(--t-danger);
   --color-json-key: var(--t-json-key);
   --color-json-string: var(--t-json-string);
   --color-json-number: var(--t-json-number);
-  --color-json-boolean: var(--t-json-boolean);
-  --color-json-null: var(--t-json-null);
+  --color-json-keyword: var(--t-json-keyword);
   --color-json-bson: var(--t-json-bson);
   --color-json-punct: var(--t-json-punct);
+  --color-code-comment: var(--t-code-comment);
+
+  /* shadcn/ui's token names, mapped onto the design tokens so its
+     primitives (components/ui) render in this system. "accent" keeps the
+     design's meaning: the blue that fills a highlighted menu item. */
+  --color-background: var(--t-editor);
+  --color-foreground: var(--t-fg);
+  --color-card: var(--t-editor);
+  --color-card-foreground: var(--t-fg);
+  --color-popover: var(--t-popover);
+  --color-popover-foreground: var(--t-fg);
+  --color-primary: var(--t-accent);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--t-hover);
+  --color-secondary-foreground: var(--t-fg);
+  --color-muted: var(--t-hover);
+  --color-muted-foreground: var(--t-fg-2);
+  --color-accent-foreground: #ffffff;
+  --color-destructive: var(--t-danger);
+  --color-border: var(--t-line);
+  --color-input: var(--t-field-line);
+  --color-ring: var(--t-accent);
+
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+
+  --shadow-overlay: var(--t-shadow-overlay);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* "Compass" - default. Near-black sidebar with MongoDB Compass's plum
-   active-connection highlight. */
 :root,
-:root[data-theme="compass"] {
-  --t-editor: #1e1e1e;
-  --t-panel: #252526;
-  --t-panel-alt: #2d2d30;
-  --t-panel-hover: #2a2d2e;
-  --t-border-subtle: #3c3c3c;
-  --t-text-default: #cccccc;
-  --t-text-muted: #9d9d9d;
-  --t-text-faint: #6e7681;
-  --t-accent: #0e639c;
-  --t-accent-hover: #1177bb;
-  --t-run: #16825d;
-  --t-run-hover: #1a9c6d;
-  --t-sidebar: #0f1214;
-  --t-sidebar-active: #3d1e35;
-  --t-sidebar-active-hover: #4a2440;
-  --t-sidebar-hover: #1c2126;
-  --t-status-green: #4ade80;
-  --t-json-key: #9cdcfe;
-  --t-json-string: #ce9178;
-  --t-json-number: #b5cea8;
-  --t-json-boolean: #569cd6;
-  --t-json-null: #569cd6;
-  --t-json-bson: #4ec9b0;
-  --t-json-punct: #808080;
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --t-editor: #1e1f22;
+  --t-panel: #2b2d30;
+  --t-seam: #1a1b1e;
+  --t-line: #393b40;
+  --t-line-soft: #2f3135;
+  --t-hover: #393b40;
+  --t-row-hover: #26282c;
+  --t-sel: #2e436e;
+  --t-sel-soft: #25324a;
+  --t-field: #1e1f22;
+  --t-field-line: #4e5157;
+  --t-fg: #dfe1e5;
+  --t-fg-2: #b4b8bf;
+  --t-fg-3: #959aa2;
+  --t-accent: #3574f0;
+  --t-accent-hover: #4682fa;
+  --t-accent-text: #6b9bfa;
+  --t-ok: #5fb865;
+  --t-warn: #e2b45c;
+  --t-danger: #e5675f;
+  --t-json-key: #c77dbb;
+  --t-json-string: #6aab73;
+  --t-json-number: #2aacb8;
+  --t-json-keyword: #cf8e6d;
+  --t-json-bson: #56a8f5;
+  --t-json-punct: #8c8f96;
+  --t-code-comment: #7a7e85;
+  --t-popover: #2b2d30;
+  --t-shadow-overlay: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --t-segment-lift: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
-/* "Dark Modern" - stock VS Code Dark+, blue accents throughout. */
-:root[data-theme="dark-modern"] {
-  --t-editor: #1e1e1e;
-  --t-panel: #252526;
-  --t-panel-alt: #2d2d30;
-  --t-panel-hover: #2a2d2e;
-  --t-border-subtle: #3c3c3c;
-  --t-text-default: #cccccc;
-  --t-text-muted: #9d9d9d;
-  --t-text-faint: #6e7681;
-  --t-accent: #0e639c;
-  --t-accent-hover: #1177bb;
-  --t-run: #16825d;
-  --t-run-hover: #1a9c6d;
-  --t-sidebar: #252526;
-  --t-sidebar-active: #37373d;
-  --t-sidebar-active-hover: #3f3f46;
-  --t-sidebar-hover: #2a2d2e;
-  --t-status-green: #4ade80;
-  --t-json-key: #9cdcfe;
-  --t-json-string: #ce9178;
-  --t-json-number: #b5cea8;
-  --t-json-boolean: #569cd6;
-  --t-json-null: #569cd6;
-  --t-json-bson: #4ec9b0;
-  --t-json-punct: #808080;
-}
-
-/* "Monokai" */
-:root[data-theme="monokai"] {
-  --t-editor: #272822;
-  --t-panel: #2d2e27;
-  --t-panel-alt: #33342c;
-  --t-panel-hover: #3a3b32;
-  --t-border-subtle: #49493e;
-  --t-text-default: #f8f8f2;
-  --t-text-muted: #a6a795;
-  --t-text-faint: #75715e;
-  --t-accent: #ae81ff;
-  --t-accent-hover: #c39bff;
-  --t-run: #a6e22e;
-  --t-run-hover: #b9f13c;
-  --t-sidebar: #1e1f1c;
-  --t-sidebar-active: #4b3a1f;
-  --t-sidebar-active-hover: #5c481f;
-  --t-sidebar-hover: #33342c;
-  --t-status-green: #a6e22e;
-  --t-json-key: #a6e22e;
-  --t-json-string: #e6db74;
-  --t-json-number: #ae81ff;
-  --t-json-boolean: #ae81ff;
-  --t-json-null: #f92672;
-  --t-json-bson: #66d9ef;
-  --t-json-punct: #75715e;
-}
-
-/* "Dracula" */
-:root[data-theme="dracula"] {
-  --t-editor: #282a36;
-  --t-panel: #21222c;
-  --t-panel-alt: #343746;
-  --t-panel-hover: #3b3e52;
-  --t-border-subtle: #44475a;
-  --t-text-default: #f8f8f2;
-  --t-text-muted: #a9abc1;
-  --t-text-faint: #6272a4;
-  --t-accent: #bd93f9;
-  --t-accent-hover: #caa4fa;
-  --t-run: #50fa7b;
-  --t-run-hover: #6bffb0;
-  --t-sidebar: #191a21;
-  --t-sidebar-active: #44295a;
-  --t-sidebar-active-hover: #54346e;
-  --t-sidebar-hover: #2b2d3a;
-  --t-status-green: #50fa7b;
-  --t-json-key: #8be9fd;
-  --t-json-string: #f1fa8c;
-  --t-json-number: #bd93f9;
-  --t-json-boolean: #bd93f9;
-  --t-json-null: #ff79c6;
-  --t-json-bson: #50fa7b;
-  --t-json-punct: #6272a4;
-}
-
-/* "Solarized Dark" */
-:root[data-theme="solarized-dark"] {
-  --t-editor: #002b36;
-  --t-panel: #073642;
-  --t-panel-alt: #0a4351;
-  --t-panel-hover: #0e4f5f;
-  --t-border-subtle: #115a6b;
-  --t-text-default: #eee8d5;
-  --t-text-muted: #93a1a1;
-  --t-text-faint: #586e75;
-  --t-accent: #268bd2;
-  --t-accent-hover: #3ba1e8;
-  --t-run: #859900;
-  --t-run-hover: #9bb000;
-  --t-sidebar: #00212b;
-  --t-sidebar-active: #2b4a3a;
-  --t-sidebar-active-hover: #375c48;
-  --t-sidebar-hover: #073642;
-  --t-status-green: #859900;
-  --t-json-key: #268bd2;
-  --t-json-string: #2aa198;
-  --t-json-number: #d33682;
-  --t-json-boolean: #b58900;
-  --t-json-null: #cb4b16;
-  --t-json-bson: #859900;
-  --t-json-punct: #586e75;
-}
-
-/* "Light" - VS Code Light+ style. */
 :root[data-theme="light"] {
+  color-scheme: light;
   --t-editor: #ffffff;
-  --t-panel: #f3f3f3;
-  --t-panel-alt: #ececec;
-  --t-panel-hover: #e4e6f1;
-  --t-border-subtle: #d4d4d4;
-  --t-text-default: #1e1e1e;
-  --t-text-muted: #5a5a5a;
-  --t-text-faint: #7a7a7a;
-  --t-accent: #0066b8;
-  --t-accent-hover: #005a9e;
-  --t-run: #0e7c4a;
-  --t-run-hover: #0a6b3f;
-  --t-sidebar: #f3f3f3;
-  --t-sidebar-active: #e5d1e6;
-  --t-sidebar-active-hover: #dcc0de;
-  --t-sidebar-hover: #e8e8e8;
-  --t-status-green: #0e7c4a;
-  --t-json-key: #0451a5;
-  --t-json-string: #a31515;
-  --t-json-number: #098658;
-  --t-json-boolean: #0000ff;
-  --t-json-null: #0000ff;
-  --t-json-bson: #267f99;
-  --t-json-punct: #666666;
+  --t-panel: #f7f8fa;
+  --t-seam: #e4e6eb;
+  --t-line: #e4e6eb;
+  --t-line-soft: #eff0f3;
+  --t-hover: #e9ebef;
+  --t-row-hover: #f4f6fa;
+  --t-sel: #d5e1ff;
+  --t-sel-soft: #e8eefd;
+  --t-field: #ffffff;
+  --t-field-line: #c9ccd6;
+  --t-fg: #1e1f22;
+  --t-fg-2: #4f5361;
+  --t-fg-3: #6b6f7c;
+  --t-accent: #3574f0;
+  --t-accent-hover: #2a63d6;
+  --t-accent-text: #2a63d6;
+  --t-ok: #3f8f46;
+  --t-warn: #a36b00;
+  --t-danger: #c9372c;
+  --t-json-key: #871094;
+  --t-json-string: #067d17;
+  --t-json-number: #1750eb;
+  --t-json-keyword: #0033b3;
+  --t-json-bson: #00627a;
+  --t-json-punct: #6e7180;
+  --t-code-comment: #8c8c8c;
+  --t-popover: #ffffff;
+  --t-shadow-overlay: 0 12px 32px rgba(20, 24, 35, 0.16), 0 2px 6px rgba(20, 24, 35, 0.08);
+  --t-segment-lift: 0 1px 2px rgba(20, 24, 35, 0.12);
 }
 
+/* ------------------------------------------------------------ base */
+/* 13px on body, not html: Tailwind's spacing is in rem and must stay 16px-based. */
+html,
 body {
   background-color: var(--color-editor);
-  color: var(--color-text-default);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+}
+body {
+  font-size: 13px;
+  line-height: 1.45;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-sel);
+  color: var(--color-fg);
+}
+
+/* In the base layer so a component's own utilities win. */
+@layer base {
+  /* What can be clicked shows a pointer; what's disabled says so. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="treeitem"],
+  [role="menuitem"]:not([data-disabled]),
+  [role="menuitemcheckbox"]:not([data-disabled]),
+  [role="menuitemradio"]:not([data-disabled]),
+  [role="option"]:not([data-disabled]):not([aria-disabled="true"]),
+  select:not(:disabled),
+  summary,
+  a[href],
+  label:has(> input:is([type="checkbox"], [type="radio"]):not(:disabled)) {
+    cursor: pointer;
+  }
+  button:disabled,
+  select:disabled,
+  [aria-disabled="true"],
+  [data-disabled] {
+    cursor: not-allowed;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -1px;
+  }
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-border-subtle) transparent;
+  scrollbar-color: color-mix(in srgb, var(--color-fg-3) 50%, transparent) transparent;
 }
 
-/* For strips that scroll by other means, like the collection tab bar. Kept
-   out of Tailwind's layers on purpose: the unlayered rule above would beat
-   any layered utility, whatever its specificity. */
+/* For strips that scroll by other means, like the tab bar. Kept out of
+   Tailwind's layers on purpose: the unlayered rule above would beat any
+   layered utility, whatever its specificity. */
 .scrollbar-none {
   scrollbar-width: none;
 }
 .scrollbar-none::-webkit-scrollbar {
   display: none;
+}
+
+/* See lib/dragCursor.ts: one cursor for the whole window while dragging. */
+.cursor-locked * {
+  cursor: inherit !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ------------------------------------------------------------ utilities
+   Reusable UI lives in components (components/ui, shadcn/ui based); only
+   typographic utilities that many components share live here. */
+
+/* Data: every stored or typed value, query, URI and namespace. */
+@utility font-data {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 20px;
+  font-variant-ligatures: none;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes flash-ok {
+  0%,
+  30% {
+    background-color: color-mix(in srgb, var(--color-ok) 28%, transparent);
+  }
+}
+.animate-pop {
+  animation: pop-in 150ms var(--ease-out-expo);
+}
+.animate-fade {
+  animation: fade-in 160ms var(--ease-out-expo);
+}
+.animate-flash {
+  animation: flash-ok 1.2s var(--ease-out-expo);
 }
