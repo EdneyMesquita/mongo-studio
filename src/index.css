@@ -1,6 +1,10 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/jetbrains-mono";
+
+/* shadcn/ui's dark: variant follows the app theme attribute. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* Design tokens: see DESIGN.md. One identity, a dark and a light version
    with the same token names; every color comes from these variables. */
@@ -52,6 +56,27 @@
   --color-json-bson: var(--t-json-bson);
   --color-json-punct: var(--t-json-punct);
   --color-code-comment: var(--t-code-comment);
+
+  /* shadcn/ui's token names, mapped onto the design tokens so its
+     primitives (components/ui) render in this system. "accent" keeps the
+     design's meaning: the blue that fills a highlighted menu item. */
+  --color-background: var(--t-editor);
+  --color-foreground: var(--t-fg);
+  --color-card: var(--t-editor);
+  --color-card-foreground: var(--t-fg);
+  --color-popover: var(--t-popover);
+  --color-popover-foreground: var(--t-fg);
+  --color-primary: var(--t-accent);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--t-hover);
+  --color-secondary-foreground: var(--t-fg);
+  --color-muted: var(--t-hover);
+  --color-muted-foreground: var(--t-fg-2);
+  --color-accent-foreground: #ffffff;
+  --color-destructive: var(--t-danger);
+  --color-border: var(--t-line);
+  --color-input: var(--t-field-line);
+  --color-ring: var(--t-accent);
 
   /* Legacy names, kept only while components move to the tokens above.
      Nothing new may use them; they go once no component does. */
@@ -112,6 +137,7 @@
   --t-json-bson: #56a8f5;
   --t-json-punct: #8c8f96;
   --t-code-comment: #7a7e85;
+  --t-popover: #2b2d30;
   --t-shadow-overlay: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
   --t-segment-lift: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
@@ -145,6 +171,7 @@
   --t-json-bson: #00627a;
   --t-json-punct: #6e7180;
   --t-code-comment: #8c8c8c;
+  --t-popover: #ffffff;
   --t-shadow-overlay: 0 12px 32px rgba(20, 24, 35, 0.16), 0 2px 6px rgba(20, 24, 35, 0.08);
   --t-segment-lift: 0 1px 2px rgba(20, 24, 35, 0.12);
 }
@@ -195,202 +222,17 @@ body {
   }
 }
 
-/* ------------------------------------------------------------ shared components
-   The vocabulary every surface uses, so a button or a field looks the same
-   everywhere. Utilities still win over these (Tailwind puts components in an
-   earlier layer), so a call site can adjust spacing or width. */
-@layer components {
-  /* Data: every stored or typed value, query, URI and namespace. */
-  .font-data {
-    font-family: var(--font-mono);
-    font-size: 12.5px;
-    line-height: 20px;
-    font-variant-ligatures: none;
-    font-variant-numeric: tabular-nums;
-  }
+/* ------------------------------------------------------------ utilities
+   Reusable UI lives in components (components/ui, shadcn/ui based); only
+   typographic utilities that many components share live here. */
 
-  /* Buttons: 28px, 6px radius. One primary per bar. */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    height: 28px;
-    padding: 0 10px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-field-line);
-    color: var(--color-fg);
-    font-size: 13px;
-    white-space: nowrap;
-    transition: background-color 120ms var(--ease-out-expo), color 120ms var(--ease-out-expo);
-  }
-  .btn:hover:not(:disabled) {
-    background-color: var(--color-hover);
-  }
-  .btn:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-  .btn-primary {
-    background-color: var(--color-accent);
-    border-color: var(--color-accent);
-    color: var(--color-on-accent);
-    font-weight: 500;
-  }
-  .btn-primary:hover:not(:disabled) {
-    background-color: var(--color-accent-hover);
-    border-color: var(--color-accent-hover);
-  }
-  .btn-primary .kbd {
-    background: transparent;
-    color: rgb(255 255 255 / 0.85);
-    border-color: rgb(255 255 255 / 0.35);
-  }
-  .btn-danger {
-    background-color: var(--color-danger);
-    border-color: var(--color-danger);
-    color: #fff;
-    font-weight: 500;
-  }
-  .btn-danger:hover:not(:disabled) {
-    background-color: color-mix(in srgb, var(--color-danger) 88%, black);
-  }
-  .btn-ghost {
-    border-color: transparent;
-    color: var(--color-fg-2);
-  }
-  .btn-ghost:hover:not(:disabled) {
-    color: var(--color-fg);
-  }
-  /* Square icon-only button; add size with h-/w- utilities when not 28px. */
-  .btn-icon {
-    display: inline-grid;
-    place-items: center;
-    width: 28px;
-    height: 28px;
-    border-radius: var(--radius-md);
-    color: var(--color-fg-2);
-    flex: none;
-  }
-  .btn-icon:hover:not(:disabled),
-  .btn-icon[aria-expanded="true"],
-  .btn-icon[aria-pressed="true"] {
-    background-color: var(--color-hover);
-    color: var(--color-fg);
-  }
-  .btn-icon:disabled {
-    opacity: 0.35;
-    cursor: default;
-  }
-
-  /* Fields: 32px in forms (add h-7 / h-[30px] for panels and the query bar). */
-  .field {
-    height: 32px;
-    width: 100%;
-    padding: 0 10px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-field-line);
-    background-color: var(--color-field);
-    color: var(--color-fg);
-    outline: none;
-  }
-  .field::placeholder {
-    color: var(--color-fg-3);
-  }
-  .field:focus,
-  .field:focus-within {
-    border-color: var(--color-accent);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 30%, transparent);
-  }
-  .field:disabled {
-    opacity: 0.5;
-  }
-  textarea.field {
-    height: auto;
-    padding: 8px 10px;
-    line-height: 1.5;
-    resize: none;
-  }
-  select.field {
-    appearance: none;
-    padding-right: 28px;
-    background-image: linear-gradient(45deg, transparent 50%, var(--color-fg-2) 50%),
-      linear-gradient(135deg, var(--color-fg-2) 50%, transparent 50%);
-    background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%;
-    background-size: 5px 5px;
-    background-repeat: no-repeat;
-  }
-  .field-label {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--color-fg);
-  }
-  .field-help {
-    font-size: 11px;
-    color: var(--color-fg-3);
-  }
-
-  /* Segmented control: a tinted track; the pressed segment lifts. */
-  .seg {
-    display: inline-flex;
-    gap: 2px;
-    padding: 2px;
-    border-radius: var(--radius-md);
-    background-color: color-mix(in srgb, var(--color-fg) 6%, transparent);
-  }
-  .seg > button {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 24px;
-    padding: 0 10px;
-    border-radius: var(--radius-sm);
-    color: var(--color-fg-2);
-    white-space: nowrap;
-  }
-  .seg > button:hover {
-    color: var(--color-fg);
-  }
-  .seg > button[aria-pressed="true"],
-  .seg > button[aria-selected="true"] {
-    background-color: var(--color-editor);
-    color: var(--color-fg);
-    box-shadow: var(--t-segment-lift), 0 0 0 1px var(--color-line);
-  }
-  .seg-icons > button {
-    padding: 0 6px;
-  }
-
-  /* Keycap for shortcut hints. */
-  .kbd {
-    display: inline-flex;
-    align-items: center;
-    font-family: var(--font-sans);
-    font-size: 10.5px;
-    font-weight: 500;
-    line-height: 1;
-    color: var(--color-fg-2);
-    border: 1px solid var(--color-line);
-    border-bottom-width: 2px;
-    border-radius: var(--radius-sm);
-    padding: 2px 5px;
-    background: var(--color-editor);
-  }
-
-  /* Floating layers: menus, palette, toasts, dialogs. */
-  .surface-overlay {
-    background-color: var(--color-panel);
-    border: 1px solid var(--color-line);
-    box-shadow: var(--shadow-overlay);
-  }
-  :root[data-theme="light"] .surface-overlay {
-    background-color: var(--color-editor);
-  }
-
-  /* 24px rows for trees and lists. */
-  .row-24 {
-    height: 24px;
-  }
+/* Data: every stored or typed value, query, URI and namespace. */
+@utility font-data {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 20px;
+  font-variant-ligatures: none;
+  font-variant-numeric: tabular-nums;
 }
 
 @keyframes pop-in {
