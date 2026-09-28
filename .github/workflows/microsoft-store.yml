@@ -1,0 +1,82 @@
+name: Microsoft Store
+
+# Builds the MSIX package for the Microsoft Store and keeps it as a workflow
+# artifact, ready to upload in Partner Center (see docs/microsoft-store.md).
+# The package is unsigned on purpose: the Store signs it after
+# certification, so no certificate is needed.
+#
+# The package identity comes from repository variables, copied from Partner
+# Center > the app > Product management > Product identity:
+#   MSSTORE_IDENTITY_NAME            Package/Identity/Name
+#   MSSTORE_PUBLISHER                Package/Identity/Publisher (CN=...)
+#   MSSTORE_PUBLISHER_DISPLAY_NAME   Package/Properties/PublisherDisplayName
+#   MSSTORE_DISPLAY_NAME             optional, the reserved app name
+# Without them (pull requests, forks) it packs with a placeholder identity,
+# which checks that packaging works but can't be uploaded.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "src-tauri/msix/**"
+      - ".github/workflows/microsoft-store.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  msix:
+    runs-on: windows-latest
+    env:
+      IDENTITY_NAME: ${{ vars.MSSTORE_IDENTITY_NAME || 'MongoStudio.Placeholder' }}
+      PUBLISHER: ${{ vars.MSSTORE_PUBLISHER || 'CN=Placeholder' }}
+      PUBLISHER_DISPLAY_NAME: ${{ vars.MSSTORE_PUBLISHER_DISPLAY_NAME || 'Placeholder' }}
+      DISPLAY_NAME: ${{ vars.MSSTORE_DISPLAY_NAME || 'Mongo Studio' }}
+      PLACEHOLDER: ${{ vars.MSSTORE_IDENTITY_NAME == '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # aws-lc-sys (pulled in transitively for TLS) needs NASM to build its
+      # assembly routines on Windows.
+      - name: Install NASM
+        uses: ilammy/setup-nasm@v1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # Just the executable: the MSIX replaces the MSI/NSIS installers here.
+      - name: Build the app
+        run: npm run tauri -- build --no-bundle
+
+      - name: Pack the MSIX
+        id: pack
+        shell: pwsh
+        run: |
+          ./src-tauri/msix/pack-msix.ps1 `
+            -IdentityName $env:IDENTITY_NAME `
+            -Publisher $env:PUBLISHER `
+            -PublisherDisplayName $env:PUBLISHER_DISPLAY_NAME `
+            -DisplayName $env:DISPLAY_NAME
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PLACEHOLDER == 'true' && 'msix-placeholder-identity-not-for-upload' || 'msix-microsoft-store' }}
+          path: ${{ steps.pack.outputs.package }}
+          if-no-files-found: error

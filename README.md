@@ -63,6 +63,8 @@ npx tauri icon src-tauri/icons/icon-source.svg
 
 Pushing a tag matching `vX.Y.Z` (e.g. `v0.2.0`) triggers `.github/workflows/release.yml`, which builds installers for macOS (universal binary), Windows, and Linux and attaches them to a **draft** GitHub release for review before publishing. You can also trigger it manually from the Actions tab. Builds are unsigned, so first launches will trip Gatekeeper (macOS) or SmartScreen (Windows) warnings until code signing is set up separately.
 
+For the Microsoft Store, `.github/workflows/microsoft-store.yml` builds an MSIX package that the Store signs itself, so it needs no certificate. [docs/microsoft-store.md](docs/microsoft-store.md) walks through the one-time Partner Center setup and each submission. The privacy policy the Store asks for is [PRIVACY.md](PRIVACY.md).
+
 ## License
 
 MIT - see [LICENSE](LICENSE).
