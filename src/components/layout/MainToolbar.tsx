@@ -1,4 +1,5 @@
 import { ThemeSwitcher } from "../sidebar/ThemeSwitcher";
+import { AssistantToggle } from "../assistant/AssistantToggle";
 import { AppLogo } from "./AppLogo";
 import { Breadcrumb } from "./Breadcrumb";
 import { ConnectionWidget } from "./ConnectionWidget";
@@ -30,6 +31,7 @@ export function MainToolbar() {
       </div>
       <SearchButton />
       <div className="flex min-w-0 items-center justify-end gap-1">
+        <AssistantToggle />
         <ThemeSwitcher />
       </div>
     </header>

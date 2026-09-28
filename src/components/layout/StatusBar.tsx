@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { ConnectionChip } from "@/components/ui/ConnectionChip";
 import { cn } from "@/lib/utils";
 import { useActiveConnection, useConnectedCount } from "./useActiveConnection";
+import { AssistantStatusItem } from "../assistant/AssistantStatusItem";
 
 interface StatusItemProps {
   className?: string;
@@ -72,6 +73,7 @@ export function StatusBar() {
         </>
       )}
       {tab?.kind === "console" && <StatusItem>JavaScript</StatusItem>}
+      <AssistantStatusItem />
     </footer>
   );
 }

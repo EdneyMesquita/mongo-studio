@@ -1,3 +1,4 @@
+mod assistant;
 mod commands;
 mod connection;
 mod connections_io;
@@ -15,6 +16,7 @@ mod state;
 
 use tauri::Manager;
 
+use assistant::Assistant;
 use saved_scripts::SavedScriptsStore;
 use sidebar_layout::SidebarLayoutStore;
 use state::AppState;
@@ -35,6 +37,13 @@ pub fn run() {
             let layout = SidebarLayoutStore::load(&config_dir)
                 .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
             app.manage(layout);
+            // The agents run in an empty folder of the app's own, so they
+            // see none of the user's files.
+            let workdir = app.path().app_data_dir()?.join("assistant");
+            app.manage(Assistant::new(
+                std::sync::Arc::new(app.handle().clone()),
+                workdir,
+            ));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -69,6 +78,14 @@ pub fn run() {
             commands::save_script,
             commands::list_saved_scripts,
             commands::read_saved_script,
+            commands::assistant_detect,
+            commands::assistant_set_policy,
+            commands::assistant_start,
+            commands::assistant_send,
+            commands::assistant_stop,
+            commands::assistant_close,
+            commands::assistant_answer,
+            commands::assistant_workdir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

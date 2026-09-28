@@ -470,8 +470,10 @@ async function keyItems(
         case "aggregate":
           return pipelineKeys(call.inner, fields);
         case "insertOne":
+        case "insertMany":
           return fields(0);
         case "updateOne":
+        case "updateMany":
           if (call.arg === 1 && depth === 1) {
             return ops(UPDATE_OPERATORS, "operator", "update operator", 0);
           }

@@ -1,4 +1,5 @@
-import { Database, Moon, Plus, SquareTerminal, Sun } from "lucide-react";
+import { Database, Moon, Plus, SlidersHorizontal, Sparkles, SquareTerminal, Sun } from "lucide-react";
+import { useAssistantStore } from "../../store/assistantStore";
 import type { ReactNode } from "react";
 import { CommandGroup, CommandItem, CommandShortcut } from "@/components/ui/command";
 import { selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
@@ -62,6 +63,19 @@ export function PaletteActions({ search, run }: PaletteActionsProps) {
       label: "Toggle Explorer",
       shortcut: "Ctrl B",
       perform: () => useUiStore.getState().toggleSidePanel("explorer"),
+    },
+    {
+      id: "assistant",
+      icon: <Sparkles />,
+      label: "Ask the Assistant",
+      shortcut: "Ctrl L",
+      perform: () => useAssistantStore.getState().openPanel(),
+    },
+    {
+      id: "assistant-settings",
+      icon: <SlidersHorizontal />,
+      label: "Assistant settings",
+      perform: () => useAssistantStore.getState().openPanel("setup"),
     },
   );
 

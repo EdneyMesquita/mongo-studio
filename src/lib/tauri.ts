@@ -20,6 +20,12 @@ import type {
 import type { SavedScript, ScriptResult } from "../types/script";
 import type { ExportOptions, ExportQueryInput, ExportSummary } from "../types/export";
 import type { ExplainQueryInput, ExplainVerbosity } from "../types/explain";
+import type {
+  ApprovalChoice,
+  AssistantPolicy,
+  AssistantStartInput,
+  DetectedAgent,
+} from "../types/assistant";
 
 export const api = {
   listConnectionProfiles: () =>
@@ -182,4 +188,30 @@ export const api = {
       query,
       verbosity,
     }),
+
+  /** Finds the Claude Code and Codex CLIs on this machine. */
+  assistantDetect: () => invoke<DetectedAgent[]>("assistant_detect"),
+
+  assistantSetPolicy: (policy: AssistantPolicy) =>
+    invoke<void>("assistant_set_policy", { policy }),
+
+  /** Binds an agent session to one database; nothing runs until a send. */
+  assistantStart: (input: AssistantStartInput) =>
+    invoke<{ agentSessionId: string }>("assistant_start", { input }),
+
+  /** Starts a turn; its text and steps arrive as events. */
+  assistantSend: (agentSessionId: string, text: string) =>
+    invoke<void>("assistant_send", { agentSessionId, text }),
+
+  assistantStop: (agentSessionId: string) =>
+    invoke<void>("assistant_stop", { agentSessionId }),
+
+  assistantClose: (agentSessionId: string) =>
+    invoke<void>("assistant_close", { agentSessionId }),
+
+  assistantAnswer: (requestId: string, choice: ApprovalChoice) =>
+    invoke<void>("assistant_answer", { requestId, choice }),
+
+  /** Where the agents run, for resuming a session in a terminal. */
+  assistantWorkdir: () => invoke<string>("assistant_workdir"),
 };
