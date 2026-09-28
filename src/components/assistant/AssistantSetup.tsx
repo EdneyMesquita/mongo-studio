@@ -14,6 +14,7 @@ import {
 } from "../../store/assistantStore";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import type { AgentKind } from "../../types/assistant";
+import { ModelSettings } from "./ModelSettings";
 
 function SectionTitle({ children }: { children: string }) {
   return <div className="-mb-1 mt-1.5 text-sm font-semibold text-fg-2">{children}</div>;
@@ -128,6 +129,13 @@ export function AssistantSetup() {
             Rescan
           </Button>
         </div>
+
+        {chosen?.path && (
+          <>
+            <SectionTitle>Model</SectionTitle>
+            <ModelSettings key={agent} agent={agent} detected={chosen} />
+          </>
+        )}
 
         <SectionTitle>What it can read</SectionTitle>
         <ShareSwitch

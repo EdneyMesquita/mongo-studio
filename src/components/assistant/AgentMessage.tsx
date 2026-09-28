@@ -1,6 +1,6 @@
 import { memo, useMemo } from "react";
 import type { ReactNode } from "react";
-import { AGENT_NAMES } from "../../store/assistantStore";
+import { AGENT_NAMES, useAssistantStore } from "../../store/assistantStore";
 import type { AssistantMessage, AssistantSession } from "../../store/assistantStore";
 import { parseAnswer } from "../../lib/assistant/answer";
 import { ApprovalCard } from "./ApprovalCard";
@@ -26,6 +26,16 @@ function TextPart({ session, cardPrefix, text }: { session: AssistantSession; ca
   });
 }
 
+/** Who answered: the agent, and the model when known. */
+function Who({ message }: { message: AgentTurn }) {
+  return (
+    <div className="-mb-0.5 text-2xs text-fg-3">
+      {AGENT_NAMES[message.agent]}
+      {message.model && ` · ${message.model}`}
+    </div>
+  );
+}
+
 /** The agent's turn: its steps, its words, its proposals, in the order they came. */
 export const AgentMessage = memo(function AgentMessage({
   session,
@@ -36,11 +46,11 @@ export const AgentMessage = memo(function AgentMessage({
 }) {
   const empty = message.parts.length === 0 && !message.error && !message.stopped;
   if (empty && !message.done) {
-    return <div className="text-2xs text-fg-3">{AGENT_NAMES[message.agent]}</div>;
+    return <Who message={message} />;
   }
   return (
     <div className="flex flex-col gap-2 leading-[1.55]">
-      <div className="-mb-0.5 text-2xs text-fg-3">{AGENT_NAMES[message.agent]}</div>
+      <Who message={message} />
       {message.parts.map((part, i) => {
         if (part.kind === "steps") return <StepList key={i} steps={part.steps} />;
         if (part.kind === "approval") {
@@ -54,6 +64,18 @@ export const AgentMessage = memo(function AgentMessage({
       {message.error && (
         <p role="alert" className="m-0 text-sm break-words text-danger">
           {message.error}
+          {/\bmodel\b/i.test(message.error) && (
+            <>
+              {" "}
+              <button
+                type="button"
+                className="font-medium text-accent-text hover:underline hover:underline-offset-2"
+                onClick={() => useAssistantStore.getState().openPanel("setup")}
+              >
+                Choose another model
+              </button>
+            </>
+          )}
         </p>
       )}
       {message.done && empty && !message.stopped && !message.error && (

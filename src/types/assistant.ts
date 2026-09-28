@@ -1,6 +1,17 @@
 /** The AI coding agents the Assistant can drive: CLIs already on the machine. */
 export type AgentKind = "claude" | "codex";
 
+/** A model an agent can run. */
+export interface AgentModel {
+  /** What the CLI takes: an alias ("sonnet") or a model name. */
+  id: string;
+  name: string;
+  description: string | null;
+  /** Effort levels it takes; empty means the agent's own list. */
+  efforts: string[];
+  defaultEffort: string | null;
+}
+
 /** A CLI found (or not) on this machine. */
 export interface DetectedAgent {
   id: AgentKind;
@@ -10,6 +21,19 @@ export interface DetectedAgent {
   path: string | null;
   version: string | null;
   error: string | null;
+  /** Codex: the models the account can use; Claude Code: its aliases. */
+  models: AgentModel[];
+  /** Effort levels the CLI accepts. */
+  efforts: string[];
+  /** The model set up in the CLI itself, used for "Default". */
+  defaultModel: string | null;
+  defaultEffort: string | null;
+}
+
+/** The model and effort the user picked for an agent; null means the CLI's own. */
+export interface ModelChoice {
+  model: string | null;
+  effort: string | null;
 }
 
 /** What the agent may read, sent to the backend's MCP server. */
@@ -37,6 +61,9 @@ export interface AssistantStartInput {
   serverVersion: string | null;
   /** The CLI's own session to continue, after a restart or a reconnect. */
   resumeId: string | null;
+  /** Null runs the model set up in the CLI itself. */
+  model: string | null;
+  effort: string | null;
 }
 
 export type ApprovalChoice = "once" | "always" | "deny";

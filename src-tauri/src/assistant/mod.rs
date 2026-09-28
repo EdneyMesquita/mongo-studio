@@ -18,6 +18,7 @@ mod agents;
 mod detect;
 mod http;
 mod mcp;
+mod models;
 mod prompt;
 mod schema;
 mod tools;
@@ -104,6 +105,12 @@ pub struct AssistantStartInput {
     pub server_version: Option<String>,
     /// The CLI's own session/thread id, to continue an earlier conversation.
     pub resume_id: Option<String>,
+    /// The model to run; `None` uses the one set up in the CLI itself.
+    #[serde(default)]
+    pub model: Option<String>,
+    /// Reasoning effort; `None` uses the CLI's configured or default one.
+    #[serde(default)]
+    pub effort: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -232,7 +239,19 @@ pub(crate) struct AgentSession {
     pub server_version: Option<String>,
     /// The CLI's session/thread id once known; the next process resumes it.
     pub cli_session_id: Mutex<Option<String>>,
+    /// Passed to the CLI explicitly: its own configuration isn't loaded.
+    pub model: Option<String>,
+    pub effort: Option<String>,
     pub runner: tokio::sync::Mutex<agents::Runner>,
+}
+
+impl AgentSession {
+    pub(crate) fn model_choice(&self) -> agents::ModelChoice<'_> {
+        agents::ModelChoice {
+            model: self.model.as_deref(),
+            effort: self.effort.as_deref(),
+        }
+    }
 }
 
 struct PendingApproval {
@@ -375,6 +394,25 @@ impl Assistant {
         if inner.host.client(input.session_id.clone()).await.is_none() {
             return Err(AppError::SessionNotFound(input.session_id));
         }
+        let configured = models::models_for(input.agent);
+        let model = input
+            .model
+            .filter(|m| !m.is_empty())
+            .or(configured.default_model);
+        let effort = input
+            .effort
+            .filter(|e| !e.is_empty())
+            .or(configured.default_effort);
+        if model.as_deref().is_some_and(|m| !models::valid_model(m)) {
+            return Err(AppError::InvalidInput(
+                "that model name isn't valid".to_string(),
+            ));
+        }
+        if effort.as_deref().is_some_and(|e| !models::valid_effort(e)) {
+            return Err(AppError::InvalidInput(
+                "that effort level isn't valid".to_string(),
+            ));
+        }
         std::fs::create_dir_all(&inner.workdir)?;
         mcp::ensure_server(inner).await?;
 
@@ -391,6 +429,8 @@ impl Assistant {
             collection: input.collection.filter(|c| !c.is_empty()),
             server_version: input.server_version,
             cli_session_id: Mutex::new(input.resume_id.filter(|id| !id.is_empty())),
+            model,
+            effort,
             runner: tokio::sync::Mutex::new(agents::Runner::default()),
         });
         let agent_session_id = session.id.clone();
@@ -499,6 +539,8 @@ pub(crate) mod test_support {
             collection: None,
             server_version: Some("8.0.19".to_string()),
             cli_session_id: Mutex::new(None),
+            model: None,
+            effort: None,
             runner: tokio::sync::Mutex::new(agents::Runner::default()),
         })
     }

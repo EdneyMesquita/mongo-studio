@@ -302,7 +302,7 @@ impl LineParser for CodexParser {
                 let message = value
                     .get("error")
                     .and_then(|e| e.get("message").and_then(Value::as_str).or(e.as_str()))
-                    .map(str::to_string)
+                    .map(api_error_message)
                     .or_else(|| self.last_error.clone())
                     .unwrap_or_else(|| "Codex couldn't finish the turn.".to_string());
                 vec![Parsed::TurnEnd {
@@ -316,7 +316,7 @@ impl LineParser for CodexParser {
                 self.last_error = value
                     .get("message")
                     .and_then(Value::as_str)
-                    .map(str::to_string);
+                    .map(api_error_message);
                 Vec::new()
             }
             _ => Vec::new(),
@@ -328,11 +328,33 @@ impl LineParser for CodexParser {
     }
 }
 
+/// Codex passes API errors on as the raw response body, e.g.
+/// `{"type":"error","status":400,"error":{"message":"The 'x' model is not
+/// supported..."}}`; the message inside is what the user needs to read.
+fn api_error_message(message: &str) -> String {
+    serde_json::from_str::<Value>(message)
+        .ok()
+        .and_then(|body| {
+            body.pointer("/error/message")
+                .or_else(|| body.get("message"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| message.to_string())
+}
+
 /// How the system prompt reaches Claude.
 pub(crate) enum PromptArg<'a> {
     Inline(&'a str),
     /// For Windows batch shims, which can't take a multi-line argument.
     File(&'a Path),
+}
+
+/// The model and effort a session runs with, when set.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct ModelChoice<'a> {
+    pub model: Option<&'a str>,
+    pub effort: Option<&'a str>,
 }
 
 /// `claude` arguments for a session process.
@@ -341,6 +363,7 @@ pub(crate) fn claude_args(
     authorization: &str,
     prompt: PromptArg<'_>,
     resume: Option<&str>,
+    choice: ModelChoice<'_>,
 ) -> Vec<String> {
     let mcp_config = json!({
         "mcpServers": {
@@ -390,6 +413,14 @@ pub(crate) fn claude_args(
             args.push(path.to_string_lossy().into_owned());
         }
     }
+    if let Some(model) = choice.model {
+        args.push("--model".to_string());
+        args.push(model.to_string());
+    }
+    if let Some(effort) = choice.effort {
+        args.push("--effort".to_string());
+        args.push(effort.to_string());
+    }
     if let Some(id) = resume {
         args.push("--resume".to_string());
         args.push(id.to_string());
@@ -410,6 +441,7 @@ pub(crate) fn codex_args(
     mcp_url: &str,
     instructions: Option<&str>,
     resume: Option<&str>,
+    choice: ModelChoice<'_>,
 ) -> Vec<String> {
     let mut args: Vec<String> = vec!["exec".into()];
     if resume.is_some() {
@@ -461,6 +493,15 @@ pub(crate) fn codex_args(
         args.extend([
             "-c".into(),
             format!("developer_instructions={}", toml_string(instructions)),
+        ]);
+    }
+    if let Some(model) = choice.model {
+        args.extend(["-m".into(), model.into()]);
+    }
+    if let Some(effort) = choice.effort {
+        args.extend([
+            "-c".into(),
+            format!("model_reasoning_effort={}", toml_string(effort)),
         ]);
     }
     if let Some(thread) = resume {
@@ -589,7 +630,13 @@ pub(crate) async fn send(
                     PromptArg::Inline(&system_prompt)
                 };
                 let authorization = format!("Bearer ${{{TOKEN_ENV}}}");
-                let args = claude_args(&mcp_url, &authorization, prompt_arg, resume.as_deref());
+                let args = claude_args(
+                    &mcp_url,
+                    &authorization,
+                    prompt_arg,
+                    resume.as_deref(),
+                    session.model_choice(),
+                );
                 let spawned = spawn(
                     inner,
                     session.agent,
@@ -639,7 +686,13 @@ pub(crate) async fn send(
             } else {
                 (Some(system_prompt.as_str()), text)
             };
-            let args = codex_args(&inner.workdir, &mcp_url, instructions, resume.as_deref());
+            let args = codex_args(
+                &inner.workdir,
+                &mcp_url,
+                instructions,
+                resume.as_deref(),
+                session.model_choice(),
+            );
             let mut spawned = spawn(
                 inner,
                 session.agent,
@@ -936,6 +989,12 @@ mod tests {
         let failed = CodexParser::new()
             .parse(r#"{"type":"turn.failed","error":{"message":"You've hit your usage limit."}}"#);
         assert_eq!(
+            api_error_message(
+                r#"{"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'gpt-x' model is not supported."}}"#
+            ),
+            "The 'gpt-x' model is not supported."
+        );
+        assert_eq!(
             failed,
             [Parsed::TurnEnd {
                 error: Some("You've hit your usage limit.".to_string())
@@ -950,6 +1009,10 @@ mod tests {
             "Bearer ${MONGO_STUDIO_MCP_TOKEN}",
             PromptArg::Inline("be brief"),
             Some("5a1c"),
+            ModelChoice {
+                model: Some("haiku"),
+                effort: Some("low"),
+            },
         );
         let joined = args.join(" ");
         assert!(joined.starts_with(
@@ -971,14 +1034,25 @@ mod tests {
             ("--permission-prompts", "none"),
             ("--append-system-prompt", "be brief"),
             ("--resume", "5a1c"),
+            ("--model", "haiku"),
+            ("--effort", "low"),
         ] {
             assert!(
                 pairs.contains(&expected),
                 "missing {expected:?} in {args:?}"
             );
         }
-        let fresh = claude_args("u", "a", PromptArg::File(Path::new("/p.txt")), None);
+        let fresh = claude_args(
+            "u",
+            "a",
+            PromptArg::File(Path::new("/p.txt")),
+            None,
+            ModelChoice::default(),
+        );
         assert!(!fresh.contains(&"--resume".to_string()));
+        assert!(
+            !fresh.contains(&"--model".to_string()) && !fresh.contains(&"--effort".to_string())
+        );
         assert!(fresh
             .windows(2)
             .any(|w| w[0] == "--append-system-prompt-file" && w[1] == "/p.txt"));
@@ -992,6 +1066,10 @@ mod tests {
             "http://127.0.0.1:4000/mcp",
             Some("line one\n\"two\""),
             None,
+            ModelChoice {
+                model: Some("gpt-6-luna"),
+                effort: Some("medium"),
+            },
         );
         assert_eq!(
             &first[..5],
@@ -1024,6 +1102,8 @@ mod tests {
                 "mcp_servers.mongo_studio.bearer_token_env_var=\"MONGO_STUDIO_MCP_TOKEN\"",
             ),
             ("-c", "developer_instructions=\"line one\\n\\\"two\\\"\""),
+            ("-m", "gpt-6-luna"),
+            ("-c", "model_reasoning_effort=\"medium\""),
         ] {
             assert!(
                 pairs.contains(&expected),
@@ -1032,7 +1112,8 @@ mod tests {
         }
         assert_eq!(first.last().unwrap(), "-");
 
-        let later = codex_args(workdir, "u", None, Some("thread-1"));
+        let later = codex_args(workdir, "u", None, Some("thread-1"), ModelChoice::default());
+        assert!(!later.contains(&"-m".to_string()));
         assert_eq!(&later[..2], ["exec", "resume"]);
         assert!(!later.contains(&"-C".to_string()) && !later.contains(&"-s".to_string()));
         assert!(later.contains(&"sandbox_mode=\"read-only\"".to_string()));

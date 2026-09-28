@@ -16,6 +16,7 @@ import type {
   AssistantEvent,
   AssistantStepEvent,
   DetectedAgent,
+  ModelChoice,
 } from "../types/assistant";
 
 export const AGENT_NAMES: Record<AgentKind, string> = { claude: "Claude Code", codex: "Codex" };
@@ -43,6 +44,8 @@ export type AssistantMessage =
       id: string;
       role: "agent";
       agent: AgentKind;
+      /** The model it answered with, as shown ("Sonnet"), when known. */
+      model: string | null;
       parts: AgentPart[];
       error: string | null;
       stopped: boolean;
@@ -76,6 +79,8 @@ export interface AssistantSession {
   mongoSessionId: string | null;
   /** The CLI's own session id, to resume it. */
   cliSessionId: string | null;
+  /** The model choice the backend session was started with. */
+  runsWith: string | null;
   running: boolean;
   /** A tool waits for the user to allow reading document values. */
   waiting: boolean;
@@ -112,6 +117,8 @@ interface Settings {
   access: Record<string, boolean>;
   /** Connections where document values are always allowed. */
   valuesConnections: string[];
+  /** The model and effort per agent; null keeps the CLI's own setting. */
+  modelChoice: Record<AgentKind, ModelChoice>;
   panelWidth: number;
 }
 
@@ -134,6 +141,8 @@ interface AssistantState extends Settings {
   setAgent: (agent: AgentKind) => void;
   setShare: (key: "indexes" | "values", on: boolean) => void;
   setAccess: (connectionId: string, allowed: boolean) => void;
+  setModel: (agent: AgentKind, model: string | null) => void;
+  setEffort: (agent: AgentKind, effort: string | null) => void;
   setPanelWidth: (width: number) => void;
   /** Ends setup: the Assistant is on from here. */
   enable: () => void;
@@ -161,6 +170,24 @@ export const DEFAULT_ASSISTANT_WIDTH = 380;
 const MAX_SESSIONS = 20;
 
 const uid = () => crypto.randomUUID();
+
+/** A model name the CLIs take as one argument (the backend checks it too). */
+export function isValidModelName(name: string): boolean {
+  return /^[A-Za-z0-9._:/[\]@][A-Za-z0-9._:/[\]@-]{0,99}$/.test(name);
+}
+
+/**
+ * The model an agent will run, as shown: what the user picked, or the one
+ * set up in the CLI itself - by its display name when it's a known model.
+ */
+export function modelLabel(agent: AgentKind, agents: DetectedAgent[] | null, choice: ModelChoice): string | null {
+  const detected = agents?.find((a) => a.id === agent);
+  const id = choice.model ?? detected?.defaultModel ?? null;
+  if (!id) return null;
+  return detected?.models.find((m) => m.id === id)?.name ?? id;
+}
+
+const choiceKey = (choice: ModelChoice) => `${choice.model ?? ""}|${choice.effort ?? ""}`;
 
 /** Servers on this machine start allowed; remote ones wait for the user. */
 export function defaultAccess(summary: string | undefined): boolean {
@@ -203,6 +230,7 @@ function blankSession(
     agentSessionId: null,
     mongoSessionId: null,
     cliSessionId: null,
+    runsWith: null,
     running: false,
     waiting: false,
     turnStartedAt: null,
@@ -278,7 +306,13 @@ export const useAssistantStore = create<AssistantState>()(
         if (!isConnectionAllowed(session.connectionId)) {
           throw new Error(`${session.connectionName} is not shared with the Assistant. Allow it in Assistant settings.`);
         }
-        if (session.agentSessionId && session.mongoSessionId === live.sessionId) {
+        // A new model or effort restarts the CLI on the same conversation.
+        const choice = get().modelChoice[session.agent];
+        if (
+          session.agentSessionId &&
+          session.mongoSessionId === live.sessionId &&
+          session.runsWith === choiceKey(choice)
+        ) {
           return session.agentSessionId;
         }
         if (session.agentSessionId) {
@@ -296,9 +330,15 @@ export const useAssistantStore = create<AssistantState>()(
           collection: session.collection,
           serverVersion: live.serverVersion,
           resumeId: session.cliSessionId,
+          model: choice.model,
+          effort: choice.effort,
         });
         routes.set(agentSessionId, { type: "chat", sessionId: session.id });
-        patchSession(session.id, () => ({ agentSessionId, mongoSessionId: live.sessionId }));
+        patchSession(session.id, () => ({
+          agentSessionId,
+          mongoSessionId: live.sessionId,
+          runsWith: choiceKey(choice),
+        }));
         return agentSessionId;
       }
 
@@ -325,6 +365,10 @@ export const useAssistantStore = create<AssistantState>()(
         share: { indexes: true, values: false },
         access: {},
         valuesConnections: [],
+        modelChoice: {
+          claude: { model: null, effort: null },
+          codex: { model: null, effort: null },
+        },
         panelWidth: DEFAULT_ASSISTANT_WIDTH,
         panel: null,
         agents: null,
@@ -353,7 +397,8 @@ export const useAssistantStore = create<AssistantState>()(
           const next = view ?? (get().enabled ? "chat" : "setup");
           if (next === "chat" && !current()) startSessionFor(activeTarget());
           set({ panel: next });
-          if (next === "setup" && !get().agents && !get().detecting) void get().detect();
+          // What's installed, and which models it runs, for the setup and the labels.
+          if (!get().agents && !get().detecting) void get().detect();
         },
         closePanel: () => set({ panel: null }),
         togglePanel: () => (get().panel ? get().closePanel() : get().openPanel()),
@@ -362,6 +407,21 @@ export const useAssistantStore = create<AssistantState>()(
         setShare: (key, on) => set((st) => ({ share: { ...st.share, [key]: on } })),
         setAccess: (connectionId, allowed) =>
           set((st) => ({ access: { ...st.access, [connectionId]: allowed } })),
+        setModel: (agent, model) =>
+          set((st) => {
+            // An effort the new model doesn't take goes back to the default.
+            const detected = st.agents?.find((a) => a.id === agent);
+            const efforts = detected?.models.find((m) => m.id === model)?.efforts ?? [];
+            const effort = st.modelChoice[agent].effort;
+            return {
+              modelChoice: {
+                ...st.modelChoice,
+                [agent]: { model, effort: effort && efforts.length && !efforts.includes(effort) ? null : effort },
+              },
+            };
+          }),
+        setEffort: (agent, effort) =>
+          set((st) => ({ modelChoice: { ...st.modelChoice, [agent]: { ...st.modelChoice[agent], effort } } })),
         setPanelWidth: (width) => set({ panelWidth: width }),
 
         enable: () => {
@@ -431,7 +491,7 @@ export const useAssistantStore = create<AssistantState>()(
             prefix = s.messages.length
               ? `Earlier in this conversation, with another assistant:\n${transcript(s.messages)}\n\n---\n`
               : "";
-            patchSession(s.id, () => ({ agent: get().agent, agentSessionId: null, cliSessionId: null }));
+            patchSession(s.id, () => ({ agent: get().agent, agentSessionId: null, cliSessionId: null, runsWith: null }));
             s = current()!;
           }
           patchSession(s.id, (x) => ({
@@ -442,7 +502,16 @@ export const useAssistantStore = create<AssistantState>()(
             messages: [
               ...x.messages,
               { id: uid(), role: "user", text, context },
-              { id: uid(), role: "agent", agent: x.agent, parts: [], error: null, stopped: false, done: false },
+              {
+                id: uid(),
+                role: "agent",
+                agent: x.agent,
+                model: modelLabel(x.agent, get().agents, get().modelChoice[x.agent]),
+                parts: [],
+                error: null,
+                stopped: false,
+                done: false,
+              },
             ],
           }));
           set({ draft: "", context: [] });
@@ -576,6 +645,8 @@ export const useAssistantStore = create<AssistantState>()(
               collection: tab.collection,
               serverVersion: live.serverVersion,
               resumeId: null,
+              model: get().modelChoice[get().agent].model,
+              effort: get().modelChoice[get().agent].effort,
             });
             routes.set(agentSessionId, { type: "inline", tabId });
             patchInline(tabId, { agentSessionId });
@@ -670,6 +741,7 @@ export const useAssistantStore = create<AssistantState>()(
         share: s.share,
         access: s.access,
         valuesConnections: s.valuesConnections,
+        modelChoice: s.modelChoice,
         panelWidth: s.panelWidth,
       }),
     },

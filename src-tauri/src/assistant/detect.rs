@@ -17,6 +17,7 @@ use serde::Serialize;
 use tokio::process::Command;
 use tokio::sync::OnceCell;
 
+use super::models::{models_for, AgentModels};
 use super::AgentKind;
 
 #[derive(Debug, Clone, Serialize)]
@@ -30,6 +31,9 @@ pub struct DetectedAgent {
     pub version: Option<String>,
     /// Set when the CLI was found but didn't run.
     pub error: Option<String>,
+    /// What it can run, and what the user set up for it.
+    #[serde(flatten)]
+    pub models: AgentModels,
 }
 
 const LOGIN_SHELL_TIMEOUT: Duration = Duration::from_secs(3);
@@ -260,6 +264,11 @@ pub(crate) async fn detect_agents() -> Vec<(AgentKind, DetectedAgent, Option<Pat
                 path: path.as_deref().map(display_path),
                 version,
                 error,
+                models: if path.is_some() {
+                    models_for(kind)
+                } else {
+                    AgentModels::default()
+                },
             },
             path,
         ));
