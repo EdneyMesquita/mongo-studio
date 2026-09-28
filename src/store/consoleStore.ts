@@ -7,7 +7,7 @@ import type { ScriptLogEvent } from "../types/script";
 
 /** The script a console starts with, pointed at its collection if it has one. */
 export function defaultScript(database: string, collection: string | null): string {
-  const header = `// db.collection("name") gives you find/findOne/insertOne/updateOne/deleteOne/aggregate/countDocuments.
+  const header = `// db.collection("name") gives you find/findOne/insertOne/insertMany/updateOne/updateMany/deleteOne/deleteMany/aggregate/countDocuments.
 // Top-level await is supported.`;
   if (collection) {
     return `// Console for ${database}.${collection} - runs against the "${database}" database.

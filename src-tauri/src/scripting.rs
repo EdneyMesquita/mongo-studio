@@ -31,11 +31,20 @@ globalThis.db = {
             insertOne: function(doc) {
                 return __native_insert_one(name, doc);
             },
+            insertMany: function(docs) {
+                return __native_insert_many(name, docs);
+            },
             updateOne: function(filter, update) {
                 return __native_update_one(name, filter, update);
             },
+            updateMany: function(filter, update) {
+                return __native_update_many(name, filter, update);
+            },
             deleteOne: function(filter) {
                 return __native_delete_one(name, filter);
+            },
+            deleteMany: function(filter) {
+                return __native_delete_many(name, filter);
             },
             aggregate: function(pipeline) {
                 return __native_aggregate(name, pipeline || []);
@@ -152,7 +161,12 @@ async fn execute(
 
 fn describe_js_error(ctx: &Ctx<'_>, err: rquickjs::Error) -> String {
     if err.is_exception() {
-        if let Some(ex) = ctx.catch().into_object() {
+        let caught = ctx.catch();
+        // The natives throw their error message as a plain string.
+        if let Some(message) = caught.as_string().and_then(|s| s.to_string().ok()) {
+            return message;
+        }
+        if let Some(ex) = caught.into_object() {
             if let Ok(message) = ex.get::<_, rquickjs::String>("message") {
                 if let Ok(s) = message.to_string() {
                     return s;
@@ -277,6 +291,27 @@ fn install_globals<'js>(
         )?,
     )?;
 
+    let insert_many_client = client.clone();
+    let insert_many_database = database.clone();
+    globals.set(
+        "__native_insert_many",
+        Function::new(
+            ctx.clone(),
+            Async(move |ctx: Ctx<'js>, coll: String, documents: Value<'js>| {
+                let client = insert_many_client.clone();
+                let database = insert_many_database.clone();
+                async move {
+                    let documents_json =
+                        js_to_json(&documents).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
+                    let result = driver::insert_many(&client, &database, &coll, documents_json)
+                        .await
+                        .map_err(|e| app_err_to_js(&ctx, e))?;
+                    json_to_js(&ctx, &result)
+                }
+            }),
+        )?,
+    )?;
+
     let update_client = client.clone();
     let update_database = database.clone();
     globals.set(
@@ -303,6 +338,37 @@ fn install_globals<'js>(
         )?,
     )?;
 
+    let update_many_client = client.clone();
+    let update_many_database = database.clone();
+    globals.set(
+        "__native_update_many",
+        Function::new(
+            ctx.clone(),
+            Async(
+                move |ctx: Ctx<'js>, coll: String, filter: Value<'js>, update: Value<'js>| {
+                    let client = update_many_client.clone();
+                    let database = update_many_database.clone();
+                    async move {
+                        let filter_json =
+                            js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
+                        let update_json =
+                            js_to_json(&update).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
+                        let result = driver::update_many(
+                            &client,
+                            &database,
+                            &coll,
+                            filter_json,
+                            update_json,
+                        )
+                        .await
+                        .map_err(|e| app_err_to_js(&ctx, e))?;
+                        json_to_js(&ctx, &result)
+                    }
+                },
+            ),
+        )?,
+    )?;
+
     let delete_client = client.clone();
     let delete_database = database.clone();
     globals.set(
@@ -316,6 +382,27 @@ fn install_globals<'js>(
                     let filter_json =
                         js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
                     let result = driver::delete_one(&client, &database, &coll, filter_json)
+                        .await
+                        .map_err(|e| app_err_to_js(&ctx, e))?;
+                    json_to_js(&ctx, &result)
+                }
+            }),
+        )?,
+    )?;
+
+    let delete_many_client = client.clone();
+    let delete_many_database = database.clone();
+    globals.set(
+        "__native_delete_many",
+        Function::new(
+            ctx.clone(),
+            Async(move |ctx: Ctx<'js>, coll: String, filter: Value<'js>| {
+                let client = delete_many_client.clone();
+                let database = delete_many_database.clone();
+                async move {
+                    let filter_json =
+                        js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
+                    let result = driver::delete_many(&client, &database, &coll, filter_json)
                         .await
                         .map_err(|e| app_err_to_js(&ctx, e))?;
                     json_to_js(&ctx, &result)
@@ -594,6 +681,67 @@ mod live_tests {
         .await
         .unwrap();
         assert!(result.value.is_number());
+    }
+
+    /// insertMany/updateMany/deleteMany against a throwaway collection:
+    ///   cargo test --lib -- --ignored live_script_many_writes
+    #[tokio::test]
+    #[ignore]
+    async fn live_script_many_writes() {
+        let (client, _) = live_client().await;
+        let coll = format!("script_many_{}", uuid::Uuid::new_v4().simple());
+        let script = format!(
+            r#"
+            const c = db.collection("{coll}");
+            const inserted = await c.insertMany([{{ n: 1 }}, {{ n: 2 }}, {{ n: 3 }}]);
+            const updated = await c.updateMany({{ n: {{ $gte: 2 }} }}, {{ $set: {{ big: true }} }});
+            const deleted = await c.deleteMany({{ big: true }});
+            const left = await c.countDocuments({{}});
+            ({{ inserted, updated, deleted, left }})
+            "#
+        );
+        let result = run_script(
+            client.clone(),
+            "mongo_studio_test".to_string(),
+            script,
+            Some(10_000),
+            Arc::new(AtomicBool::new(false)),
+            noop_log(),
+        )
+        .await;
+        client
+            .database("mongo_studio_test")
+            .collection::<mongodb::bson::Document>(&coll)
+            .drop()
+            .await
+            .unwrap();
+        let value = result.unwrap().value;
+        assert_eq!(value["inserted"]["insertedCount"], 3);
+        let ids = value["inserted"]["insertedIds"].as_array().unwrap();
+        assert_eq!(ids.len(), 3);
+        assert!(ids[0]["$oid"].is_string(), "{value}");
+        assert_eq!(value["updated"]["matchedCount"], 2);
+        assert_eq!(value["updated"]["modifiedCount"], 2);
+        assert_eq!(value["updated"]["upsertedId"], JsonValue::Null);
+        assert_eq!(value["deleted"]["deletedCount"], 2);
+        assert_eq!(value["left"], 1);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_script_insert_many_rejects_a_non_array() {
+        let (client, _) = live_client().await;
+        let err = run_script(
+            client,
+            "mongo_studio_test".to_string(),
+            "await db.collection(\"x\").insertMany({ n: 1 })".to_string(),
+            Some(5_000),
+            Arc::new(AtomicBool::new(false)),
+            noop_log(),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.to_string().contains("array"), "unexpected error: {err}");
     }
 
     #[tokio::test]

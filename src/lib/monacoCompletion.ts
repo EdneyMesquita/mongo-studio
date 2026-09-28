@@ -55,11 +55,17 @@ interface MongoStudioCollection {
   /** Runs an aggregation pipeline. */
   aggregate(pipeline?: object[]): Promise<any[]>;
   insertOne(document: object): Promise<{ insertedId: any }>;
+  insertMany(documents: object[]): Promise<{ insertedCount: number; insertedIds: any[] }>;
   updateOne(
     filter: object,
     update: object,
   ): Promise<{ matchedCount: number; modifiedCount: number; upsertedId: any }>;
+  updateMany(
+    filter: object,
+    update: object,
+  ): Promise<{ matchedCount: number; modifiedCount: number; upsertedId: any }>;
   deleteOne(filter: object): Promise<{ deletedCount: number }>;
+  deleteMany(filter: object): Promise<{ deletedCount: number }>;
 }
 interface MongoStudioDb {
   /** A collection of the console's database. */

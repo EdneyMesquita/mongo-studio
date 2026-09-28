@@ -34,7 +34,8 @@ Used for long stretches next to an IDE and a terminal, often on a laptop screen.
 - Documents: Find (filter, sort, limit, skip) and Aggregate (pipeline) with MongoDB-aware completion; Explain; results as a document grid with the selected document in an inspector, a JSON tree, or raw JSON; inline value editing; export of the whole query to CSV or JSON.
 - Console: Monaco JS editor with completion, run/cancel, Result and Logs, stacked or side-by-side layout with a resizable split, save to a local .js file (Ctrl/Cmd+S), saved scripts in their own tool window, export of the result to CSV or JSON.
 - Indexes: list with usage stats.
-- Terminology: connection, database, collection, document, filter, sort, pipeline, console, saved script, tab.
+- Assistant (opt-in): drives an AI coding agent CLI already installed and signed in on the machine - Claude Code or Codex - never an API key of the app's own. A tool window docked right (Ctrl/Cmd+L) holds sessions bound to one database of one connection; Ctrl/Cmd+I asks in place in a filter bar or a console and shows the change as a diff to accept or reject. The agent reads the server only through read-only tools the app serves over a local MCP server (list collections, sample the schema, find and aggregate with a limit, explain, count); its own shell and file tools are off, `$out`/`$merge` are refused, document values need the user's permission unless allowed in settings, and connections are shared one by one (localhost ones start allowed). The user picks the model and reasoning effort per agent - the CLI's own default, one it lists (Codex: the models the account can use; Claude Code: its fable/opus/sonnet/haiku aliases) or any model name - trading cost and speed against strength. It proposes filters, pipelines and console scripts as cards with a read-only dry run; writes come back as scripts that run only when the user presses Run.
+- Terminology: connection, database, collection, document, filter, sort, pipeline, console, saved script, tab, Assistant, session, proposal.
 
 ## Brand Commitments
 
@@ -52,4 +53,4 @@ Sample data lives only in contributors' local dev databases (not in the repo). N
 1. The data is the interface: documents, fields and types get the space and the clearest type; chrome recedes.
 2. Always show where you are: which server, database and collection every tab, query and console runs against.
 3. Fast by keyboard, fine by mouse: every frequent action has a shortcut and a visible control.
-4. Nothing leaves the machine: no account, no network beyond the user's own servers.
+4. Nothing leaves the machine: no account, no network beyond the user's own servers. The one exception is the Assistant, off until the user sets it up: then their messages, and what the agent reads through the read-only tools, go to the agent's provider (Anthropic or OpenAI) under the user's own CLI account - said plainly in its setup.

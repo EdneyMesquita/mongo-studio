@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import Editor from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
 import { useThemeStore } from "../../store/themeStore";
@@ -33,6 +34,8 @@ interface QueryEditorProps {
   ariaLabel: string;
   /** Caption inside a one-line field ("filter", "sort"). */
   label?: string;
+  /** Inside a one-line field, after the text: e.g. the Assistant's button. */
+  trailing?: ReactNode;
   className?: string;
 }
 
@@ -50,6 +53,7 @@ export function QueryEditor({
   multiline = false,
   ariaLabel,
   label,
+  trailing,
   className,
 }: QueryEditorProps) {
   const themeId = useThemeStore((s) => s.themeId);
@@ -163,6 +167,7 @@ export function QueryEditor({
   return (
     <QueryField label={label ?? kind} className={className}>
       <div className="h-full min-w-0 flex-1">{editorElement}</div>
+      {trailing}
     </QueryField>
   );
 }

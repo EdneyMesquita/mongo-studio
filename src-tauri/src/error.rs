@@ -16,6 +16,10 @@ pub enum AppError {
     InvalidInput(String),
     #[error("session {0} is not connected")]
     SessionNotFound(String),
+    /// Assistant failures are shown to the user as they are, so the message
+    /// carries no prefix.
+    #[error("{0}")]
+    Assistant(String),
 }
 
 // Tauri serializes command errors as JSON for the frontend; a plain string

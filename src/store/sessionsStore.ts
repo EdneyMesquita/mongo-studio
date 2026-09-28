@@ -38,6 +38,8 @@ export interface CollectionTab {
   pipelineText: string;
   loading: boolean;
   error: string | null;
+  /** The query field the Assistant last wrote, until the user edits it. */
+  assistantSource?: "filter" | "pipeline" | null;
 }
 
 /**
@@ -53,6 +55,8 @@ export interface ConsoleTab {
   collection: string | null;
   /** Numbers consoles on the same database apart: 1, 2, ... */
   number: number;
+  /** Opened with a script the Assistant wrote. */
+  fromAssistant?: boolean;
 }
 
 export type Tab = CollectionTab | ConsoleTab;
@@ -98,13 +102,20 @@ interface SessionsState {
     database: string,
     collection: string,
   ) => Promise<void>;
-  /** Opens a new console on the database, however many it already has. */
-  openConsole: (connection: TabConnection, database: string, collection: string | null) => void;
+  /** Opens a new console on the database, however many it already has; returns its tab id. */
+  openConsole: (
+    connection: TabConnection,
+    database: string,
+    collection: string | null,
+    options?: { fromAssistant?: boolean },
+  ) => string;
   activateTab: (id: string) => void;
   closeTab: (id: string) => void;
   closeOtherTabs: (id: string) => void;
   closeAllTabs: () => void;
   updateTab: (id: string, patch: Partial<TabQueryFields>) => void;
+  /** Puts a query the Assistant wrote into the tab, marked as its. */
+  applyQuery: (id: string, patch: Partial<TabQueryFields>, source: "filter" | "pipeline") => void;
   runQuery: (sessionId: string, id: string) => Promise<void>;
   /** Swaps in a document as stored after an edit, matched on _id. */
   replaceDocument: (id: string, updated: unknown) => void;
@@ -254,7 +265,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       }
     },
 
-    openConsole: (connection, database, collection) => {
+    openConsole: (connection, database, collection, options) => {
       const numbers = get()
         .tabs.filter(
           (t) => t.kind === "console" && t.connection.id === connection.id && t.database === database,
@@ -267,8 +278,10 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
         database,
         collection,
         number: Math.max(0, ...numbers) + 1,
+        fromAssistant: options?.fromAssistant ?? false,
       };
       set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
+      return tab.id;
     },
 
     activateTab: (id) => set({ activeTabId: id }),
@@ -296,7 +309,16 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
 
     closeAllTabs: () => set({ tabs: [], activeTabId: null }),
 
-    updateTab: (id, patch) => patchTab(id, patch),
+    updateTab: (id, patch) => {
+      const tab = collectionTab(id);
+      // An edit of the field the Assistant wrote makes it the user's again.
+      const edited =
+        (tab?.assistantSource === "filter" && patch.filterText !== undefined && patch.filterText !== tab.filterText) ||
+        (tab?.assistantSource === "pipeline" && patch.pipelineText !== undefined && patch.pipelineText !== tab.pipelineText);
+      patchTab(id, edited ? { ...patch, assistantSource: null } : patch);
+    },
+
+    applyQuery: (id, patch, source) => patchTab(id, { ...patch, assistantSource: source }),
 
     runQuery: async (sessionId, id) => {
       const tab = collectionTab(id);

@@ -28,7 +28,7 @@ keyring = { version = "4.2.0", default-features = false, features = ["apple-nati
 russh = "0.63.3"
 uuid = { version = "1.26.1", features = ["v4", "serde"] }
 thiserror = "2.0.20"
-tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "process"] }
 aes-gcm = "0.11.1"
 rand = "0.10.2"
 base64 = "0.23.1"

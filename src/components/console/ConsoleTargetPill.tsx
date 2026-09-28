@@ -14,8 +14,8 @@ export function ConsoleTargetPill({ tab }: { tab: Tab }) {
     >
       <ConnectionChip name={tab.connection.name} color={color} size="sm" />
       <span className="truncate font-data font-medium text-fg">{target}</span>
-      {tab.kind === "console" && <span className="shrink-0 text-fg-3">any collection</span>}
-      <span className="truncate">on {tab.connection.name}</span>
+      {tab.kind === "console" && <span className="shrink-0 text-fg-3 @max-[820px]:hidden">any collection</span>}
+      <span className="truncate @max-[600px]:hidden">on {tab.connection.name}</span>
     </span>
   );
 }

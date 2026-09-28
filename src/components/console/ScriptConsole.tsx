@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import type { Tab } from "../../store/sessionsStore";
 import { defaultScript, useConsoleStore } from "../../store/consoleStore";
@@ -9,6 +9,8 @@ import { ConsoleEditor } from "./ConsoleEditor";
 import { ConsoleOutputPane } from "./ConsoleOutputPane";
 import { ConsoleToolbar } from "./ConsoleToolbar";
 import { runCurrentConsole, useRunDuration } from "./useTimedRun";
+import { useAssistantStore } from "../../store/assistantStore";
+import { InlineAskStrip } from "../assistant/InlineAskStrip";
 
 /** The script console of a tab: a console tab, or a collection tab's own. */
 export function ScriptConsole({ tab }: { tab: Tab }) {
@@ -22,6 +24,13 @@ export function ScriptConsole({ tab }: { tab: Tab }) {
   const split = useUiStore((s) => s.consoleSplit[s.consoleLayout]);
   const setSplit = useUiStore((s) => s.setConsoleSplit);
   const durationMs = useRunDuration(key);
+  const ask = useAssistantStore((s) => (s.inline[key]?.kind === "script" ? s.inline[key] : undefined));
+  const reviewOriginal = ask?.state === "review" ? ask.original : null;
+  const reviewText = ask?.state === "review" ? ask.proposal : null;
+  const proposal = useMemo(
+    () => (reviewOriginal !== null && reviewText !== null ? { original: reviewOriginal, text: reviewText } : null),
+    [reviewOriginal, reviewText],
+  );
 
   // Ctrl/Cmd+S saves, adding Shift saves to a new file. On the window rather
   // than as a Monaco command so it also works with the editor unfocused;
@@ -43,6 +52,8 @@ export function ScriptConsole({ tab }: { tab: Tab }) {
   const running = consoleSession?.running ?? false;
 
   function handleRun() {
+    // Not while a proposal waits for Accept or Reject.
+    if (useAssistantStore.getState().inline[key]?.kind === "script") return;
     void runCurrentConsole();
   }
 
@@ -55,13 +66,21 @@ export function ScriptConsole({ tab }: { tab: Tab }) {
         onRun={handleRun}
         onCancel={() => cancel(key)}
       />
+      {ask && <InlineAskStrip tab={tab} ask={ask} />}
       <SplitPane
         direction={layout === "side" ? "horizontal" : "vertical"}
         ratio={split}
         onRatioChange={(ratio) => setSplit(layout, ratio)}
         defaultRatio={DEFAULT_CONSOLE_SPLIT}
         ariaLabel="Resize editor and output"
-        first={<ConsoleEditor consoleKey={key} script={script} onRun={handleRun} />}
+        first={
+          <ConsoleEditor
+            consoleKey={key}
+            script={script}
+            onRun={handleRun}
+            proposal={proposal}
+          />
+        }
         second={
           <ConsoleOutputPane
             session={consoleSession}
