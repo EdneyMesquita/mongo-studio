@@ -46,9 +46,9 @@ In Partner Center, open the app and start a submission:
 5. **Store listings:**
    - A description, at least one screenshot (1366×768 or larger) and search terms.
    - The app icon comes from the package.
-6. **Submission options > Restricted capabilities:** the package declares `runFullTrust`, like any packaged desktop app. Explain why it's needed, for example:
+6. **Submission options > Restricted capabilities:** the package declares `runFullTrust`, like any packaged desktop app. The field takes at most 500 characters; this text fits:
 
-   > Mongo Studio is a desktop (Win32) app packaged as MSIX. It needs full trust to connect to the user's MongoDB servers, store their passwords in the Windows Credential Manager, save scripts where the user chooses, and, for its opt-in Assistant, run the Claude Code or Codex CLI the user installed.
+   > Mongo Studio is a Win32 desktop app (Rust + WebView2) packaged as MSIX; runFullTrust is required for its Windows.FullTrustApplication entry point. It uses it to connect to the user's MongoDB servers (TLS, SSH tunnels), keep passwords in Windows Credential Manager, save scripts and exports where the user chooses, and, for the optional Assistant, run the user's own Claude Code or Codex CLI. No admin rights, drivers, services or telemetry.
 
 7. Submit. Certification usually takes from a few hours to three business days.
 
