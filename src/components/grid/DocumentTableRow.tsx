@@ -30,7 +30,7 @@ export const DocumentTableRow = memo(function DocumentTableRow({
     <tr
       data-row={index}
       aria-selected={onSelect ? selected : undefined}
-      className={cn("group/row scroll-mt-[30px]", flashing && "*:animate-flash")}
+      className={cn("group/row scroll-mt-[30px]", onSelect && "cursor-pointer", flashing && "*:animate-flash")}
       onClick={onSelect ? () => onSelect(index) : undefined}
     >
       <td

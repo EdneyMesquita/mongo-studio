@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
 import { DEFAULT_SIDEBAR_WIDTH, useUiStore } from "../../store/uiStore";
+import { lockCursor, unlockCursor } from "../../lib/dragCursor";
 
 const MIN_WIDTH = 180;
 const KEY_STEP = 16;
@@ -30,7 +31,7 @@ export function SidebarResizer() {
     start.current = { x: e.clientX, width };
     setDragging(true);
     document.body.style.userSelect = "none";
-    document.body.style.cursor = "col-resize";
+    lockCursor("col-resize");
   }
 
   function onPointerMove(e: PointerEvent<HTMLDivElement>) {
@@ -45,7 +46,7 @@ export function SidebarResizer() {
     start.current = null;
     setDragging(false);
     document.body.style.userSelect = "";
-    document.body.style.cursor = "";
+    unlockCursor();
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {

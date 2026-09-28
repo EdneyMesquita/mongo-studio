@@ -49,7 +49,7 @@ export function EditorTab({ tab, active, entries }: EditorTabProps) {
         tabIndex={0}
         title={`${tabName(tab)}${fileName ? ` · ${fileName}` : ""}\n${tab.connection.name} · ${tab.connection.summary}`}
         className={cn(
-          "group relative flex max-w-[280px] shrink-0 cursor-default select-none items-center gap-[7px] whitespace-nowrap pl-3 pr-1.5 text-base",
+          "group relative flex max-w-[280px] shrink-0 select-none items-center gap-[7px] whitespace-nowrap pl-3 pr-1.5 text-base",
           active ? "text-fg" : "text-fg-2 hover:bg-row-hover hover:text-fg",
         )}
         onClick={() => activateTab(tab.id)}

@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
 import { DEFAULT_INSPECTOR_WIDTH, useUiStore } from "../../store/uiStore";
+import { lockCursor, unlockCursor } from "../../lib/dragCursor";
 
 export const MIN_INSPECTOR_WIDTH = 280;
 export const MAX_INSPECTOR_WIDTH = 640;
@@ -23,7 +24,7 @@ export function InspectorResizer({ width }: { width: number }) {
     e.currentTarget.setPointerCapture(e.pointerId);
     start.current = { x: e.clientX, width };
     document.body.style.userSelect = "none";
-    document.body.style.cursor = "col-resize";
+    lockCursor("col-resize");
   }
 
   function onPointerMove(e: PointerEvent<HTMLDivElement>) {
@@ -37,7 +38,7 @@ export function InspectorResizer({ width }: { width: number }) {
     }
     start.current = null;
     document.body.style.userSelect = "";
-    document.body.style.cursor = "";
+    unlockCursor();
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {

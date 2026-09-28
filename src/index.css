@@ -178,8 +178,30 @@ body {
   color: var(--color-fg);
 }
 
-/* In the base layer so a component's own outline utilities win. */
+/* In the base layer so a component's own utilities win. */
 @layer base {
+  /* What can be clicked shows a pointer; what's disabled says so. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="treeitem"],
+  [role="menuitem"]:not([data-disabled]),
+  [role="menuitemcheckbox"]:not([data-disabled]),
+  [role="menuitemradio"]:not([data-disabled]),
+  [role="option"]:not([data-disabled]):not([aria-disabled="true"]),
+  select:not(:disabled),
+  summary,
+  a[href],
+  label:has(> input:is([type="checkbox"], [type="radio"]):not(:disabled)) {
+    cursor: pointer;
+  }
+  button:disabled,
+  select:disabled,
+  [aria-disabled="true"],
+  [data-disabled] {
+    cursor: not-allowed;
+  }
+
   :focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: -1px;
@@ -199,6 +221,11 @@ body {
 }
 .scrollbar-none::-webkit-scrollbar {
   display: none;
+}
+
+/* See lib/dragCursor.ts: one cursor for the whole window while dragging. */
+.cursor-locked * {
+  cursor: inherit !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

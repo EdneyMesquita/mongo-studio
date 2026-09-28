@@ -64,7 +64,11 @@ export function KvRow({
       aria-level={depth + 1}
       aria-expanded={toggles ? expanded : undefined}
       aria-label={aria["aria-label"]}
-      className="group/kv relative grid min-h-6 grid-cols-[16px_auto_minmax(0,1fr)_auto] items-start gap-x-1 py-0.5 pr-2.5 hover:bg-row-hover"
+      className={cn(
+        "group/kv relative grid min-h-6 grid-cols-[16px_auto_minmax(0,1fr)_auto] items-start gap-x-1 py-0.5 pr-2.5 hover:bg-row-hover",
+        // only rows that expand are clickable; a leaf is not
+        !toggles && "cursor-default",
+      )}
       style={guides(depth)}
       onClick={toggles ? onToggle : undefined}
     >

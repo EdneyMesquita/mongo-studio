@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { lockCursor, unlockCursor } from "../../lib/dragCursor";
 
 interface SplitPaneProps {
   /** "horizontal" puts the panes side by side; "vertical" stacks them. */
@@ -59,7 +60,7 @@ export function SplitPane({
     e.currentTarget.setPointerCapture(e.pointerId);
     setDragging(true);
     document.body.style.userSelect = "none";
-    document.body.style.cursor = horizontal ? "col-resize" : "row-resize";
+    lockCursor(horizontal ? "col-resize" : "row-resize");
   }
 
   function onPointerMove(e: PointerEvent<HTMLDivElement>) {
@@ -77,7 +78,7 @@ export function SplitPane({
     }
     setDragging(false);
     document.body.style.userSelect = "";
-    document.body.style.cursor = "";
+    unlockCursor();
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {

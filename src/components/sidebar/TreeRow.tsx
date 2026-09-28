@@ -57,7 +57,7 @@ export function TreeRow({
       aria-selected={selected}
       tabIndex={0}
       className={cn(
-        "group relative flex h-6 cursor-default select-none items-center gap-1.5 whitespace-nowrap pr-2 text-base text-fg hover:bg-row-hover",
+        "group relative flex h-6 select-none items-center gap-1.5 whitespace-nowrap pr-2 text-base text-fg hover:bg-row-hover",
         selected && "bg-sel hover:bg-sel",
         className,
       )}
