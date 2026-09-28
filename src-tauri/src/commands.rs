@@ -4,6 +4,10 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
+use crate::assistant::{
+    ApprovalChoice, Assistant, AssistantPolicy, AssistantStartInput, AssistantStarted,
+    DetectedAgent,
+};
 use crate::connection::extract_uri_credentials;
 use crate::connections_io;
 use crate::driver;
@@ -698,6 +702,72 @@ pub async fn read_saved_script(
     path: String,
 ) -> AppResult<String> {
     store.read(&path)
+}
+
+/// Finds the agent CLIs (Claude Code, Codex) and their versions.
+#[tauri::command]
+pub async fn assistant_detect(assistant: State<'_, Assistant>) -> AppResult<Vec<DetectedAgent>> {
+    Ok(assistant.detect().await)
+}
+
+/// What the Assistant's tools may read; set at startup and whenever the
+/// settings change.
+#[tauri::command]
+pub fn assistant_set_policy(assistant: State<Assistant>, policy: AssistantPolicy) -> AppResult<()> {
+    assistant.set_policy(policy);
+    Ok(())
+}
+
+/// Registers a conversation bound to one connection and database. Spawns
+/// nothing until the first `assistant_send`.
+#[tauri::command]
+pub async fn assistant_start(
+    assistant: State<'_, Assistant>,
+    input: AssistantStartInput,
+) -> AppResult<AssistantStarted> {
+    assistant.start(input).await
+}
+
+/// Starts a turn; returns once the prompt is handed to the CLI. The answer
+/// arrives as `assistant-event`s.
+#[tauri::command]
+pub async fn assistant_send(
+    assistant: State<'_, Assistant>,
+    agent_session_id: String,
+    text: String,
+) -> AppResult<()> {
+    assistant.send(&agent_session_id, text).await
+}
+
+#[tauri::command]
+pub async fn assistant_stop(
+    assistant: State<'_, Assistant>,
+    agent_session_id: String,
+) -> AppResult<()> {
+    assistant.stop(&agent_session_id).await
+}
+
+#[tauri::command]
+pub async fn assistant_close(
+    assistant: State<'_, Assistant>,
+    agent_session_id: String,
+) -> AppResult<()> {
+    assistant.close(&agent_session_id).await
+}
+
+#[tauri::command]
+pub fn assistant_answer(
+    assistant: State<Assistant>,
+    request_id: String,
+    choice: ApprovalChoice,
+) -> AppResult<()> {
+    assistant.answer(&request_id, choice)
+}
+
+/// The folder the agents run in, for the "Copy resume command" action.
+#[tauri::command]
+pub fn assistant_workdir(assistant: State<Assistant>) -> AppResult<String> {
+    assistant.workdir()
 }
 
 #[cfg(test)]
