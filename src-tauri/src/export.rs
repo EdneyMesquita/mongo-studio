@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::io::Write;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -10,13 +11,17 @@ use serde_json::Value as JsonValue;
 
 use crate::ejson::{document_to_json, json_to_document, json_to_pipeline};
 use crate::error::{AppError, AppResult};
-use crate::models::{ExportNestedMode, ExportOptions, ExportQueryInput, ExportSummary};
+use crate::models::{
+    ExportFormat, ExportNestedMode, ExportOptions, ExportQueryInput, ExportSummary,
+};
 
 const DEFAULT_SAMPLE_SIZE: usize = 500;
 const PROGRESS_EVERY: u64 = 200;
 
+/// Streams a find or an aggregation to `dest_path` as CSV or JSON, the whole
+/// result rather than one page, reporting progress and honouring cancel.
 #[allow(clippy::too_many_arguments)]
-pub async fn export_to_csv(
+pub async fn export_query(
     client: &Client,
     db: &str,
     collection: &str,
@@ -45,6 +50,35 @@ pub async fn export_to_csv(
         }
         find.await?
     };
+
+    if options.format == ExportFormat::Json {
+        let mut out = std::io::BufWriter::new(std::fs::File::create(dest_path)?);
+        let mut rows_written: u64 = 0;
+        loop {
+            if cancel_flag.load(Ordering::Relaxed) {
+                out.flush()?;
+                return Err(AppError::InvalidInput("export cancelled".to_string()));
+            }
+            match cursor.try_next().await? {
+                Some(doc) => {
+                    write_json_item(&mut out, &document_to_json(doc), rows_written == 0)?;
+                    rows_written += 1;
+                    if rows_written.is_multiple_of(PROGRESS_EVERY) {
+                        on_progress(rows_written);
+                        out.flush()?;
+                        tokio::task::yield_now().await;
+                    }
+                }
+                None => break,
+            }
+        }
+        finish_json_array(&mut out, rows_written)?;
+        on_progress(rows_written);
+        return Ok(ExportSummary {
+            rows_written,
+            columns: Vec::new(),
+        });
+    }
 
     let sample_size = options.sample_size.unwrap_or(DEFAULT_SAMPLE_SIZE);
     let mut sample: Vec<JsonValue> = Vec::with_capacity(sample_size.min(1024));
@@ -97,6 +131,76 @@ pub async fn export_to_csv(
         rows_written,
         columns,
     })
+}
+
+/// Writes a value already in memory - a script console's result - to
+/// `dest_path`. An array exports one row / element per item; anything else
+/// exports as a single row / value. In CSV, items that aren't documents
+/// (numbers, strings...) go in a "value" column.
+pub fn export_value(
+    value: &JsonValue,
+    options: &ExportOptions,
+    dest_path: &Path,
+) -> AppResult<ExportSummary> {
+    let items: Vec<&JsonValue> = match value {
+        JsonValue::Array(items) => items.iter().collect(),
+        other => vec![other],
+    };
+    let rows_written = items.len() as u64;
+
+    if options.format == ExportFormat::Json {
+        let mut out = std::io::BufWriter::new(std::fs::File::create(dest_path)?);
+        serde_json::to_writer_pretty(&mut out, value)
+            .map_err(|e| AppError::InvalidInput(format!("json write error: {e}")))?;
+        out.write_all(b"\n")?;
+        out.flush()?;
+        return Ok(ExportSummary {
+            rows_written,
+            columns: Vec::new(),
+        });
+    }
+
+    let rows: Vec<JsonValue> = items
+        .into_iter()
+        .map(|item| {
+            if item.is_object() && ejson_leaf(item).is_none() {
+                item.clone()
+            } else {
+                serde_json::json!({ "value": item })
+            }
+        })
+        .collect();
+    let mut columns = Vec::new();
+    let mut seen = HashSet::new();
+    for row in &rows {
+        collect_columns(row, options.nested_mode, &mut columns, &mut seen);
+    }
+    let mut writer = csv::Writer::from_writer(std::fs::File::create(dest_path)?);
+    writer.write_record(&columns).map_err(csv_err)?;
+    for row in &rows {
+        write_row(&mut writer, row, &columns, options.nested_mode)?;
+    }
+    writer.flush()?;
+    Ok(ExportSummary {
+        rows_written,
+        columns,
+    })
+}
+
+/// One element of a streamed JSON array, indented under its "[".
+fn write_json_item<W: Write>(out: &mut W, doc: &JsonValue, first: bool) -> AppResult<()> {
+    let pretty = serde_json::to_string_pretty(doc)
+        .map_err(|e| AppError::InvalidInput(format!("json write error: {e}")))?;
+    out.write_all(if first { b"[\n  " } else { b",\n  " })?;
+    out.write_all(pretty.replace('\n', "\n  ").as_bytes())?;
+    Ok(())
+}
+
+/// Closes a streamed JSON array, or writes "[]" when nothing came.
+fn finish_json_array<W: Write>(out: &mut W, rows_written: u64) -> AppResult<()> {
+    out.write_all(if rows_written == 0 { b"[]\n" } else { b"\n]\n" })?;
+    out.flush()?;
+    Ok(())
 }
 
 fn collect_columns(
@@ -244,6 +348,83 @@ mod tests {
         );
     }
 
+    fn options(format: ExportFormat) -> ExportOptions {
+        ExportOptions {
+            format,
+            nested_mode: ExportNestedMode::Flatten,
+            sample_size: None,
+        }
+    }
+
+    fn temp_file(ext: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "mongo-studio-export-{}.{ext}",
+            uuid::Uuid::new_v4()
+        ))
+    }
+
+    #[test]
+    fn streamed_json_is_a_valid_array_for_any_count() {
+        for docs in [
+            vec![],
+            vec![json!({"a": 1})],
+            vec![json!({"a": 1}), json!({"b": {"c": [1, 2]}})],
+        ] {
+            let mut out = Vec::new();
+            for (i, doc) in docs.iter().enumerate() {
+                write_json_item(&mut out, doc, i == 0).unwrap();
+            }
+            finish_json_array(&mut out, docs.len() as u64).unwrap();
+            let parsed: JsonValue = serde_json::from_slice(&out).unwrap();
+            assert_eq!(parsed, JsonValue::Array(docs));
+        }
+    }
+
+    #[test]
+    fn a_console_result_exports_as_csv_rows() {
+        let value = json!([
+            { "_id": "delivered", "orders": 71, "revenue": { "$numberDecimal": "68412.30" } },
+            { "_id": "paid", "orders": 38, "extra": { "note": "x" } },
+        ]);
+        let path = temp_file("csv");
+        let summary = export_value(&value, &options(ExportFormat::Csv), &path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+        assert_eq!(summary.rows_written, 2);
+        assert_eq!(
+            summary.columns,
+            vec!["_id", "orders", "revenue", "extra.note"]
+        );
+        assert_eq!(
+            text,
+            "_id,orders,revenue,extra.note\ndelivered,71,68412.30,\npaid,38,,x\n"
+        );
+    }
+
+    #[test]
+    fn a_console_result_of_plain_values_exports_to_a_value_column() {
+        let path = temp_file("csv");
+        let summary =
+            export_value(&json!([1, "two", null]), &options(ExportFormat::Csv), &path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+        assert_eq!(summary.columns, vec!["value"]);
+        // a lone empty field is quoted, or the row would read as a blank line
+        assert_eq!(text, "value\n1\ntwo\n\"\"\n");
+    }
+
+    #[test]
+    fn a_console_result_exports_as_json_unchanged() {
+        let value = json!({ "count": 3, "ids": [{ "$oid": "507f1f77bcf86cd799439011" }] });
+        let path = temp_file("json");
+        let summary = export_value(&value, &options(ExportFormat::Json), &path).unwrap();
+        let parsed: JsonValue =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        std::fs::remove_file(&path).ok();
+        assert_eq!(summary.rows_written, 1);
+        assert_eq!(parsed, value);
+    }
+
     #[test]
     fn stringify_mode_only_uses_top_level_keys() {
         let doc = json!({ "name": "Ada", "address": { "city": "London" } });
@@ -324,7 +505,7 @@ mod live_tests {
 
         let dest =
             std::env::temp_dir().join(format!("mongo-studio-export-{}.csv", uuid::Uuid::new_v4()));
-        let summary = export_to_csv(
+        let summary = export_query(
             &active.client,
             &database,
             &collection.name,
@@ -336,6 +517,7 @@ mod live_tests {
                 limit: None,
             },
             ExportOptions {
+                format: ExportFormat::Csv,
                 nested_mode: ExportNestedMode::Flatten,
                 sample_size: Some(50),
             },
@@ -357,7 +539,40 @@ mod live_tests {
         let line_count = contents.lines().count() as u64;
         // header + one line per row (rows_written could be 0 for an empty collection)
         assert_eq!(line_count, summary.rows_written + 1);
+        std::fs::remove_file(&dest).ok();
 
+        // The same query as JSON: an array of every document, as stored.
+        let dest =
+            std::env::temp_dir().join(format!("mongo-studio-export-{}.json", uuid::Uuid::new_v4()));
+        let json_summary = export_query(
+            &active.client,
+            &database,
+            &collection.name,
+            ExportQueryInput {
+                filter: JsonValue::Object(Default::default()),
+                sort: None,
+                projection: None,
+                pipeline: None,
+                limit: None,
+            },
+            ExportOptions {
+                format: ExportFormat::Json,
+                nested_mode: ExportNestedMode::Flatten,
+                sample_size: None,
+            },
+            &dest,
+            Arc::new(AtomicBool::new(false)),
+            |_| {},
+        )
+        .await
+        .expect("json export should succeed");
+        let parsed: JsonValue = serde_json::from_str(&std::fs::read_to_string(&dest).unwrap())
+            .expect("the export should be valid JSON");
+        assert_eq!(
+            parsed.as_array().map(|a| a.len() as u64),
+            Some(json_summary.rows_written)
+        );
+        assert_eq!(json_summary.rows_written, summary.rows_written);
         std::fs::remove_file(&dest).ok();
     }
 }

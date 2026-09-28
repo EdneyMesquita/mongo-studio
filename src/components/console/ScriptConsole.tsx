@@ -62,7 +62,14 @@ export function ScriptConsole({ tab }: { tab: Tab }) {
         defaultRatio={DEFAULT_CONSOLE_SPLIT}
         ariaLabel="Resize editor and output"
         first={<ConsoleEditor consoleKey={key} script={script} onRun={handleRun} />}
-        second={<ConsoleOutputPane session={consoleSession} durationMs={durationMs} />}
+        second={
+          <ConsoleOutputPane
+            session={consoleSession}
+            durationMs={durationMs}
+            exportLabel={tab.kind === "collection" ? `${tab.database}.${tab.collection} console` : `${tab.database} console`}
+            exportName={`${tab.database}-result`}
+          />
+        }
       />
     </div>
   );

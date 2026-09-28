@@ -2,7 +2,29 @@ import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/tauri";
-import type { ExportNestedMode, ExportProgressEvent, ExportSummary } from "../types/export";
+import type {
+  ExportFormat,
+  ExportNestedMode,
+  ExportProgressEvent,
+  ExportQueryInput,
+  ExportSummary,
+} from "../types/export";
+
+/** What an export writes: a collection's whole query, or a value in hand. */
+export type ExportSource =
+  | {
+      kind: "query";
+      sessionId: string;
+      database: string;
+      collection: string;
+      query: Omit<ExportQueryInput, "projection">;
+    }
+  | { kind: "value"; value: unknown };
+
+export interface ExportChoice {
+  format: ExportFormat;
+  nestedMode: ExportNestedMode;
+}
 
 interface ExportState {
   running: boolean;
@@ -11,22 +33,16 @@ interface ExportState {
   error: string | null;
   executionId: string | null;
 
-  start: (
-    sessionId: string,
-    database: string,
-    collection: string,
-    query: {
-      filter: unknown;
-      sort: unknown | null;
-      pipeline: unknown | null;
-      limit: number | null;
-    },
-    nestedMode: ExportNestedMode,
-    suggestedName: string,
-  ) => Promise<void>;
+  /** Asks where to save (suggesting `baseName` + the format's extension), then writes. */
+  start: (source: ExportSource, choice: ExportChoice, baseName: string) => Promise<void>;
   cancel: () => Promise<void>;
   reset: () => void;
 }
+
+const FILTERS: Record<ExportFormat, { name: string; extensions: string[] }> = {
+  csv: { name: "CSV", extensions: ["csv"] },
+  json: { name: "JSON", extensions: ["json"] },
+};
 
 export const useExportStore = create<ExportState>((set, get) => ({
   running: false,
@@ -35,44 +51,32 @@ export const useExportStore = create<ExportState>((set, get) => ({
   error: null,
   executionId: null,
 
-  start: async (sessionId, database, collection, query, nestedMode, suggestedName) => {
+  start: async (source, { format, nestedMode }, baseName) => {
     const destPath = await save({
-      defaultPath: suggestedName,
-      filters: [{ name: "CSV", extensions: ["csv"] }],
+      defaultPath: `${baseName}.${format}`,
+      filters: [FILTERS[format]],
     });
     if (!destPath) return;
 
     const executionId = crypto.randomUUID();
-    set({
-      running: true,
-      rowsWritten: 0,
-      summary: null,
-      error: null,
-      executionId,
-    });
+    set({ running: true, rowsWritten: 0, summary: null, error: null, executionId });
+    const options = { format, nestedMode, sampleSize: null };
     try {
-      const summary = await api.exportToCsv(
-        sessionId,
-        database,
-        collection,
-        {
-          filter: query.filter,
-          sort: query.sort,
-          projection: null,
-          pipeline: query.pipeline,
-          limit: query.limit,
-        },
-        { nestedMode, sampleSize: null },
-        destPath,
-        executionId,
-      );
-      if (get().executionId === executionId) {
-        set({ running: false, summary });
-      }
+      const summary =
+        source.kind === "query"
+          ? await api.exportQuery(
+              source.sessionId,
+              source.database,
+              source.collection,
+              { ...source.query, projection: null },
+              options,
+              destPath,
+              executionId,
+            )
+          : await api.exportValue(source.value, options, destPath);
+      if (get().executionId === executionId) set({ running: false, summary });
     } catch (e) {
-      if (get().executionId === executionId) {
-        set({ running: false, error: String(e) });
-      }
+      if (get().executionId === executionId) set({ running: false, error: String(e) });
     }
   },
 

@@ -3,7 +3,8 @@ import { Download } from "lucide-react";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import type { CollectionTab } from "../../store/sessionsStore";
 import { useExportStore } from "../../store/exportStore";
-import type { ExportNestedMode } from "../../types/export";
+import type { ExportSource } from "../../store/exportStore";
+import type { ExportFormat, ExportNestedMode } from "../../types/export";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -16,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   Select,
   SelectContent,
@@ -25,38 +27,77 @@ import {
 } from "@/components/ui/select";
 import { exportQueryOf } from "./exportQuery";
 
+/** What to export: a collection tab's whole query, or a console result. */
+export type ExportTarget =
+  | { kind: "tab"; tab: CollectionTab }
+  | {
+      kind: "result";
+      value: unknown;
+      /** Where it came from, shown under the title, e.g. "shop console". */
+      label: string;
+      /** File name suggested in the save dialog, without extension. */
+      baseName: string;
+    };
+
 interface ExportDialogProps {
-  tab: CollectionTab;
+  target: ExportTarget;
   onClose: () => void;
 }
+
+const formatOptions: { value: ExportFormat; label: string }[] = [
+  { value: "csv", label: "CSV" },
+  { value: "json", label: "JSON" },
+];
 
 const nestedOptions: { id: ExportNestedMode; label: string }[] = [
   { id: "flatten", label: "Flatten into columns (address.city, items.0.sku)" },
   { id: "stringify", label: "Keep as JSON text in one column" },
 ];
 
-/** Streams the tab's whole query (not just the page shown) to a CSV file. */
-export function ExportDialog({ tab, onClose }: ExportDialogProps) {
-  const session = useConnectionsStore((st) => st.sessions[tab.connection.id]);
-  const { database, collection, mode, limit } = tab;
+function itemsOf(value: unknown): string {
+  if (!Array.isArray(value)) return "a single value";
+  return `${value.length.toLocaleString("en")} ${value.length === 1 ? "item" : "items"}`;
+}
+
+/**
+ * Exports to CSV or JSON: a collection tab's whole query (streamed from the
+ * server, not just the page shown) or a console result already in hand.
+ */
+export function ExportDialog({ target, onClose }: ExportDialogProps) {
+  const tab = target.kind === "tab" ? target.tab : null;
+  const session = useConnectionsStore((st) => (tab ? st.sessions[tab.connection.id] : undefined));
   const { running, rowsWritten, summary, error, start, cancel, reset } = useExportStore();
+  const [format, setFormat] = useState<ExportFormat>("csv");
   const [nestedMode, setNestedMode] = useState<ExportNestedMode>("flatten");
   const [capToLimit, setCapToLimit] = useState(false);
   const nestedId = useId();
   const capId = useId();
 
-  if (!session || !database || !collection) return null;
-  const sessionId = session.sessionId;
+  if (tab && !session) return null;
 
   async function handleExport() {
-    let query;
-    try {
-      query = exportQueryOf(tab, capToLimit);
-    } catch {
-      useExportStore.setState({ error: "Current filter/pipeline is not valid JSON" });
-      return;
+    let source: ExportSource;
+    let baseName: string;
+    if (target.kind === "tab") {
+      const { tab: t } = target;
+      try {
+        source = {
+          kind: "query",
+          sessionId: session!.sessionId,
+          database: t.database,
+          collection: t.collection,
+          query: exportQueryOf(t, capToLimit),
+        };
+      } catch {
+        useExportStore.setState({ error: "Current filter/pipeline is not valid JSON" });
+        return;
+      }
+      baseName = t.collection;
+    } else {
+      source = { kind: "value", value: target.value };
+      baseName = target.baseName;
     }
-    await start(sessionId, database, collection, query, nestedMode, `${collection}.csv`);
+    await start(source, { format, nestedMode }, baseName);
   }
 
   function handleClose() {
@@ -64,41 +105,56 @@ export function ExportDialog({ tab, onClose }: ExportDialogProps) {
     onClose();
   }
 
+  const subtitle = tab ? `${tab.database}.${tab.collection}` : target.kind === "result" ? target.label : "";
+  const unit = (n: number) =>
+    format === "csv" ? (n === 1 ? "row" : "rows") : n === 1 ? "document" : "documents";
+
   return (
     // A running export only stops through Cancel; the dialog stays up until then.
     <Dialog open onOpenChange={(open) => !open && !running && handleClose()}>
-      <DialogContent className="sm:max-w-md" showCloseButton={!running}>
+      <DialogContent className="max-w-md" showCloseButton={!running}>
         <DialogHeader>
-          <DialogTitle>Export to CSV</DialogTitle>
-          <span className="truncate font-data text-fg-3">
-            {database}.{collection}
-          </span>
+          <DialogTitle>Export</DialogTitle>
+          <span className="truncate font-data text-fg-3">{subtitle}</span>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4">
           <DialogDescription>
-            Exports the current {mode === "aggregate" ? "pipeline" : "filter"}, not just the page
-            shown.
+            {tab
+              ? `Exports the current ${tab.mode === "aggregate" ? "pipeline" : "filter"}, not just the page shown.`
+              : `Exports the console's result: ${itemsOf(target.kind === "result" ? target.value : null)}.`}
           </DialogDescription>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor={nestedId}>Nested fields</Label>
-            <Select
-              value={nestedMode}
-              onValueChange={(value) => setNestedMode(value as ExportNestedMode)}
-              disabled={running}
-            >
-              <SelectTrigger id={nestedId} className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {nestedOptions.map((option) => (
-                  <SelectItem key={option.id} value={option.id}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <span className="text-sm font-medium text-fg">Format</span>
+            <SegmentedControl
+              aria-label="Format"
+              value={format}
+              onChange={setFormat}
+              options={formatOptions}
+              className="self-start"
+            />
           </div>
-          {mode === "find" && (
+          {format === "csv" && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={nestedId}>Nested fields</Label>
+              <Select
+                value={nestedMode}
+                onValueChange={(value) => setNestedMode(value as ExportNestedMode)}
+                disabled={running}
+              >
+                <SelectTrigger id={nestedId} className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {nestedOptions.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {tab?.mode === "find" && (
             <div className="flex items-center gap-2">
               <Checkbox
                 id={capId}
@@ -107,26 +163,31 @@ export function ExportDialog({ tab, onClose }: ExportDialogProps) {
                 disabled={running}
               />
               <Label htmlFor={capId} className="font-normal">
-                Cap to current limit (<span className="tabular-nums">{limit}</span>)
+                <span>
+                  Cap to current limit (<span className="tabular-nums">{tab.limit}</span>)
+                </span>
               </Label>
             </div>
           )}
 
           {running && (
             <p role="status" className="text-sm text-fg-2 tabular-nums">
-              Exporting… {rowsWritten.toLocaleString()} rows written
+              Exporting… {rowsWritten.toLocaleString()} {unit(rowsWritten)} written
             </p>
           )}
           {summary && (
             <p role="status" className="text-sm text-ok tabular-nums">
-              Done - {summary.rowsWritten.toLocaleString()} rows, {summary.columns.length} columns
+              Done - {summary.rowsWritten.toLocaleString()} {unit(summary.rowsWritten)}
+              {summary.columns.length > 0 && `, ${summary.columns.length} columns`}
             </p>
           )}
           {error && <p className="text-sm break-words text-danger">{error}</p>}
         </DialogBody>
         <DialogFooter className="justify-end">
           {running ? (
-            <Button onClick={() => cancel()}>Cancel</Button>
+            <Button onClick={() => cancel()} disabled={target.kind === "result"}>
+              Cancel
+            </Button>
           ) : (
             <>
               <Button variant="ghost" onClick={handleClose}>

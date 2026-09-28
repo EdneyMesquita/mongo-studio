@@ -325,9 +325,23 @@ pub enum ExportNestedMode {
     Stringify,
 }
 
+/// The file an export writes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExportFormat {
+    /// One row per document, one column per field (see ExportNestedMode).
+    #[default]
+    Csv,
+    /// A JSON array of the documents in relaxed Extended JSON, as stored.
+    Json,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportOptions {
+    #[serde(default)]
+    pub format: ExportFormat,
+    /// CSV only: how nested fields become columns.
     pub nested_mode: ExportNestedMode,
     /// How many leading documents to sample for column inference. Columns
     /// for fields that only appear later in a very heterogeneous collection

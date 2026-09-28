@@ -29,9 +29,9 @@ export function CollectionToolbar({ view, onViewChange, onExplain, onExport }: C
             <Zap />
             <span className="max-sm:hidden">Explain</span>
           </Button>
-          <Button variant="ghost" onClick={onExport} aria-label="Export CSV">
+          <Button variant="ghost" onClick={onExport} aria-label="Export">
             <Download />
-            <span className="max-sm:hidden">Export CSV</span>
+            <span className="max-sm:hidden">Export</span>
           </Button>
         </>
       )}

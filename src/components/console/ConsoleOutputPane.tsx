@@ -1,4 +1,6 @@
-import { useId, useMemo, useState } from "react";
+import { lazy, Suspense, useId, useMemo, useState } from "react";
+import { Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import type { ConsoleSession } from "../../store/consoleStore";
 import { ConsoleOutput } from "./ConsoleOutput";
@@ -8,15 +10,24 @@ import type { OutputTab, OutputTabOption } from "./ConsoleOutputTabs";
 import { ConsoleRunState } from "./ConsoleRunState";
 import { ResultViewToggle } from "../json/ResultViewToggle";
 
+const ExportDialog = lazy(() =>
+  import("../export/ExportDialog").then((m) => ({ default: m.ExportDialog })),
+);
+
 interface ConsoleOutputPaneProps {
   session: ConsoleSession | undefined;
   /** The last completed run's duration, when it was timed. */
   durationMs?: number;
+  /** Where the result comes from, for the export dialog, e.g. "shop console". */
+  exportLabel: string;
+  /** File name the export suggests, without extension. */
+  exportName: string;
 }
 
 /** The console's output: Result and Logs tabs over the run's state. */
-export function ConsoleOutputPane({ session, durationMs }: ConsoleOutputPaneProps) {
+export function ConsoleOutputPane({ session, durationMs, exportLabel, exportName }: ConsoleOutputPaneProps) {
   const [tab, setTab] = useState<OutputTab>("result");
+  const [exporting, setExporting] = useState(false);
   const idPrefix = useId();
   const running = session?.running ?? false;
   const hasResult = session?.hasResult ?? false;
@@ -48,6 +59,12 @@ export function ConsoleOutputPane({ session, durationMs }: ConsoleOutputPaneProp
         {/* ConsoleOutput follows the shared result view but has no switch
             of its own yet. */}
         {tab === "result" && hasResult && <ResultViewToggle />}
+        {hasResult && !running && (
+          <Button variant="ghost" size="sm" onClick={() => setExporting(true)} title="Export the result to CSV or JSON">
+            <Download />
+            Export
+          </Button>
+        )}
         <ConsoleRunState
           running={running}
           failed={!running && error !== null}
@@ -77,6 +94,14 @@ export function ConsoleOutputPane({ session, durationMs }: ConsoleOutputPaneProp
           <ConsoleOutput session={resultSession} />
         )}
       </div>
+      {exporting && session?.hasResult && (
+        <Suspense fallback={null}>
+          <ExportDialog
+            target={{ kind: "result", value: session.result, label: exportLabel, baseName: exportName }}
+            onClose={() => setExporting(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

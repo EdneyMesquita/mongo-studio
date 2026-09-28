@@ -63,7 +63,7 @@ export const CollectionTabView = memo(function CollectionTabView({ tab, active }
       )}
       <Suspense fallback={null}>
         {dialog === "explain" && <ExplainDialog tab={tab} onClose={closeDialog} />}
-        {dialog === "export" && <ExportDialog tab={tab} onClose={closeDialog} />}
+        {dialog === "export" && <ExportDialog target={{ kind: "tab", tab }} onClose={closeDialog} />}
       </Suspense>
     </div>
   );

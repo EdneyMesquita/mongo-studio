@@ -582,7 +582,7 @@ pub fn cancel_script(state: State<AppState>, execution_id: String) {
 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-pub async fn export_to_csv(
+pub async fn export_query(
     state: State<'_, AppState>,
     app: AppHandle,
     session_id: String,
@@ -616,7 +616,7 @@ pub async fn export_to_csv(
         );
     };
 
-    let result = export::export_to_csv(
+    let result = export::export_query(
         &client,
         &database,
         &collection,
@@ -630,6 +630,20 @@ pub async fn export_to_csv(
 
     state.running_tasks.lock().unwrap().remove(&execution_id);
     result
+}
+
+/// Writes a value the frontend already holds, such as a console result.
+#[tauri::command]
+pub async fn export_value(
+    value: serde_json::Value,
+    options: ExportOptions,
+    dest_path: String,
+) -> AppResult<ExportSummary> {
+    tokio::task::spawn_blocking(move || {
+        export::export_value(&value, &options, std::path::Path::new(&dest_path))
+    })
+    .await
+    .map_err(|e| AppError::InvalidInput(format!("export failed: {e}")))?
 }
 
 #[tauri::command]
