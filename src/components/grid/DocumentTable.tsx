@@ -1,11 +1,14 @@
 import { useCallback, useContext, useMemo, useRef } from "react";
-import type { CSSProperties, KeyboardEvent } from "react";
+import type { KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
 import { documentKey } from "../../lib/bsonFormat";
 import { columnsOf } from "../../lib/documentColumns";
 import { ValueEditContext } from "../json/ValueEditContext";
 import { DocumentTableRow } from "./DocumentTableRow";
 import { useScrollbarWidth } from "./useScrollbarWidth";
+import { useVirtualRows } from "./useVirtualRows";
+
+const HEADER_HEIGHT = 30;
 
 interface DocumentTableProps {
   documents: unknown[];
@@ -18,18 +21,12 @@ interface DocumentTableProps {
   className?: string;
 }
 
-/** Fades the last 36px before the vertical scrollbar, leaving the scrollbar itself whole. */
-function fadeMask(scrollbar: number): CSSProperties {
-  const edge = `100% - ${scrollbar}px`;
-  const mask = `linear-gradient(to right, black calc(${edge} - 36px), transparent calc(${edge} - 4px), transparent calc(${edge}), black calc(${edge}))`;
-  return { maskImage: mask, WebkitMaskImage: mask };
-}
-
 /**
  * Documents as a grid: columns inferred from their fields, a sticky header
  * with each field's type, sticky row numbers. With `onSelect`, a click or
  * ArrowUp/ArrowDown selects a row. Scalar cells edit in place on
- * double-click under a ValueEditContext.
+ * double-click under a ValueEditContext. Large results render only the rows
+ * in view (useVirtualRows), so a 2000-document page scrolls like a small one.
  */
 export function DocumentTable({
   documents,
@@ -43,15 +40,15 @@ export function DocumentTable({
   const scrollbar = useScrollbarWidth(scroller);
   const columns = useMemo(() => columnsOf(documents), [documents]);
   const saved = useContext(ValueEditContext)?.saved ?? null;
+  const rows = useVirtualRows(scroller, documents.length, HEADER_HEIGHT);
+  const { reveal } = rows;
 
   const select = useCallback(
     (index: number) => {
       onSelect?.(index);
-      scroller.current
-        ?.querySelector(`tr[data-row="${index}"]`)
-        ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      reveal(index);
     },
-    [onSelect],
+    [onSelect, reveal],
   );
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
@@ -69,11 +66,11 @@ export function DocumentTable({
   }
 
   return (
+    <div className={cn("relative flex min-h-0 min-w-0", className)}>
     <div
       ref={scroller}
       tabIndex={onSelect ? 0 : undefined}
-      className={cn("relative min-h-0 min-w-0 overflow-auto", className)}
-      style={fadeRight ? fadeMask(scrollbar) : undefined}
+      className="relative min-h-0 min-w-0 flex-1 overflow-auto"
       onKeyDown={onKeyDown}
     >
       <table
@@ -104,7 +101,13 @@ export function DocumentTable({
           </tr>
         </thead>
         <tbody>
-          {documents.map((doc, i) => {
+          {rows.padTop > 0 && (
+            <tr aria-hidden style={{ height: rows.padTop }}>
+              <td colSpan={columns.length + 1} className="p-0" />
+            </tr>
+          )}
+          {documents.slice(rows.start, rows.end).map((doc, offset) => {
+            const i = rows.start + offset;
             const flashing = saved !== null && saved.docKey === documentKey(doc);
             return (
               <DocumentTableRow
@@ -119,8 +122,23 @@ export function DocumentTable({
               />
             );
           })}
+          {rows.padBottom > 0 && (
+            <tr aria-hidden style={{ height: rows.padBottom }}>
+              <td colSpan={columns.length + 1} className="p-0" />
+            </tr>
+          )}
         </tbody>
       </table>
+    </div>
+      {/* Where the grid meets a panel beside it, its right edge fades out
+          (an overlay: a CSS mask made every scroll frame repaint the table). */}
+      {fadeRight && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 w-9 bg-linear-to-r from-transparent to-editor"
+          style={{ right: scrollbar }}
+        />
+      )}
     </div>
   );
 }

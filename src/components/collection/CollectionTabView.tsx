@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { lazy, memo, Suspense, useState } from "react";
 import type { CollectionTab } from "../../store/sessionsStore";
 import { useUiStore } from "../../store/uiStore";
 import { cn } from "@/lib/utils";
@@ -6,8 +6,14 @@ import { QueryBar } from "../query/QueryBar";
 import { DocumentResults } from "../results/DocumentResults";
 import { IndexesPanel } from "../indexes/IndexesPanel";
 import { ScriptConsole } from "../console/ScriptConsole";
-import { ExplainDialog } from "../explain/ExplainDialog";
-import { ExportDialog } from "../export/ExportDialog";
+
+// Loaded on first use: most sessions never open them.
+const ExplainDialog = lazy(() =>
+  import("../explain/ExplainDialog").then((m) => ({ default: m.ExplainDialog })),
+);
+const ExportDialog = lazy(() =>
+  import("../export/ExportDialog").then((m) => ({ default: m.ExportDialog })),
+);
 import { CollectionToolbar } from "./CollectionToolbar";
 
 interface CollectionTabViewProps {
@@ -20,9 +26,10 @@ type ToolDialog = "explain" | "export" | null;
 
 /**
  * Everything under a collection tab: its toolbar (Documents / Indexes /
- * Console) and the view picked there.
+ * Console) and the view picked there. Memoised: every open tab stays
+ * mounted, and typing in one tab's query must not re-render the others.
  */
-export function CollectionTabView({ tab, active }: CollectionTabViewProps) {
+export const CollectionTabView = memo(function CollectionTabView({ tab, active }: CollectionTabViewProps) {
   const view = useUiStore((s) => s.mainTab);
   const setView = useUiStore((s) => s.setMainTab);
   const [dialog, setDialog] = useState<ToolDialog>(null);
@@ -54,8 +61,10 @@ export function CollectionTabView({ tab, active }: CollectionTabViewProps) {
           <ScriptConsole tab={tab} />
         </div>
       )}
-      {dialog === "explain" && <ExplainDialog tab={tab} onClose={closeDialog} />}
-      {dialog === "export" && <ExportDialog tab={tab} onClose={closeDialog} />}
+      <Suspense fallback={null}>
+        {dialog === "explain" && <ExplainDialog tab={tab} onClose={closeDialog} />}
+        {dialog === "export" && <ExportDialog tab={tab} onClose={closeDialog} />}
+      </Suspense>
     </div>
   );
-}
+});

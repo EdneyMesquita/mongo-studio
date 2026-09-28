@@ -1,7 +1,18 @@
+import { lazy, Suspense } from "react";
 import { useUiStore } from "../../store/uiStore";
-import { ConnectionForm } from "../connections/ConnectionForm";
-import { ConnectionsImportExportDialog } from "../connections/ConnectionsImportExportDialog";
-import { EditConnectionDialog } from "./EditConnectionDialog";
+
+// Loaded on first use, keeping them out of the startup bundle.
+const ConnectionForm = lazy(() =>
+  import("../connections/ConnectionForm").then((m) => ({ default: m.ConnectionForm })),
+);
+const ConnectionsImportExportDialog = lazy(() =>
+  import("../connections/ConnectionsImportExportDialog").then((m) => ({
+    default: m.ConnectionsImportExportDialog,
+  })),
+);
+const EditConnectionDialog = lazy(() =>
+  import("./EditConnectionDialog").then((m) => ({ default: m.EditConnectionDialog })),
+);
 
 /**
  * App-level dialogs, opened from anywhere through uiStore: the connection
@@ -14,10 +25,12 @@ export function DialogHost() {
   const setImportExportOpen = useUiStore((s) => s.setImportExportOpen);
   const close = () => setConnectionDialog(null);
 
-  if (dialog?.mode === "new") return <ConnectionForm onSaved={close} onCancel={close} />;
-  if (dialog?.mode === "edit") return <EditConnectionDialog key={dialog.id} id={dialog.id} onClose={close} />;
-  if (importExportOpen) {
-    return <ConnectionsImportExportDialog onClose={() => setImportExportOpen(false)} />;
+  let content = null;
+  if (dialog?.mode === "new") content = <ConnectionForm onSaved={close} onCancel={close} />;
+  else if (dialog?.mode === "edit") {
+    content = <EditConnectionDialog key={dialog.id} id={dialog.id} onClose={close} />;
+  } else if (importExportOpen) {
+    content = <ConnectionsImportExportDialog onClose={() => setImportExportOpen(false)} />;
   }
-  return null;
+  return <Suspense fallback={null}>{content}</Suspense>;
 }

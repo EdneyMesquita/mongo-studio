@@ -8,7 +8,7 @@ import { SidePanelHost } from "./components/layout/SidePanelHost";
 import { StatusBar } from "./components/layout/StatusBar";
 import { ToolStripe } from "./components/layout/ToolStripe";
 import { useGlobalShortcuts } from "./components/layout/useGlobalShortcuts";
-import { QuickOpenPalette } from "./components/palette/QuickOpenPalette";
+import { LazyQuickOpenPalette } from "./components/palette/LazyQuickOpenPalette";
 import { useSuppressNativeContextMenu } from "./lib/useSuppressNativeContextMenu";
 
 function App() {
@@ -25,7 +25,7 @@ function App() {
       >
         <EditorArea />
       </AppShell>
-      <QuickOpenPalette />
+      <LazyQuickOpenPalette />
       <DialogHost />
       <Toaster />
     </TooltipProvider>

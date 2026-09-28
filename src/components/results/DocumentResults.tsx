@@ -9,7 +9,28 @@ import { ResultsError } from "./ResultsError";
 import { ResultsHeader } from "./ResultsHeader";
 import { useDocumentValueEditor } from "./useDocumentValueEditor";
 
-function ResultViews({ tab, documents }: { tab: CollectionTab; documents: unknown[] }) {
+interface ResultViewsProps {
+  tab: CollectionTab;
+  documents: unknown[];
+}
+
+/**
+ * The views depend on the results and on which collection they came from,
+ * never on the query text: typing in the filter changes the tab object on
+ * every key, and must not re-render the grid and the inspector.
+ */
+function sameResults(a: ResultViewsProps, b: ResultViewsProps): boolean {
+  return (
+    a.documents === b.documents &&
+    a.tab.id === b.tab.id &&
+    a.tab.resultsMode === b.tab.resultsMode &&
+    a.tab.database === b.tab.database &&
+    a.tab.collection === b.tab.collection &&
+    a.tab.connection === b.tab.connection
+  );
+}
+
+const ResultViews = memo(function ResultViews({ tab, documents }: ResultViewsProps) {
   const resultView = useUiStore((s) => s.resultView);
   if (documents.length === 0) {
     return <p className="p-6 text-center text-fg-3">No documents match this query.</p>;
@@ -26,7 +47,7 @@ function ResultViews({ tab, documents }: { tab: CollectionTab; documents: unknow
     default:
       return <DocumentGridView tab={tab} documents={documents} />;
   }
-}
+}, sameResults);
 
 /**
  * A collection tab's query results under its query bar: the results header,
