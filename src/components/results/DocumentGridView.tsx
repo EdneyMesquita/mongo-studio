@@ -5,10 +5,13 @@ import { DocumentTable } from "../grid/DocumentTable";
 import { DocumentInspector } from "./DocumentInspector";
 import { InspectorResizer } from "./InspectorResizer";
 import { useDocumentSelection } from "./useDocumentSelection";
+import { useElementWidth } from "./useElementWidth";
 import { useMediaQuery } from "./useMediaQuery";
 
 /** The inspector's default width on narrower windows. */
 const NARROW_INSPECTOR_WIDTH = 320;
+/** Below this width the grid and the inspector stack: the grid would be too narrow beside it. */
+const STACK_BELOW = 780;
 
 interface DocumentGridViewProps {
   tab: CollectionTab;
@@ -22,14 +25,15 @@ interface DocumentGridViewProps {
 export function DocumentGridView({ tab, documents }: DocumentGridViewProps) {
   const [selected, select] = useDocumentSelection(tab.id, documents);
   const storedWidth = useUiStore((s) => s.inspectorWidth);
-  const stacked = useMediaQuery("(max-width: 959px)");
+  const [box, boxWidth] = useElementWidth<HTMLDivElement>();
+  const stacked = useMediaQuery("(max-width: 959px)") || (boxWidth > 0 && boxWidth < STACK_BELOW);
   const narrow = useMediaQuery("(max-width: 1179px)");
   // Narrow windows start the inspector smaller; a width the user dragged to stays.
   const width =
     narrow && storedWidth === DEFAULT_INSPECTOR_WIDTH ? NARROW_INSPECTOR_WIDTH : storedWidth;
 
   return (
-    <div className={cn("flex min-h-0 flex-1", stacked && "flex-col")}>
+    <div ref={box} className={cn("flex min-h-0 flex-1", stacked && "flex-col")}>
       <DocumentTable
         documents={documents}
         selectedIndex={selected}

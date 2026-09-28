@@ -25,6 +25,12 @@ function resolve(selection: Selection | null, documents: unknown[]): number | nu
   return found === -1 ? 0 : found;
 }
 
+/** The document selected in a tab's grid, read outside React (the Assistant's context). */
+export function selectedDocumentOf(tabId: string, documents: unknown[]): unknown {
+  const index = resolve(remembered.get(tabId) ?? null, documents);
+  return index === null ? undefined : documents[index];
+}
+
 /** The grid's selected row for a tab, and a setter; the first row until one is picked. */
 export function useDocumentSelection(
   tabId: string,

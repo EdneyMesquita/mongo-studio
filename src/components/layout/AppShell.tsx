@@ -11,6 +11,8 @@ interface AppShellProps {
   /** The side panel's content; its box hides when no tool window is open. */
   sidePanel: ReactNode;
   statusBar: ReactNode;
+  /** A tool window docked right of the editor: the Assistant. */
+  rightPanel?: ReactNode;
   /** The editor area. */
   children: ReactNode;
 }
@@ -20,7 +22,7 @@ interface AppShellProps {
  * panel, editor and status bar. Under 960px the side panel floats over the
  * editor instead of pushing it aside.
  */
-export function AppShell({ toolbar, stripe, sidePanel, statusBar, children }: AppShellProps) {
+export function AppShell({ toolbar, stripe, sidePanel, statusBar, rightPanel, children }: AppShellProps) {
   const sidebarWidth = useUiStore((s) => s.sidebarWidth);
   const panelOpen = useUiStore((s) => s.sidePanel !== null);
 
@@ -53,6 +55,7 @@ export function AppShell({ toolbar, stripe, sidePanel, statusBar, children }: Ap
           <SidebarResizer />
         </aside>
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-editor">{children}</main>
+        {rightPanel}
       </div>
       {statusBar}
     </div>

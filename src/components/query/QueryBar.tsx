@@ -1,4 +1,5 @@
-import { Play } from "lucide-react";
+import { Play, Sparkles } from "lucide-react";
+import { useAssistantStore } from "../../store/assistantStore";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import { useSessionsStore } from "../../store/sessionsStore";
 import type { CollectionTab, QueryMode } from "../../store/sessionsStore";
@@ -9,6 +10,9 @@ import type { SegmentOption } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
 import { QueryEditor } from "./QueryEditor";
 import { QueryNumberField } from "./QueryNumberField";
+import { InlineAskStrip } from "../assistant/InlineAskStrip";
+import { ProposedFilter } from "../assistant/ProposedFilter";
+import { useAssistantFlash } from "../assistant/useAssistantFlash";
 
 const modes: SegmentOption<QueryMode>[] = [
   { value: "find", label: "Find" },
@@ -23,6 +27,9 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
   const session = useConnectionsStore((s) => s.sessions[tab.connection.id]);
   const updateTab = useSessionsStore((s) => s.updateTab);
   const runQuery = useSessionsStore((s) => s.runQuery);
+  const ask = useAssistantStore((s) => (s.inline[tab.id]?.kind === "filter" ? s.inline[tab.id] : undefined));
+  const askInline = useAssistantStore((s) => s.askInline);
+  const flash = useAssistantFlash(tab.id);
 
   if (!session) return null;
 
@@ -36,11 +43,18 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
     collection: tab.collection,
   });
 
+  const reviewing = !aggregate && ask?.state === "review" && ask.proposal !== null;
+  // While a proposal waits for Accept or Reject it is the bar's one primary.
+  const pending = !aggregate && ask !== undefined;
+
   return (
+    <>
+    {/* A container, so a narrow editor (the Assistant open) gives the filter its own row. */}
     <div
       className={cn(
-        "flex flex-none flex-wrap gap-2 border-b border-line px-2.5 py-2",
-        aggregate ? "items-start" : "items-center",
+        "@container flex flex-none flex-wrap gap-2 px-2.5 py-2",
+        pending ? "pb-1.5" : "border-b border-line",
+        aggregate || reviewing ? "items-start" : "items-center",
       )}
     >
       <SegmentedControl
@@ -60,21 +74,42 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
           completionContext={completionContext}
           onSubmit={submit}
           placeholder='[ { "$match": {} }, { "$limit": 50 } ]'
-          className="min-w-[200px] flex-1 max-sm:order-first max-sm:basis-full"
+          className={cn(
+            "min-w-[200px] flex-1 max-sm:order-first max-sm:basis-full",
+            flash === "pipeline" && "animate-flash-box",
+          )}
         />
       ) : (
         <>
-          <QueryEditor
-            kind="filter"
-            label="filter"
-            ariaLabel="Filter"
-            value={filterText}
-            onChange={(text) => updateTab(tab.id, { filterText: text })}
-            completionContext={completionContext}
-            onSubmit={submit}
-            placeholder='{ "field": "value" }'
-            className="min-w-[200px] flex-1 max-sm:order-first max-sm:basis-full"
-          />
+          {reviewing ? (
+            <ProposedFilter original={ask.original} proposal={ask.proposal!} />
+          ) : (
+            <QueryEditor
+              kind="filter"
+              label="filter"
+              ariaLabel="Filter"
+              value={filterText}
+              onChange={(text) => updateTab(tab.id, { filterText: text })}
+              completionContext={completionContext}
+              onSubmit={submit}
+              placeholder='{ "field": "value" }'
+              className={cn(
+                "min-w-[200px] flex-1 max-sm:order-first max-sm:basis-full @max-[820px]:order-first @max-[820px]:basis-full",
+                flash === "filter" && "animate-flash-box",
+              )}
+              trailing={
+                <button
+                  type="button"
+                  onClick={askInline}
+                  title="Ask the Assistant (Ctrl I)"
+                  aria-label="Ask the Assistant for a filter"
+                  className="mr-[3px] grid size-6 shrink-0 place-items-center rounded-sm text-fg-3 hover:bg-hover hover:text-accent-text"
+                >
+                  <Sparkles className="size-3.5" />
+                </button>
+              }
+            />
+          )}
           <QueryEditor
             kind="sort"
             label="sort"
@@ -98,16 +133,34 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
           />
         </>
       )}
-      <Button
-        variant="primary"
-        disabled={loading}
-        onClick={submit}
-        className={aggregate ? "mt-px" : undefined}
-      >
-        <Play />
-        Run
-        <Kbd>{aggregate ? "Ctrl ⏎" : "⏎"}</Kbd>
-      </Button>
+      <div className={cn("flex flex-col items-start gap-1.5", aggregate && "mt-px")}>
+        <Button
+          variant={pending ? "secondary" : "primary"}
+          disabled={loading || pending}
+          title={pending ? "Accept or reject the proposal first" : undefined}
+          onClick={submit}
+        >
+          <Play />
+          Run
+          <Kbd>{aggregate ? "Ctrl ⏎" : "⏎"}</Kbd>
+        </Button>
+        {aggregate && tab.assistantSource === "pipeline" && <FromAssistantTag />}
+      </div>
     </div>
+    {ask && !aggregate && <InlineAskStrip tab={tab} ask={ask} />}
+    </>
+  );
+}
+
+/** Marks a query or script the Assistant wrote, until the user edits it. */
+export function FromAssistantTag() {
+  return (
+    <span
+      title="Written by the Assistant"
+      className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-sm bg-accent/12 px-1.5 text-xs font-medium whitespace-nowrap text-accent-text"
+    >
+      <Sparkles className="size-3" />
+      from Assistant
+    </span>
   );
 }
