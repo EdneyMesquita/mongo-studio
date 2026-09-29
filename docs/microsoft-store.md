@@ -23,7 +23,7 @@ Mongo Studio goes to the Store as an **MSIX** package. The Store signs MSIX pack
 
 ## Building a package
 
-Pushing a `vX.Y.Z` tag builds the package along with the other release installers. You can also build it at any time from *Actions* > *Microsoft Store* > *Run workflow*. When the run finishes, download the **msix-microsoft-store** artifact: a zip holding `MongoStudio_X.Y.Z.0_x64.msix`.
+Publishing a GitHub release builds its package. You can also build one at any time from *Actions* > *Microsoft Store* > *Run workflow*: leave *tag* empty for the latest release, and leave *submit* unchecked to only build. When the run finishes, download the **msix-microsoft-store** artifact: a zip holding `MongoStudio_X.Y.Z.0_x64.msix`.
 
 Two versioning rules apply:
 
@@ -54,7 +54,43 @@ In Partner Center, open the app and start a submission:
 
 ## Updates
 
-Bump the version in `src-tauri/tauri.conf.json` and push the tag. Then start a new submission with the new `.msix`. Store installs update themselves once it's certified.
+Once the app is live, the workflow submits each new release by itself. The new submission copies the last one, so the listing, pricing and the rest stay as they are; only the package changes. Certification follows as usual, and Store installs update themselves once it passes.
+
+A release reaches the Store when its GitHub release is published, not when its tag is pushed. Releases start as drafts, and the Store gets them only when they go public.
+
+### Setting up automatic submissions
+
+1. **A Microsoft Entra tenant.** In Partner Center, open *Account settings* > *Tenants*. Associate the tenant you already have, or create a new one there. A new tenant is free.
+2. **An Entra app.** In *Account settings* > *User management* > *Microsoft Entra applications*, add a new app and give it the **Manager** role. Then create a key for it and copy the **client secret** right away, because it's shown only once. The same page shows the app's **tenant ID** and **client ID**.
+3. **Seller ID.** Find it in *Account settings*, under *Legal info* > *Developer* or *Identifiers*, depending on the account.
+4. **Store ID.** Find it in the app > *Product management* > *Product identity*. It looks like `9N...`.
+5. **In GitHub**, open *Settings* > *Secrets and variables* > *Actions*:
+
+   | Kind | Name | Value |
+   |---|---|---|
+   | Secret | `MSSTORE_TENANT_ID` | Tenant ID |
+   | Secret | `MSSTORE_SELLER_ID` | Seller ID |
+   | Secret | `MSSTORE_CLIENT_ID` | Client ID |
+   | Secret | `MSSTORE_CLIENT_SECRET` | Client secret |
+   | Variable | `MSSTORE_PRODUCT_ID` | Store ID |
+   | Variable | `MSSTORE_SOURCE_REPO` | Only in a fork: the repository whose releases to follow, e.g. `matheuscaet/mongo-studio` |
+
+6. **Mark what's already in the Store.** Each submitted release is marked with an `msstore/vX.Y.Z` tag, so it's sent only once. A version you submitted by hand has no mark yet. Push one for it, or the schedule will try to submit that version again:
+
+   ```bash
+   git tag msstore/v1.0.0 && git push origin msstore/v1.0.0
+   ```
+
+### When a release is picked up
+
+- **In the repository that makes the releases,** publishing one starts the build right away.
+- **In a fork,** `MSSTORE_SOURCE_REPO` points to the upstream repository. Its releases don't trigger anything in the fork, so a run every six hours looks for a new one.
+  - The schedule only runs from the fork's default branch.
+  - GitHub turns schedules off in a public repository after 60 days without activity. It warns by email first, and *Actions* > *Microsoft Store* > *Enable workflow* turns it back on.
+
+### When a submission fails
+
+A submission fails while the previous one is still in certification, or when the version isn't higher than the one in the Store. Nothing is marked in that case, so the next scheduled run tries again. To resend a release that is already marked, run the workflow by hand with *submit* checked.
 
 ## Good to know
 
