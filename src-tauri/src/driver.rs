@@ -21,6 +21,8 @@ use crate::ssh_tunnel::{self, KnownHosts, SshTunnel, SshTunnelAuth, SshTunnelCon
 pub struct ActiveConnection {
     pub client: Client,
     pub tunnel: Option<SshTunnel>,
+    /// The connection's name, for log lines about this session.
+    pub name: String,
 }
 
 /// Builds a plain connection URI (no advanced overrides applied yet) from a
@@ -274,7 +276,11 @@ pub async fn connect(
         .database("admin")
         .run_command(doc! { "ping": 1 })
         .await?;
-    Ok(ActiveConnection { client, tunnel })
+    Ok(ActiveConnection {
+        client,
+        tunnel,
+        name: profile.name.clone(),
+    })
 }
 
 pub async fn test_connection(

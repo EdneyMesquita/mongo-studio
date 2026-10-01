@@ -363,6 +363,19 @@ impl Assistant {
 
     pub async fn detect(&self) -> Vec<DetectedAgent> {
         let detected = detect::detect_agents().await;
+        for (_, agent, _) in &detected {
+            match (&agent.path, &agent.version, &agent.error) {
+                (None, _, _) => log::info!("{} not found", agent.name),
+                (Some(path), _, Some(error)) => {
+                    log::warn!("{} found at {path} but didn't run: {error}", agent.name)
+                }
+                (Some(path), version, None) => log::info!(
+                    "{} {} found at {path}",
+                    agent.name,
+                    version.as_deref().unwrap_or("(version unknown)")
+                ),
+            }
+        }
         let mut binaries = self.inner.binaries.lock().unwrap();
         for (kind, _, path) in &detected {
             match path {
@@ -434,6 +447,13 @@ impl Assistant {
             runner: tokio::sync::Mutex::new(agents::Runner::default()),
         });
         let agent_session_id = session.id.clone();
+        log::info!(
+            "Assistant conversation {agent_session_id} opened with {} on \"{}\" ({}), database {}",
+            session.agent.display_name(),
+            session.connection_name,
+            session.connection_id,
+            session.database
+        );
         inner
             .sessions
             .lock()
@@ -457,6 +477,7 @@ impl Assistant {
         let session = self.inner.sessions.lock().unwrap().remove(agent_session_id);
         if let Some(session) = session {
             agents::stop(&self.inner, &session, true).await;
+            log::info!("Assistant conversation {agent_session_id} closed");
         }
         Ok(())
     }

@@ -25,13 +25,26 @@ pub struct AppState {
 impl AppState {
     pub fn init(config_dir: &std::path::Path) -> Result<Self, String> {
         let connection_store = ConnectionStore::load(config_dir).map_err(|e| e.to_string())?;
+        log::info!(
+            "{} saved connections in {}",
+            connection_store.list().len(),
+            config_dir.display()
+        );
         let known_hosts = Arc::new(KnownHosts::load(config_dir).map_err(|e| e.to_string())?);
 
         let (secret_store, secret_backend): (Box<dyn SecretStore>, SecretBackendKind) =
             match KeyringStore::probe() {
-                Ok(store) => (Box::new(store), SecretBackendKind::Keyring),
-                Err(_) => {
-                    let store = EncryptedFileStore::new(config_dir)?;
+                Ok(store) => {
+                    log::info!("secrets are kept in the OS keychain");
+                    (Box::new(store), SecretBackendKind::Keyring)
+                }
+                Err(e) => {
+                    log::warn!(
+                        "no usable OS keychain ({e}); secrets are kept in an encrypted file instead"
+                    );
+                    let store = EncryptedFileStore::new(config_dir).inspect_err(|e| {
+                        log::error!("can't open the encrypted secret file: {e}")
+                    })?;
                     (Box::new(store), SecretBackendKind::EncryptedFile)
                 }
             };
