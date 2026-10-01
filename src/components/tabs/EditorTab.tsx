@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Loader2, SquareTerminal, Table, X } from "lucide-react";
+import { useEditorLayoutStore } from "../../store/editorLayoutStore";
 import { useSessionsStore } from "../../store/sessionsStore";
 import type { Tab } from "../../store/sessionsStore";
 import { useScriptsStore } from "../../store/scriptsStore";
@@ -11,17 +12,25 @@ import { useConnectionColor } from "@/lib/connectionColor";
 import { cn } from "@/lib/utils";
 import { tabName } from "./tabName";
 import { useConsoleDirty } from "./useConsoleDirty";
+import { startTabDrag } from "./useTabDrag";
+import { PaneNumber } from "./PaneNumber";
 
 interface EditorTabProps {
   tab: Tab;
   active: boolean;
   /** The tab's right-click menu, built when it opens. */
   entries: () => MenuEntry[];
+  /** In its connection's group, whose header already names the connection. */
+  bare?: boolean;
+  /** The pane showing it in a split, from 0; null when it's in none. */
+  pane?: number | null;
+  /** Whether that pane is the focused one. */
+  paneFocused?: boolean;
 }
 
 /** One tab of the editor strip, underlined in its connection's color when active. */
-export function EditorTab({ tab, active, entries }: EditorTabProps) {
-  const activateTab = useSessionsStore((s) => s.activateTab);
+export function EditorTab({ tab, active, entries, bare = false, pane = null, paneFocused = false }: EditorTabProps) {
+  const showTab = useEditorLayoutStore((s) => s.showTab);
   const closeTab = useSessionsStore((s) => s.closeTab);
   const ref = useRef<HTMLDivElement>(null);
   const fileName = useScriptsStore((s) =>
@@ -47,17 +56,18 @@ export function EditorTab({ tab, active, entries }: EditorTabProps) {
         role="tab"
         aria-selected={active}
         tabIndex={0}
-        title={`${tabName(tab)}${fileName ? ` · ${fileName}` : ""}\n${tab.connection.name} · ${tab.connection.summary}`}
+        title={`${tabName(tab)}${fileName ? ` · ${fileName}` : ""}\n${tab.connection.name} · ${tab.connection.summary}${pane !== null ? `\nIn pane ${pane + 1}` : ""}`}
         className={cn(
           "group relative flex max-w-[280px] shrink-0 select-none items-center gap-[7px] whitespace-nowrap pl-3 pr-1.5 text-base",
           active ? "text-fg" : "text-fg-2 hover:bg-row-hover hover:text-fg",
         )}
-        onClick={() => activateTab(tab.id)}
+        onClick={() => showTab(tab.id)}
+        onPointerDown={(e) => startTabDrag(e, tab.id, name)}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            activateTab(tab.id);
+            showTab(tab.id);
           }
         }}
         // Middle-click closes, as in a browser. Swallow the mousedown too, or
@@ -79,8 +89,9 @@ export function EditorTab({ tab, active, entries }: EditorTabProps) {
         />
         <span className="min-w-0 truncate">{name}</span>
         {/* Names the connection too, so tabs stay unambiguous when two
-            servers hold the same namespace. */}
-        <span className="shrink-0 text-sm text-fg-3">{tab.connection.name}</span>
+            servers hold the same namespace - unless its group already does. */}
+        {!bare && <span className="shrink-0 text-sm text-fg-3">{tab.connection.name}</span>}
+        {pane !== null && <PaneNumber pane={pane} focused={paneFocused} />}
         {dirty && (
           <span
             role="img"
@@ -93,6 +104,7 @@ export function EditorTab({ tab, active, entries }: EditorTabProps) {
           size="icon-xs"
           aria-label={`Close ${name} on ${tab.connection.name}`}
           title="Close (middle-click)"
+          data-no-drag=""
           className={cn(
             "text-fg-3",
             active ? "opacity-100" : "opacity-0 group-has-[:focus-visible]:opacity-100 group-hover:opacity-100",

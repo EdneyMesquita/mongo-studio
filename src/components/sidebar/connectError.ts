@@ -3,6 +3,7 @@
  * in its tooltip.
  */
 export function connectErrorLabel(message: string): string {
+  if (/no password is saved|saved password .* is missing/i.test(message)) return "Needs password";
   if (/auth|credential|password|scram|unauthori[sz]ed|not authorized/i.test(message)) {
     return "Auth failed";
   }

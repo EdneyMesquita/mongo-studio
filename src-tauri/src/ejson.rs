@@ -57,6 +57,66 @@ mod tests {
         assert_eq!(back.get_i32("count").unwrap(), 3);
     }
 
+    /// Every shape the query fields' parser (src/lib/queryText.ts) turns
+    /// mongosh helpers into must read back as its BSON type here.
+    #[test]
+    fn reads_the_shapes_the_query_parser_emits() {
+        let value = serde_json::json!({
+            "oid": { "$oid": "65f0c3a2e4b0a1b2c3d4e5f6" },
+            "date": { "$date": "2026-01-31T14:30:00.000Z" },
+            "oldDate": { "$date": { "$numberLong": "-1000" } },
+            "long": { "$numberLong": "9007199254740993" },
+            "int": { "$numberInt": "5" },
+            "decimal": { "$numberDecimal": "10.25" },
+            "uuid": { "$uuid": "3b241101-e2bb-4255-8caf-4136c566a962" },
+            "regex": { "$regularExpression": { "pattern": "^ac", "options": "i" } },
+            "ts": { "$timestamp": { "t": 1700000000, "i": 3 } },
+            "bin": { "$binary": { "base64": "AAECAwQFBgcICQoLDA0ODw==", "subType": "04" } },
+            "min": { "$minKey": 1 },
+            "max": { "$maxKey": 1 },
+            "nan": { "$numberDouble": "NaN" },
+            "inf": { "$numberDouble": "-Infinity" },
+        });
+        let doc = json_to_document(value).unwrap();
+        use bson::spec::{BinarySubtype, ElementType};
+        let types: Vec<ElementType> = doc.values().map(Bson::element_type).collect();
+        assert_eq!(
+            types,
+            vec![
+                ElementType::ObjectId,
+                ElementType::DateTime,
+                ElementType::DateTime,
+                ElementType::Int64,
+                ElementType::Int32,
+                ElementType::Decimal128,
+                ElementType::Binary,
+                ElementType::RegularExpression,
+                ElementType::Timestamp,
+                ElementType::Binary,
+                ElementType::MinKey,
+                ElementType::MaxKey,
+                ElementType::Double,
+                ElementType::Double,
+            ]
+        );
+        assert_eq!(
+            doc.get_datetime("oldDate").unwrap().timestamp_millis(),
+            -1000
+        );
+        assert_eq!(doc.get_i64("long").unwrap(), 9_007_199_254_740_993);
+        let Some(Bson::Binary(uuid)) = doc.get("uuid") else {
+            panic!("uuid")
+        };
+        assert_eq!(uuid.subtype, BinarySubtype::Uuid);
+        let Some(Bson::RegularExpression(regex)) = doc.get("regex") else {
+            panic!("regex")
+        };
+        assert_eq!(
+            (regex.pattern.as_str(), regex.options.as_str()),
+            ("^ac", "i")
+        );
+    }
+
     #[test]
     fn rejects_non_object_filter() {
         let err = json_to_document(Value::String("nope".to_string()));

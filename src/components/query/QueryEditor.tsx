@@ -6,6 +6,14 @@ import { useThemeStore } from "../../store/themeStore";
 import { monacoTheme } from "../../lib/themes";
 import { attachCompletion } from "../../lib/monacoCompletion";
 import { addEditorCommand } from "../../lib/monaco";
+import { QUERY_LANGUAGE } from "../../lib/monacoQueryLanguage";
+import {
+  compactQueryText,
+  parseOptionalQueryObject,
+  parseQueryArray,
+  parseQueryObject,
+  QuerySyntaxError,
+} from "../../lib/queryText";
 import type { CompletionContext } from "../../lib/monacoCompletion";
 import { cn } from "@/lib/utils";
 import { QueryField } from "./QueryField";
@@ -39,9 +47,56 @@ interface QueryEditorProps {
   className?: string;
 }
 
+/** Owner of the error markers this editor sets on its model. */
+const MARKER_OWNER = "mongo-query";
+/** Wait for a pause in typing before underlining an error. */
+const VALIDATE_DELAY_MS = 250;
+
+/** Reads the text the way running the query will, so the squiggle and the run agree. */
+function check(text: string, kind: QueryEditorProps["kind"]): QuerySyntaxError | null {
+  try {
+    if (kind === "pipeline") parseQueryArray(text);
+    else if (kind === "sort") parseOptionalQueryObject(text, "sort");
+    else parseQueryObject(text, "filter");
+    return null;
+  } catch (e) {
+    return e instanceof QuerySyntaxError ? e : null;
+  }
+}
+
+function markErrors(monaco: typeof Monaco, model: Monaco.editor.ITextModel, kind: QueryEditorProps["kind"]) {
+  const text = model.getValue();
+  const error = check(text, kind);
+  if (!error) {
+    monaco.editor.setModelMarkers(model, MARKER_OWNER, []);
+    return;
+  }
+  // An error at the very end ("expected '}'") has nothing under it to
+  // underline: mark the last character typed instead.
+  let start = error.offset;
+  let end = error.offset + error.length;
+  if (start >= text.trimEnd().length) {
+    end = text.trimEnd().length;
+    start = Math.max(0, end - 1);
+  }
+  const from = model.getPositionAt(start);
+  const to = model.getPositionAt(Math.max(end, start + 1));
+  monaco.editor.setModelMarkers(model, MARKER_OWNER, [
+    {
+      severity: monaco.MarkerSeverity.Error,
+      message: error.reason,
+      startLineNumber: from.lineNumber,
+      startColumn: from.column,
+      endLineNumber: to.lineNumber,
+      endColumn: to.column,
+    },
+  ]);
+}
+
 /**
- * A JSON editor sized like a query field: syntax colours, invalid JSON
- * underlined, and MongoDB completion (fields, operators, stages).
+ * A query editor sized like a query field: syntax colours, MongoDB
+ * completion (fields, operators, stages), and what the query parser can't
+ * read underlined. It takes JSON or mongosh-style text (see queryText.ts).
  */
 export function QueryEditor({
   value,
@@ -64,9 +119,16 @@ export function QueryEditor({
   submitRef.current = onSubmit;
   contextRef.current = completionContext;
   const detach = useRef<(() => void) | null>(null);
+  const validateTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [pipelineHeight, setPipelineHeight] = useState(MIN_PIPELINE_HEIGHT);
 
-  useEffect(() => () => detach.current?.(), []);
+  useEffect(
+    () => () => {
+      detach.current?.();
+      clearTimeout(validateTimer.current);
+    },
+    [],
+  );
 
   function handleMount(editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) {
     const model = editor.getModel();
@@ -74,6 +136,13 @@ export function QueryEditor({
       detach.current = attachCompletion(model, {
         editor: kind,
         context: () => contextRef.current(),
+      });
+      markErrors(monaco, model, kind);
+      editor.onDidChangeModelContent(() => {
+        clearTimeout(validateTimer.current);
+        validateTimer.current = setTimeout(() => {
+          if (!model.isDisposed()) markErrors(monaco, model, kind);
+        }, VALIDATE_DELAY_MS);
       });
     }
 
@@ -98,10 +167,12 @@ export function QueryEditor({
       () => submitRef.current(),
       "!suggestWidgetVisible",
     );
-    // Pasted multi-line JSON would hide everything past its first line.
+    // Pasted multi-line text would hide everything past its first line.
+    // Folding drops comments too: on one line a // would swallow the rest.
     editor.onDidPaste(() => {
       if (!model || model.getLineCount() === 1) return;
-      const flat = model.getValue().replace(/\s*\r?\n\s*/g, " ");
+      const text = model.getValue();
+      const flat = compactQueryText(text) ?? text.replace(/\s*\r?\n\s*/g, " ");
       model.setValue(flat);
       editor.setPosition({ lineNumber: 1, column: flat.length + 1 });
     });
@@ -110,7 +181,7 @@ export function QueryEditor({
   const padding = multiline ? PIPELINE_PADDING : LINE_PADDING;
   const editorElement = (
     <Editor
-      language="json"
+      language={QUERY_LANGUAGE}
       // The app themes paint editor.background in the field tone.
       theme={monacoTheme(themeId)}
       value={value}

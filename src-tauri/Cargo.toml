@@ -37,6 +37,9 @@ futures-util = { version = "0.3.34", features = ["io"] }
 rquickjs = { version = "0.14.0", features = ["futures", "macro"] }
 csv = "1.4.0"
 tauri-plugin-dialog = "2.7.3"
+tauri-plugin-log = "2"
+log = "0.4"
+time = { version = "0.3", features = ["local-offset"] }
 
 # Only needed to force-enable apple-native-keyring-store's own "keychain"
 # feature (keyring's own feature flag doesn't do that for us). Gated to

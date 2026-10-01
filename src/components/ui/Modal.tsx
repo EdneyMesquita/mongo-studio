@@ -19,6 +19,8 @@ interface ModalProps {
   footer?: ReactNode;
   /** Tailwind max-width class for the panel. */
   width?: string;
+  /** Extra classes for the scrolling body, e.g. tighter padding for a list. */
+  bodyClassName?: string;
 }
 
 /**
@@ -26,7 +28,15 @@ interface ModalProps {
  * scrolling body and an optional footer. Built on the Radix dialog, so it
  * traps focus, closes on Escape and outside click, and restores focus.
  */
-export function Modal({ title, onClose, children, subheader, footer, width = "max-w-md" }: ModalProps) {
+export function Modal({
+  title,
+  onClose,
+  children,
+  subheader,
+  footer,
+  width = "max-w-md",
+  bodyClassName,
+}: ModalProps) {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className={cn(width)} aria-describedby={undefined}>
@@ -34,7 +44,7 @@ export function Modal({ title, onClose, children, subheader, footer, width = "ma
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         {subheader && <div className="shrink-0 border-b border-line">{subheader}</div>}
-        <DialogBody>{children}</DialogBody>
+        <DialogBody className={bodyClassName}>{children}</DialogBody>
         {footer && <DialogFooter>{footer}</DialogFooter>}
       </DialogContent>
     </Dialog>

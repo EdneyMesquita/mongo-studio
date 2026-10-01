@@ -1,11 +1,17 @@
 import { useEffect } from "react";
 import { useUiStore } from "../../store/uiStore";
 import { useAssistantStore } from "../../store/assistantStore";
+import { SPLIT_LAYOUT_ORDER } from "../../lib/editorLayout";
+import { useEditorLayoutStore } from "../../store/editorLayoutStore";
+import { useSessionsStore } from "../../store/sessionsStore";
+import { toast } from "sonner";
 
 /**
  * App-wide keys: Ctrl/Cmd+K quick open, Ctrl/Cmd+B the Explorer, Ctrl/Cmd+N
- * a new connection, Ctrl/Cmd+L the Assistant, Ctrl/Cmd+I ask it in place. Caught in the capture phase, before Monaco sees them:
- * it would otherwise swallow Ctrl+K as the start of one of its chords.
+ * a new connection, Ctrl/Cmd+L the Assistant, Ctrl/Cmd+I ask it in place,
+ * Ctrl/Cmd+\ the active tab to the side, Ctrl/Cmd+Alt+1-4 a split layout.
+ * Caught in the capture phase, before Monaco sees them: it would otherwise
+ * swallow Ctrl+K as the start of one of its chords.
  */
 /** Focuses an element once it has rendered (the panel loads on first open). */
 function focusSoon(id: string, tries = 20) {
@@ -16,8 +22,31 @@ function focusSoon(id: string, tries = 20) {
 
 export function useGlobalShortcuts() {
   useEffect(() => {
+    /** Ctrl+Alt+1-4 and Ctrl+\: by key position, as Ctrl+Alt is AltGr on many layouts. */
+    function onLayoutKey(e: KeyboardEvent): boolean {
+      const digit = /^Digit([1-4])$/.exec(e.code);
+      if (e.altKey && digit) {
+        useEditorLayoutStore.getState().setLayout(SPLIT_LAYOUT_ORDER[Number(digit[1]) - 1]);
+        return true;
+      }
+      if (!e.altKey && e.key === "\\") {
+        const active = useSessionsStore.getState().activeTabId;
+        if (active && !useEditorLayoutStore.getState().openToSide(active)) {
+          toast("All four panes are in use", { description: "Close a pane, or drop the tab onto one to replace it." });
+        }
+        return true;
+      }
+      return false;
+    }
+
     function onKeyDown(e: KeyboardEvent) {
-      if (e.defaultPrevented || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+      if (e.defaultPrevented || !(e.ctrlKey || e.metaKey) || e.shiftKey) return;
+      if (!useUiStore.getState().connectionDialog && onLayoutKey(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (e.altKey) return;
       const ui = useUiStore.getState();
       // The connection dialog is modal; nothing opens over it.
       if (ui.connectionDialog) return;

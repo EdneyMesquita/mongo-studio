@@ -1,7 +1,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 
+use mongodb::Client;
 use tauri::{AppHandle, Emitter, State};
+use tauri_plugin_opener::OpenerExt;
 use uuid::Uuid;
 
 use crate::assistant::{
@@ -13,6 +16,7 @@ use crate::connections_io;
 use crate::driver;
 use crate::error::{AppError, AppResult};
 use crate::export;
+use crate::logging::{self, logged, Op};
 use crate::models::{
     validate_color, CollectionInfo, CollectionStats, ConnectionAdvancedOptions, ConnectionHandle,
     ConnectionImportPreview, ConnectionProfile, ConnectionProfileInput, ConnectionProfileMeta,
@@ -139,7 +143,20 @@ pub fn list_connection_profiles(state: State<AppState>) -> Vec<ConnectionProfile
 
 #[tauri::command]
 pub fn get_connection_profile(state: State<AppState>, id: String) -> AppResult<ConnectionProfile> {
-    state.connection_store.get(&id)
+    logged("get_connection_profile", state.connection_store.get(&id))
+}
+
+/// `"prod" (3f2a...)`: how log lines name a saved connection.
+fn connection_label(profile: &ConnectionProfile) -> String {
+    format!("\"{}\" ({})", profile.name, profile.id)
+}
+
+fn yes_no(value: bool) -> &'static str {
+    if value {
+        "yes"
+    } else {
+        "no"
+    }
 }
 
 #[tauri::command]
@@ -147,15 +164,29 @@ pub async fn save_connection_profile(
     state: State<'_, AppState>,
     input: ConnectionProfileInput,
 ) -> AppResult<ConnectionProfileMeta> {
-    let profile = materialize_profile(&state, input).await?;
-    let saved = state.connection_store.upsert(profile)?;
+    let saved = async {
+        let profile = materialize_profile(&state, input).await?;
+        state.connection_store.upsert(profile)
+    }
+    .await;
+    let saved = logged("save_connection_profile", saved)?;
+    log::info!(
+        "saved connection {} at {}; password saved: {}",
+        connection_label(&saved),
+        logging::route(&saved),
+        yes_no(saved.has_password)
+    );
     Ok(ConnectionProfileMeta::from(&saved))
 }
 
 #[tauri::command]
 pub async fn delete_connection_profile(state: State<'_, AppState>, id: String) -> AppResult<()> {
-    state.connection_store.delete(&id)?;
+    logged(
+        "delete_connection_profile",
+        state.connection_store.delete(&id),
+    )?;
     let _ = state.secret_store.delete_all(&id);
+    log::info!("deleted connection {id}");
     Ok(())
 }
 
@@ -166,12 +197,19 @@ pub async fn export_connections(
     include_secrets: bool,
 ) -> AppResult<ConnectionsExportSummary> {
     let profiles = state.connection_store.list();
-    let exported = connections_io::export_connections(
-        &profiles,
-        include_secrets,
-        state.secret_store.as_ref(),
-        std::path::Path::new(&dest_path),
+    let exported = logged(
+        "export_connections",
+        connections_io::export_connections(
+            &profiles,
+            include_secrets,
+            state.secret_store.as_ref(),
+            std::path::Path::new(&dest_path),
+        ),
     )?;
+    log::info!(
+        "exported {exported} connections; secrets included: {}",
+        yes_no(include_secrets)
+    );
     Ok(ConnectionsExportSummary { exported })
 }
 
@@ -182,7 +220,12 @@ pub async fn preview_connections_import(
     state: State<'_, AppState>,
     src_path: String,
 ) -> AppResult<Vec<ConnectionImportPreview>> {
-    preview_import(&state, &std::fs::read_to_string(&src_path)?)
+    logged(
+        "preview_connections_import",
+        std::fs::read_to_string(&src_path)
+            .map_err(AppError::from)
+            .and_then(|raw| preview_import(&state, &raw)),
+    )
 }
 
 fn preview_import(state: &AppState, raw: &str) -> AppResult<Vec<ConnectionImportPreview>> {
@@ -224,12 +267,30 @@ pub async fn import_connections(
     src_path: String,
     selected: Option<Vec<usize>>,
 ) -> AppResult<ConnectionsImportSummary> {
-    import_file(
-        &state,
-        &std::fs::read_to_string(&src_path)?,
-        selected.as_deref(),
-    )
-    .await
+    let summary = async {
+        import_file(
+            &state,
+            &std::fs::read_to_string(&src_path)?,
+            selected.as_deref(),
+        )
+        .await
+    }
+    .await;
+    let summary = logged("import_connections", summary)?;
+    log::info!(
+        "imported {} connections, {} skipped with errors, {} with warnings",
+        summary.imported,
+        summary.errors.len(),
+        summary.warnings.len()
+    );
+    // Names and what went wrong, never a connection string or password.
+    for error in &summary.errors {
+        log::warn!("import error: {error}");
+    }
+    for warning in &summary.warnings {
+        log::warn!("import warning: {warning}");
+    }
+    Ok(summary)
 }
 
 async fn import_file(
@@ -272,7 +333,16 @@ async fn import_file(
             advanced: ConnectionAdvancedOptions::default(),
         };
         let profile = materialize_profile(state, input).await?;
-        state.connection_store.upsert(profile)?;
+        let saved = state.connection_store.upsert(profile)?;
+        // Whether a password came along is what "imported connections
+        // can't log in" comes down to.
+        log::info!(
+            "imported connection {} at {}; user set: {}, password saved: {}",
+            connection_label(&saved),
+            logging::route(&saved),
+            yes_no(saved.username.is_some()),
+            yes_no(saved.has_password)
+        );
         imported += 1;
     }
 
@@ -309,6 +379,12 @@ async fn test_profile(
         .filter(|id| !id.is_empty())
         .and_then(|id| state.connection_store.get(id).ok());
     let temp_id = format!("connection-test-{}", Uuid::new_v4());
+    let label = format!(
+        "\"{}\" ({})",
+        input.name,
+        saved.as_ref().map_or("unsaved", |s| s.id.as_str())
+    );
+    let started = Instant::now();
 
     let result = async {
         if let Some(saved) = &saved {
@@ -329,21 +405,46 @@ async fn test_profile(
         let mut profile = materialize_profile(state, input).await?;
         // A blank password field means the saved one, copied over above.
         profile.has_password |= saved.as_ref().is_some_and(|s| s.has_password);
-        Ok(
+        let tested =
             driver::test_connection(&profile, state.secret_store.as_ref(), &state.known_hosts)
-                .await,
-        )
+                .await;
+        Ok((tested, logging::route(&profile)))
     }
     .await;
 
     let _ = state.secret_store.delete_all(&temp_id);
-    result
+    let ms = started.elapsed().as_millis();
+    let (tested, route) = logged(&format!("testing connection {label}"), result)?;
+    if tested.success {
+        log::info!(
+            "connection test of {label} at {route} succeeded in {ms} ms; server {}",
+            tested
+                .server_version
+                .as_deref()
+                .unwrap_or("version unknown")
+        );
+    } else {
+        log::warn!(
+            "connection test of {label} at {route} failed after {ms} ms: {}",
+            logging::scrub_credentials(&tested.message)
+        );
+    }
+    Ok(tested)
 }
 
 #[tauri::command]
 pub async fn connect(state: State<'_, AppState>, id: String) -> AppResult<ConnectionHandle> {
-    let profile = state.connection_store.get(&id)?;
-    let active = driver::connect(&profile, state.secret_store.as_ref(), &state.known_hosts).await?;
+    let profile = logged("connect", state.connection_store.get(&id))?;
+    let target = format!(
+        "{} at {}",
+        connection_label(&profile),
+        logging::route(&profile)
+    );
+    log::info!("connecting to {target}");
+    let started = Instant::now();
+    let active = driver::connect(&profile, state.secret_store.as_ref(), &state.known_hosts).await;
+    let ms = started.elapsed().as_millis();
+    let active = logged(&format!("connecting to {target} ({ms} ms)"), active)?;
 
     let build_info = active
         .client
@@ -357,6 +458,11 @@ pub async fn connect(state: State<'_, AppState>, id: String) -> AppResult<Connec
         .map(str::to_string);
 
     let session_id = Uuid::new_v4().to_string();
+    log::info!(
+        "connected to {target} in {} ms; server {}; session {session_id}",
+        started.elapsed().as_millis(),
+        server_version.as_deref().unwrap_or("version unknown")
+    );
     state
         .sessions
         .write()
@@ -377,9 +483,10 @@ pub async fn disconnect(state: State<'_, AppState>, session_id: String) -> AppRe
             if let Some(tunnel) = active.tunnel {
                 tunnel.shutdown().await;
             }
+            log::info!("disconnected \"{}\"; session {session_id}", active.name);
             Ok(())
         }
-        None => Err(AppError::SessionNotFound(session_id)),
+        None => logged("disconnect", Err(AppError::SessionNotFound(session_id))),
     }
 }
 
@@ -399,16 +506,35 @@ pub fn secret_backend_info(state: State<AppState>) -> SecretBackendInfo {
     }
 }
 
+/// Runs a database operation on a connected session's client, logging it
+/// if it fails or is slow (see `logging::timed`). The sessions lock is held
+/// throughout, as before, so a disconnect waits for the operation.
+async fn on_session<T>(
+    state: &AppState,
+    session_id: &str,
+    op: Op<'_>,
+    run: impl AsyncFnOnce(&Client) -> AppResult<T>,
+) -> AppResult<T> {
+    let sessions = state.sessions.read().await;
+    let active = sessions.get(session_id);
+    let connection = active.map_or("not connected", |a| a.name.as_str());
+    logging::timed(&op, connection, async {
+        let active = active.ok_or_else(|| AppError::SessionNotFound(session_id.to_string()))?;
+        run(&active.client).await
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn list_databases(
     state: State<'_, AppState>,
     session_id: String,
 ) -> AppResult<Vec<DatabaseInfo>> {
-    let sessions = state.sessions.read().await;
-    let active = sessions
-        .get(&session_id)
-        .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
-    driver::list_databases(&active.client).await
+    let op = Op::new("listDatabases", "", None);
+    on_session(&state, &session_id, op, async |client| {
+        driver::list_databases(client).await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -417,11 +543,11 @@ pub async fn list_collections(
     session_id: String,
     database: String,
 ) -> AppResult<Vec<CollectionInfo>> {
-    let sessions = state.sessions.read().await;
-    let active = sessions
-        .get(&session_id)
-        .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
-    driver::list_collections(&active.client, &database).await
+    let op = Op::new("listCollections", &database, None);
+    on_session(&state, &session_id, op, async |client| {
+        driver::list_collections(client, &database).await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -431,11 +557,11 @@ pub async fn get_collection_stats(
     database: String,
     collection: String,
 ) -> AppResult<CollectionStats> {
-    let sessions = state.sessions.read().await;
-    let active = sessions
-        .get(&session_id)
-        .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
-    driver::get_collection_stats(&active.client, &database, &collection).await
+    let op = Op::new("collStats", &database, Some(&collection));
+    on_session(&state, &session_id, op, async |client| {
+        driver::get_collection_stats(client, &database, &collection).await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -445,11 +571,11 @@ pub async fn list_index_stats(
     database: String,
     collection: String,
 ) -> AppResult<Vec<serde_json::Value>> {
-    let sessions = state.sessions.read().await;
-    let active = sessions
-        .get(&session_id)
-        .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
-    driver::list_index_stats(&active.client, &database, &collection).await
+    let op = Op::new("indexStats", &database, Some(&collection));
+    on_session(&state, &session_id, op, async |client| {
+        driver::list_index_stats(client, &database, &collection).await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -461,11 +587,11 @@ pub async fn explain_query(
     query: ExplainQueryInput,
     verbosity: ExplainVerbosity,
 ) -> AppResult<serde_json::Value> {
-    let sessions = state.sessions.read().await;
-    let active = sessions
-        .get(&session_id)
-        .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
-    driver::explain_query(&active.client, &database, &collection, &query, verbosity).await
+    let op = Op::new("explain", &database, Some(&collection));
+    on_session(&state, &session_id, op, async |client| {
+        driver::explain_query(client, &database, &collection, &query, verbosity).await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -476,11 +602,11 @@ pub async fn run_find(
     collection: String,
     query: FindQueryInput,
 ) -> AppResult<QueryResultPage> {
-    let sessions = state.sessions.read().await;
-    let active = sessions
-        .get(&session_id)
-        .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
-    driver::run_find(&active.client, &database, &collection, &query).await
+    let op = Op::new("find", &database, Some(&collection));
+    on_session(&state, &session_id, op, async |client| {
+        driver::run_find(client, &database, &collection, &query).await
+    })
+    .await
 }
 
 /// Sets one field of one document, found by `_id`. Returns the document as
@@ -495,11 +621,11 @@ pub async fn update_field(
     path: Vec<String>,
     value: serde_json::Value,
 ) -> AppResult<serde_json::Value> {
-    let sessions = state.sessions.read().await;
-    let active = sessions
-        .get(&session_id)
-        .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
-    driver::update_field(&active.client, &database, &collection, id, &path, value).await
+    let op = Op::new("updateField", &database, Some(&collection));
+    on_session(&state, &session_id, op, async |client| {
+        driver::update_field(client, &database, &collection, id, &path, value).await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -510,11 +636,11 @@ pub async fn run_aggregate(
     collection: String,
     pipeline: serde_json::Value,
 ) -> AppResult<QueryResultPage> {
-    let sessions = state.sessions.read().await;
-    let active = sessions
-        .get(&session_id)
-        .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
-    driver::run_aggregate(&active.client, &database, &collection, pipeline).await
+    let op = Op::new("aggregate", &database, Some(&collection));
+    on_session(&state, &session_id, op, async |client| {
+        driver::run_aggregate(client, &database, &collection, pipeline).await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -525,11 +651,11 @@ pub async fn count_documents(
     collection: String,
     filter: serde_json::Value,
 ) -> AppResult<u64> {
-    let sessions = state.sessions.read().await;
-    let active = sessions
-        .get(&session_id)
-        .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
-    driver::count_documents(&active.client, &database, &collection, filter).await
+    let op = Op::new("count", &database, Some(&collection));
+    on_session(&state, &session_id, op, async |client| {
+        driver::count_documents(client, &database, &collection, filter).await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -542,13 +668,7 @@ pub async fn run_script(
     execution_id: String,
     timeout_ms: Option<u64>,
 ) -> AppResult<ScriptResult> {
-    let client = {
-        let sessions = state.sessions.read().await;
-        let active = sessions
-            .get(&session_id)
-            .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
-        active.client.clone()
-    };
+    let (client, connection) = logged("run_script", session_client(&state, &session_id).await)?;
 
     let cancel_flag = Arc::new(AtomicBool::new(false));
     state
@@ -565,8 +685,22 @@ pub async fn run_script(
         );
     };
 
-    let result =
-        scripting::run_script(client, database, script, timeout_ms, cancel_flag, on_log).await;
+    // The script's text, output and errors are the user's: only where it
+    // ran, how long it took and whether it failed are logged.
+    let op = Op::new("script", &database, None);
+    let result = logging::timed(
+        &op,
+        &connection,
+        scripting::run_script(
+            client,
+            database.clone(),
+            script,
+            timeout_ms,
+            cancel_flag,
+            on_log,
+        ),
+    )
+    .await;
 
     state.running_tasks.lock().unwrap().remove(&execution_id);
 
@@ -597,13 +731,7 @@ pub async fn export_query(
     dest_path: String,
     execution_id: String,
 ) -> AppResult<ExportSummary> {
-    let client = {
-        let sessions = state.sessions.read().await;
-        let active = sessions
-            .get(&session_id)
-            .ok_or_else(|| AppError::SessionNotFound(session_id.clone()))?;
-        active.client.clone()
-    };
+    let (client, connection) = logged("export_query", session_client(&state, &session_id).await)?;
 
     let cancel_flag = Arc::new(AtomicBool::new(false));
     state
@@ -620,6 +748,7 @@ pub async fn export_query(
         );
     };
 
+    let started = Instant::now();
     let result = export::export_query(
         &client,
         &database,
@@ -633,7 +762,30 @@ pub async fn export_query(
     .await;
 
     state.running_tasks.lock().unwrap().remove(&execution_id);
+    // Exports are slow by nature, so a finished one is logged as such
+    // rather than through `logging::timed`'s slow-operation warning.
+    let op = Op::new("export", &database, Some(&collection));
+    match &result {
+        Ok(summary) => log::info!(
+            "{op} [{connection}] wrote {} rows in {} ms",
+            summary.rows_written,
+            started.elapsed().as_millis()
+        ),
+        Err(e) => logging::op_failed(&op, &connection, started.elapsed(), e),
+    }
     result
+}
+
+/// A session's client and connection name, for work that runs without
+/// holding the sessions lock (scripts and exports, which can be cancelled).
+async fn session_client(state: &AppState, session_id: &str) -> AppResult<(Client, String)> {
+    state
+        .sessions
+        .read()
+        .await
+        .get(session_id)
+        .map(|active| (active.client.clone(), active.name.clone()))
+        .ok_or_else(|| AppError::SessionNotFound(session_id.to_string()))
 }
 
 /// Writes a value the frontend already holds, such as a console result.
@@ -643,11 +795,13 @@ pub async fn export_value(
     options: ExportOptions,
     dest_path: String,
 ) -> AppResult<ExportSummary> {
-    tokio::task::spawn_blocking(move || {
+    let result = tokio::task::spawn_blocking(move || {
         export::export_value(&value, &options, std::path::Path::new(&dest_path))
     })
     .await
-    .map_err(|e| AppError::InvalidInput(format!("export failed: {e}")))?
+    .map_err(|e| AppError::InvalidInput(format!("export failed: {e}")))
+    .flatten();
+    logged("export_value", result)
 }
 
 #[tauri::command]
@@ -662,7 +816,7 @@ pub fn cancel_export(state: State<AppState>, execution_id: String) {
 pub async fn get_sidebar_layout(
     store: State<'_, SidebarLayoutStore>,
 ) -> AppResult<serde_json::Value> {
-    store.get()
+    logged("get_sidebar_layout", store.get())
 }
 
 #[tauri::command]
@@ -670,12 +824,17 @@ pub async fn save_sidebar_layout(
     store: State<'_, SidebarLayoutStore>,
     layout: serde_json::Value,
 ) -> AppResult<()> {
-    store.save(&layout)
+    logged("save_sidebar_layout", store.save(&layout))
 }
 
 #[tauri::command]
 pub async fn suggest_script_path(store: State<'_, SavedScriptsStore>) -> AppResult<String> {
-    Ok(store.suggest_path()?.to_string_lossy().into_owned())
+    logged(
+        "suggest_script_path",
+        store
+            .suggest_path()
+            .map(|path| path.to_string_lossy().into_owned()),
+    )
 }
 
 /// Saves a console script. With no `path` it lands in the default folder
@@ -686,14 +845,14 @@ pub async fn save_script(
     path: Option<String>,
     content: String,
 ) -> AppResult<SavedScript> {
-    store.save(path.as_deref(), &content)
+    logged("save_script", store.save(path.as_deref(), &content))
 }
 
 #[tauri::command]
 pub async fn list_saved_scripts(
     store: State<'_, SavedScriptsStore>,
 ) -> AppResult<Vec<SavedScript>> {
-    store.list()
+    logged("list_saved_scripts", store.list())
 }
 
 #[tauri::command]
@@ -701,7 +860,7 @@ pub async fn read_saved_script(
     store: State<'_, SavedScriptsStore>,
     path: String,
 ) -> AppResult<String> {
-    store.read(&path)
+    logged("read_saved_script", store.read(&path))
 }
 
 /// Finds the agent CLIs (Claude Code, Codex) and their versions.
@@ -725,7 +884,7 @@ pub async fn assistant_start(
     assistant: State<'_, Assistant>,
     input: AssistantStartInput,
 ) -> AppResult<AssistantStarted> {
-    assistant.start(input).await
+    logged("assistant_start", assistant.start(input).await)
 }
 
 /// Starts a turn; returns once the prompt is handed to the CLI. The answer
@@ -736,7 +895,10 @@ pub async fn assistant_send(
     agent_session_id: String,
     text: String,
 ) -> AppResult<()> {
-    assistant.send(&agent_session_id, text).await
+    logged(
+        "assistant_send",
+        assistant.send(&agent_session_id, text).await,
+    )
 }
 
 #[tauri::command]
@@ -744,7 +906,7 @@ pub async fn assistant_stop(
     assistant: State<'_, Assistant>,
     agent_session_id: String,
 ) -> AppResult<()> {
-    assistant.stop(&agent_session_id).await
+    logged("assistant_stop", assistant.stop(&agent_session_id).await)
 }
 
 #[tauri::command]
@@ -752,7 +914,7 @@ pub async fn assistant_close(
     assistant: State<'_, Assistant>,
     agent_session_id: String,
 ) -> AppResult<()> {
-    assistant.close(&agent_session_id).await
+    logged("assistant_close", assistant.close(&agent_session_id).await)
 }
 
 #[tauri::command]
@@ -761,13 +923,30 @@ pub fn assistant_answer(
     request_id: String,
     choice: ApprovalChoice,
 ) -> AppResult<()> {
-    assistant.answer(&request_id, choice)
+    logged("assistant_answer", assistant.answer(&request_id, choice))
 }
 
 /// The folder the agents run in, for the "Copy resume command" action.
 #[tauri::command]
 pub fn assistant_workdir(assistant: State<Assistant>) -> AppResult<String> {
-    assistant.workdir()
+    logged("assistant_workdir", assistant.workdir())
+}
+
+/// Opens the folder holding the app's log files in the OS file manager, and
+/// returns its path. The error names the path too, so the user can still
+/// find the folder when no file manager opens.
+#[tauri::command]
+pub async fn open_log_dir(app: AppHandle) -> AppResult<String> {
+    let opened = (|| {
+        let dir = crate::logging::log_dir(&app).map_err(std::io::Error::other)?;
+        std::fs::create_dir_all(&dir)?;
+        let dir = dir.to_string_lossy().into_owned();
+        app.opener().open_path(&dir, None::<&str>).map_err(|e| {
+            std::io::Error::other(format!("couldn't open the logs folder ({dir}): {e}"))
+        })?;
+        Ok(dir)
+    })();
+    logged("open_log_dir", opened)
 }
 
 #[cfg(test)]

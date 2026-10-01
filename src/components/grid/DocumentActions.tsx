@@ -71,7 +71,7 @@ export function DocumentActions({ doc, collectionName, tabId, size = "icon" }: D
     const script = buildEditScript(doc as Record<string, unknown>, collectionName);
     useConsoleStore.getState().setScript(tabId, script);
     useSessionsStore.getState().activateTab(tabId);
-    useUiStore.getState().setMainTab("console");
+    useUiStore.getState().setMainTab(tabId, "console");
   }
 
   return (

@@ -1,6 +1,6 @@
 import { lazy, memo, Suspense, useState } from "react";
 import type { CollectionTab } from "../../store/sessionsStore";
-import { useUiStore } from "../../store/uiStore";
+import { useUiStore, type MainTab } from "../../store/uiStore";
 import { cn } from "@/lib/utils";
 import { QueryBar } from "../query/QueryBar";
 import { DocumentResults } from "../results/DocumentResults";
@@ -18,8 +18,10 @@ import { CollectionToolbar } from "./CollectionToolbar";
 
 interface CollectionTabViewProps {
   tab: CollectionTab;
-  /** Only the active tab mounts its console (it owns global shortcuts). */
+  /** The active tab, or the focused pane's: its console owns the global shortcuts. */
   active: boolean;
+  /** On screen, alone or in a pane; hidden tabs mount only their documents. */
+  shown: boolean;
 }
 
 type ToolDialog = "explain" | "export" | null;
@@ -29,9 +31,11 @@ type ToolDialog = "explain" | "export" | null;
  * Console) and the view picked there. Memoised: every open tab stays
  * mounted, and typing in one tab's query must not re-render the others.
  */
-export const CollectionTabView = memo(function CollectionTabView({ tab, active }: CollectionTabViewProps) {
-  const view = useUiStore((s) => s.mainTab);
-  const setView = useUiStore((s) => s.setMainTab);
+export const CollectionTabView = memo(function CollectionTabView({ tab, active, shown }: CollectionTabViewProps) {
+  // Per tab, so panes side by side can show different views.
+  const view = useUiStore((s) => s.mainTabs[tab.id] ?? "browse");
+  const setMainTab = useUiStore((s) => s.setMainTab);
+  const setView = (next: MainTab) => setMainTab(tab.id, next);
   const [dialog, setDialog] = useState<ToolDialog>(null);
   const closeDialog = () => setDialog(null);
 
@@ -51,14 +55,14 @@ export const CollectionTabView = memo(function CollectionTabView({ tab, active }
           <DocumentResults tab={tab} />
         </div>
       </div>
-      {active && view === "indexes" && (
+      {shown && view === "indexes" && (
         <div className="min-h-0 flex-1">
           <IndexesPanel tab={tab} />
         </div>
       )}
-      {active && view === "console" && (
+      {shown && view === "console" && (
         <div className="min-h-0 flex-1">
-          <ScriptConsole tab={tab} />
+          <ScriptConsole tab={tab} active={active} />
         </div>
       )}
       <Suspense fallback={null}>

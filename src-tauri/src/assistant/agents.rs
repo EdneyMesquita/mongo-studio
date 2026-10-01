@@ -565,6 +565,15 @@ async fn spawn(
     let mut child = command
         .spawn()
         .map_err(|e| AppError::Assistant(format!("Couldn't start {}: {e}", kind.display_name())))?;
+    // Not the arguments: they carry the system prompt and the MCP address.
+    log::info!(
+        "started {} from {} (pid {})",
+        kind.display_name(),
+        program.display(),
+        child
+            .id()
+            .map_or("unknown".to_string(), |pid| pid.to_string())
+    );
     let (Some(stdin), Some(stdout), Some(mut stderr_pipe)) =
         (child.stdin.take(), child.stdout.take(), child.stderr.take())
     else {
@@ -828,13 +837,19 @@ async fn read_output(
     let Some(mut process) = process else { return };
     let status = tokio::time::timeout(Duration::from_secs(5), process.child.wait()).await;
     let _ = tokio::time::timeout(Duration::from_secs(1), &mut process.stderr_task).await;
+    let name = session.agent.display_name();
+    let exit = match &status {
+        Ok(Ok(status)) => status.to_string(),
+        Ok(Err(e)) => format!("unknown status: {e}"),
+        Err(_) => "still running after 5 s".to_string(),
+    };
     if turn.is_none() {
+        log::info!("{name} exited ({exit}); conversation {}", session.id);
         return;
     }
     let stderr = String::from_utf8_lossy(&process.stderr.lock().unwrap())
         .trim()
         .to_string();
-    let name = session.agent.display_name();
     let error = parser
         .last_error()
         .or_else(|| (!stderr.is_empty()).then(|| stderr.clone()))
@@ -842,6 +857,13 @@ async fn read_output(
             Ok(Ok(status)) => format!("{name} stopped unexpectedly ({status})."),
             _ => format!("{name} stopped unexpectedly."),
         });
+    // The CLI's own error (an API error, a crash message), cut short; the
+    // conversation itself stays out of the log.
+    log::warn!(
+        "{name} exited mid-turn ({exit}); conversation {}: {}",
+        session.id,
+        error.chars().take(500).collect::<String>()
+    );
     inner.emit(
         EVENT,
         &AssistantEvent::TurnEnd {
@@ -866,6 +888,11 @@ pub(crate) async fn stop(inner: &Arc<Inner>, session: &Arc<AgentSession>, closin
         (turn, process)
     };
     if let Some(mut process) = process {
+        log::info!(
+            "stopping {}; conversation {}",
+            session.agent.display_name(),
+            session.id
+        );
         let _ = process.child.start_kill();
         tokio::spawn(async move {
             let _ = process.child.wait().await;

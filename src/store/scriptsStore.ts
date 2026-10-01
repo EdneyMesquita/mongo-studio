@@ -128,7 +128,7 @@ export const useScriptsStore = create<ScriptsState>((set, get) => ({
     const openIn = sessions.tabs.find((t) => get().files[t.id]?.path === script.path);
     if (openIn) {
       sessions.activateTab(openIn.id);
-      if (openIn.kind === "collection") useUiStore.getState().setMainTab("console");
+      if (openIn.kind === "collection") useUiStore.getState().setMainTab(openIn.id, "console");
       return;
     }
     const home = scriptHome();
