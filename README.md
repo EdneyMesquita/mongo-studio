@@ -16,6 +16,22 @@ An open-source, cross-platform MongoDB GUI client built with Tauri (Rust) and Re
 - **Copy / edit documents** - copy a document as JSON, or jump to the console with an `updateOne` script pre-filled for that document's `_id`.
 - **Themes** - several built-in color themes (including a light one), picked from the sidebar.
 
+## Logs
+
+Mongo Studio keeps a log file, so a failed connection or a crash can be looked into after the fact. To find it, open the command palette (Ctrl/Cmd+K) and choose **Open logs folder**. The crash screen has the same button. The file is `mongo-studio.log` in:
+
+| OS | Folder |
+| --- | --- |
+| Windows | `%LOCALAPPDATA%\com.matheuscaet.mongo-studio\logs` |
+| macOS | `~/Library/Logs/com.matheuscaet.mongo-studio` |
+| Linux | `$XDG_DATA_HOME/com.matheuscaet.mongo-studio/logs`, usually `~/.local/share/com.matheuscaet.mongo-studio/logs` |
+
+When the file reaches 5 MB it is renamed with a timestamp and a new one is started. The five most recent old files are kept.
+
+**What's logged:** app start (version, OS, log folder) and exit; the secret store in use (OS keychain or encrypted file) and keychain errors; connect, disconnect and connection tests, each with the connection's name and id, its hosts, whether an SSH tunnel is used, the result or error, the server version and how long it took; saving, deleting, importing and exporting connections (counts, import warnings, and whether each imported connection came with a password); every failed command and its error; database operations that fail or take longer than 5 seconds, with the operation, the `database.collection` and the time taken; Assistant CLI detection (path, version), start, stop and exit; panics and frontend errors, including crashes of the interface.
+
+**What's never logged:** passwords, passphrases or other secrets; connection strings (only the hosts, with no user or options); filters, pipelines, scripts or documents. When a query fails, only the kind of error and the server's error code are written, because the server's message can quote your data.
+
 ## Development
 
 Prerequisites:

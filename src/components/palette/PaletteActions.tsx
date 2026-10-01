@@ -1,7 +1,18 @@
-import { Database, Moon, Plus, SlidersHorizontal, Sparkles, SquareTerminal, Sun } from "lucide-react";
+import {
+  Database,
+  FolderOpen,
+  Moon,
+  Plus,
+  SlidersHorizontal,
+  Sparkles,
+  SquareTerminal,
+  Sun,
+} from "lucide-react";
+import { toast } from "sonner";
 import { useAssistantStore } from "../../store/assistantStore";
 import type { ReactNode } from "react";
 import { CommandGroup, CommandItem, CommandShortcut } from "@/components/ui/command";
+import { api } from "../../lib/tauri";
 import { selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
 import { useThemeStore } from "../../store/themeStore";
 import { useUiStore } from "../../store/uiStore";
@@ -76,6 +87,15 @@ export function PaletteActions({ search, run }: PaletteActionsProps) {
       icon: <SlidersHorizontal />,
       label: "Assistant settings",
       perform: () => useAssistantStore.getState().openPanel("setup"),
+    },
+    {
+      id: "open-logs",
+      icon: <FolderOpen />,
+      label: "Open logs folder",
+      perform: () =>
+        api.openLogDir().catch((e) =>
+          toast.error("Couldn't open the logs folder", { description: String(e) }),
+        ),
     },
   );
 

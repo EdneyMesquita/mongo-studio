@@ -51,6 +51,9 @@ export const api = {
   secretBackendInfo: () =>
     invoke<SecretBackendInfo>("secret_backend_info"),
 
+  /** Opens the app's log folder in the file manager; resolves to its path. */
+  openLogDir: () => invoke<string>("open_log_dir"),
+
   exportConnections: (destPath: string, includeSecrets: boolean) =>
     invoke<ConnectionsExportSummary>("export_connections", {
       destPath,
