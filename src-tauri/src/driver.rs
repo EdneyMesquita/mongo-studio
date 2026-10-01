@@ -130,7 +130,10 @@ fn apply_advanced_overrides(
 fn logs_in_with_password(options: &ClientOptions) -> bool {
     use mongodb::options::AuthMechanism as Driver;
     matches!(
-        options.credential.as_ref().and_then(|c| c.mechanism.as_ref()),
+        options
+            .credential
+            .as_ref()
+            .and_then(|c| c.mechanism.as_ref()),
         None | Some(Driver::ScramSha1 | Driver::ScramSha256 | Driver::Plain)
     )
 }
