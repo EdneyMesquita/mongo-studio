@@ -2,6 +2,7 @@ import {
   Database,
   FolderOpen,
   Moon,
+  PanelRight,
   Plus,
   SlidersHorizontal,
   Sparkles,
@@ -13,7 +14,10 @@ import { useAssistantStore } from "../../store/assistantStore";
 import type { ReactNode } from "react";
 import { CommandGroup, CommandItem, CommandShortcut } from "@/components/ui/command";
 import { api } from "../../lib/tauri";
+import { SPLIT_LAYOUT_ORDER, SPLIT_LAYOUTS } from "../../lib/editorLayout";
+import { useEditorLayoutStore } from "../../store/editorLayoutStore";
 import { selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
+import { LayoutIcon } from "../tabs/LayoutPicker";
 import { useThemeStore } from "../../store/themeStore";
 import { useUiStore } from "../../store/uiStore";
 import { HighlightMatch } from "./HighlightMatch";
@@ -37,6 +41,7 @@ interface PaletteAction {
 export function PaletteActions({ search, run }: PaletteActionsProps) {
   const activeTab = useSessionsStore(selectActiveTab);
   const themeId = useThemeStore((s) => s.themeId);
+  const layout = useEditorLayoutStore((s) => s.layout);
 
   const actions: PaletteAction[] = [
     {
@@ -58,6 +63,27 @@ export function PaletteActions({ search, run }: PaletteActionsProps) {
         useSessionsStore
           .getState()
           .openConsole(tab.connection, tab.database, tab.kind === "collection" ? tab.collection : null),
+    });
+    actions.push({
+      id: "open-to-side",
+      icon: <PanelRight />,
+      label: "Open the tab to the side",
+      shortcut: "Ctrl \\",
+      perform: () => {
+        if (!useEditorLayoutStore.getState().openToSide(tab.id)) {
+          toast("All four panes are in use", { description: "Close a pane, or drop the tab onto one to replace it." });
+        }
+      },
+    });
+    SPLIT_LAYOUT_ORDER.forEach((kind, i) => {
+      if (kind === layout) return;
+      actions.push({
+        id: `layout-${kind}`,
+        icon: <LayoutIcon layout={kind} />,
+        label: kind === "single" ? "Editor: single pane" : `Split the editor: ${SPLIT_LAYOUTS[kind].label}`,
+        shortcut: `Ctrl Alt ${i + 1}`,
+        perform: () => useEditorLayoutStore.getState().setLayout(kind),
+      });
     });
   }
   const other = themeId === "dark" ? "light" : "dark";

@@ -1,5 +1,5 @@
-import { useCallback, useContext, useMemo, useRef } from "react";
-import type { KeyboardEvent } from "react";
+import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { documentKey } from "../../lib/bsonFormat";
 import { columnsOf } from "../../lib/documentColumns";
@@ -17,6 +17,14 @@ interface DocumentTableProps {
   onSelect?: (index: number) => void;
   /** Fade the right edge where the grid meets a panel beside it. */
   fadeRight?: boolean;
+  /**
+   * A document open under its row, for a pane too narrow for an inspector:
+   * which row, how to toggle it, and what to show (given the visible width,
+   * so it stays in view while the grid scrolls sideways).
+   */
+  expandedIndex?: number | null;
+  onToggleExpand?: (index: number) => void;
+  renderExpanded?: (index: number, width: number) => ReactNode;
   "aria-label": string;
   className?: string;
 }
@@ -33,15 +41,45 @@ export function DocumentTable({
   selectedIndex = null,
   onSelect,
   fadeRight = false,
+  expandedIndex = null,
+  onToggleExpand,
+  renderExpanded,
   className,
   ...aria
 }: DocumentTableProps) {
   const scroller = useRef<HTMLDivElement>(null);
+  const detail = useRef<HTMLTableRowElement>(null);
   const scrollbar = useScrollbarWidth(scroller);
   const columns = useMemo(() => columnsOf(documents), [documents]);
   const saved = useContext(ValueEditContext)?.saved ?? null;
-  const rows = useVirtualRows(scroller, documents.length, HEADER_HEIGHT);
+  const expandable = Boolean(onToggleExpand && renderExpanded);
+  const open = expandable && expandedIndex !== null && expandedIndex < documents.length ? expandedIndex : null;
+  const [detailHeight, setDetailHeight] = useState(0);
+  const [viewport, setViewport] = useState(0);
+  const rows = useVirtualRows(
+    scroller,
+    documents.length,
+    HEADER_HEIGHT,
+    open === null ? null : { index: open, height: detailHeight },
+  );
   const { reveal } = rows;
+
+  // The open document's height feeds the row windowing; the grid's visible
+  // width keeps the document in view while the grid scrolls sideways.
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el || !expandable) return;
+    // Out of the rendered window the row is gone; its last height stands.
+    const measure = () => {
+      setViewport(el.clientWidth);
+      if (detail.current) setDetailHeight(detail.current.offsetHeight);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    if (detail.current) observer.observe(detail.current);
+    measure();
+    return () => observer.disconnect();
+  }, [expandable, open]);
 
   const select = useCallback(
     (index: number) => {
@@ -53,6 +91,19 @@ export function DocumentTable({
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (!onSelect || documents.length === 0) return;
+    if (expandable && e.target === e.currentTarget) {
+      // Enter or Space opens the selected document under its row; Esc closes it.
+      if ((e.key === "Enter" || e.key === " ") && selectedIndex !== null) {
+        e.preventDefault();
+        onToggleExpand?.(selectedIndex);
+        return;
+      }
+      if (e.key === "Escape" && open !== null) {
+        e.preventDefault();
+        onToggleExpand?.(open);
+        return;
+      }
+    }
     const last = documents.length - 1;
     const current = selectedIndex ?? -1;
     let next: number | null = null;
@@ -109,7 +160,7 @@ export function DocumentTable({
           {documents.slice(rows.start, rows.end).map((doc, offset) => {
             const i = rows.start + offset;
             const flashing = saved !== null && saved.docKey === documentKey(doc);
-            return (
+            const row = (
               <DocumentTableRow
                 // keyed by the save while flashing, so each save restarts it
                 key={flashing ? `${i}:${saved.at}` : i}
@@ -119,8 +170,19 @@ export function DocumentTable({
                 selected={i === selectedIndex}
                 flashing={flashing}
                 onSelect={onSelect ? select : undefined}
+                onToggle={expandable ? onToggleExpand : undefined}
+                expanded={i === open}
               />
             );
+            if (i !== open) return row;
+            return [
+              row,
+              <tr key="open-document" ref={detail}>
+                <td colSpan={columns.length + 1} className="border-b border-line bg-panel p-0">
+                  {renderExpanded?.(i, viewport)}
+                </td>
+              </tr>,
+            ];
           })}
           {rows.padBottom > 0 && (
             <tr aria-hidden style={{ height: rows.padBottom }}>

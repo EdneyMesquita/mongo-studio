@@ -49,11 +49,13 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
 
   return (
     <>
-    {/* A container, so a narrow editor (the Assistant open) gives the filter its own row. */}
+    {/* A container, so a narrow editor (the Assistant open) gives the filter its
+        own row, and a narrower pane of a split two rows: mode, filter and Run,
+        then sort, limit and skip. */}
+    <div className={cn("@container flex-none px-2.5 py-2", pending ? "pb-1.5" : "border-b border-line")}>
     <div
       className={cn(
-        "@container flex flex-none flex-wrap gap-2 px-2.5 py-2",
-        pending ? "pb-1.5" : "border-b border-line",
+        "flex flex-wrap gap-2 @max-[620px]:grid @max-[620px]:grid-cols-[auto_minmax(0,1fr)_auto]",
         aggregate || reviewing ? "items-start" : "items-center",
       )}
     >
@@ -95,6 +97,7 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
               placeholder='{ "field": "value" }'
               className={cn(
                 "min-w-[200px] flex-1 max-sm:order-first max-sm:basis-full @max-[820px]:order-first @max-[820px]:basis-full",
+                "@max-[620px]:order-none @max-[620px]:min-w-0",
                 flash === "filter" && "animate-flash-box",
               )}
               trailing={
@@ -110,6 +113,8 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
               }
             />
           )}
+          {/* One row of their own in a narrow pane; part of the bar's flow otherwise. */}
+          <div className="contents @max-[620px]:order-last @max-[620px]:col-span-3 @max-[620px]:flex @max-[620px]:gap-2">
           <QueryEditor
             kind="sort"
             label="sort"
@@ -119,7 +124,7 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
             completionContext={completionContext}
             onSubmit={submit}
             placeholder='{ "_id": -1 }'
-            className="min-w-[120px] flex-[0_1_190px] max-[960px]:basis-[130px] max-sm:flex-1"
+            className="min-w-[120px] flex-[0_1_190px] max-[960px]:basis-[130px] max-sm:flex-1 @max-[620px]:min-w-0 @max-[620px]:flex-1"
           />
           <QueryNumberField
             label="limit"
@@ -131,6 +136,7 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
             value={skip}
             onChange={(value) => updateTab(tab.id, { skip: value })}
           />
+          </div>
         </>
       )}
       <div className={cn("flex flex-col items-start gap-1.5", aggregate && "mt-px")}>
@@ -146,6 +152,7 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
         </Button>
         {aggregate && tab.assistantSource === "pipeline" && <FromAssistantTag />}
       </div>
+    </div>
     </div>
     {ask && !aggregate && <InlineAskStrip tab={tab} ask={ask} />}
     </>

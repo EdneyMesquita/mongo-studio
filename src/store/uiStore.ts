@@ -19,8 +19,9 @@ export type ConnectionDialog = { mode: "new" } | { mode: "edit"; id: string } | 
 export type ConsoleLayout = "side" | "stacked";
 
 interface UiState {
-  mainTab: MainTab;
-  setMainTab: (tab: MainTab) => void;
+  /** Each collection tab's view (Documents, Indexes, Console); unset is Documents. */
+  mainTabs: Record<string, MainTab>;
+  setMainTab: (tabId: string, view: MainTab) => void;
   resultView: ResultView;
   setResultView: (view: ResultView) => void;
   consoleLayout: ConsoleLayout;
@@ -55,8 +56,8 @@ export const DEFAULT_INSPECTOR_WIDTH = 380;
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
-      mainTab: "browse",
-      setMainTab: (tab) => set({ mainTab: tab }),
+      mainTabs: {},
+      setMainTab: (tabId, view) => set((s) => ({ mainTabs: { ...s.mainTabs, [tabId]: view } })),
       resultView: "grid",
       setResultView: (view) => set({ resultView: view }),
       consoleLayout: "stacked",

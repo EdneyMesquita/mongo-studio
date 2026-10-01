@@ -586,7 +586,7 @@ export const useAssistantStore = create<AssistantState>()(
           const tab = selectActiveTab(useSessionsStore.getState());
           if (!tab) return;
           const consoleView =
-            tab.kind === "console" || useUiStore.getState().mainTab === "console";
+            tab.kind === "console" || useUiStore.getState().mainTabs[tab.id] === "console";
           if (!consoleView && (tab.kind !== "collection" || tab.mode !== "find")) return;
           if (get().inline[tab.id]) return;
           set((st) => ({
