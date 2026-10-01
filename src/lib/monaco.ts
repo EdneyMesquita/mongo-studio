@@ -4,6 +4,7 @@ import EditorWorker from "monaco-editor/editor/editor.worker.js?worker";
 import JsonWorker from "monaco-editor/language/json/json.worker.js?worker";
 import TsWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 import { registerMongoCompletion } from "./monacoCompletion";
+import { registerQueryLanguage } from "./monacoQueryLanguage";
 
 // Bundle Monaco (and its web workers) via Vite instead of letting
 // @monaco-editor/react fetch them from a CDN at runtime - this app needs to
@@ -19,6 +20,7 @@ self.MonacoEnvironment = {
 };
 
 loader.config({ monaco });
+registerQueryLanguage(monaco);
 registerMongoCompletion(monaco);
 
 // Editor themes in the app's own colors (DESIGN.md tokens), so the console
@@ -33,6 +35,7 @@ monaco.editor.defineTheme("mongo-studio-dark", {
     { token: "string.key.json", foreground: "C77DBB" },
     { token: "string.value.json", foreground: "6AAB73" },
     { token: "number", foreground: "2AACB8" },
+    { token: "regexp", foreground: "6AAB73" },
     { token: "keyword.json", foreground: "CF8E6D" },
     { token: "delimiter", foreground: "8C8F96" },
     { token: "identifier", foreground: "DFE1E5" },
@@ -71,6 +74,7 @@ monaco.editor.defineTheme("mongo-studio-light", {
     { token: "string.key.json", foreground: "871094" },
     { token: "string.value.json", foreground: "067D17" },
     { token: "number", foreground: "1750EB" },
+    { token: "regexp", foreground: "067D17" },
     { token: "keyword.json", foreground: "0033B3" },
     { token: "delimiter", foreground: "6E7180" },
     { token: "identifier", foreground: "1E1F22" },

@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -8,6 +9,8 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(() => ({
   plugins: [react(), tailwindcss()],
+  // Only the app's own tests, not copies in local worktrees under .claude/.
+  test: { include: ["src/**/*.test.ts"] },
   resolve: {
     // "@/..." resolves to src/, matching tsconfig paths (shadcn/ui imports it)
     alias: { "@": new URL("./src", import.meta.url).pathname },

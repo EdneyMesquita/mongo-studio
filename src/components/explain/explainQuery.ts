@@ -1,7 +1,8 @@
 import type { CollectionTab } from "../../store/sessionsStore";
 import type { ExplainQueryInput } from "../../types/explain";
+import { parseOptionalQueryObject, parseQueryArray, parseQueryObject } from "../../lib/queryText";
 
-/** The tab's current query as explain input; throws on invalid JSON. */
+/** The tab's current query as explain input; throws `QuerySyntaxError` on text it can't read. */
 export function explainQueryOf(tab: CollectionTab): ExplainQueryInput {
   if (tab.mode === "aggregate") {
     return {
@@ -10,12 +11,12 @@ export function explainQueryOf(tab: CollectionTab): ExplainQueryInput {
       projection: null,
       limit: null,
       skip: null,
-      pipeline: tab.pipelineText.trim() ? JSON.parse(tab.pipelineText) : [],
+      pipeline: parseQueryArray(tab.pipelineText),
     };
   }
   return {
-    filter: tab.filterText.trim() ? JSON.parse(tab.filterText) : {},
-    sort: tab.sortText.trim() ? JSON.parse(tab.sortText) : null,
+    filter: parseQueryObject(tab.filterText, "filter"),
+    sort: parseOptionalQueryObject(tab.sortText, "sort"),
     projection: null,
     limit: null,
     skip: null,

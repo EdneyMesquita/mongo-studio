@@ -2,6 +2,7 @@ import type * as Monaco from "monaco-editor";
 import { suggest } from "./mongoCompletion";
 import type { CompletionEditor, SuggestionKind } from "./mongoCompletion";
 import { completionSource } from "./completionData";
+import { QUERY_LANGUAGE } from "./monacoQueryLanguage";
 
 /** Where an editor's completions look names up, read when completion runs. */
 export interface CompletionContext {
@@ -96,9 +97,9 @@ function itemKind(monaco: typeof Monaco, kind: SuggestionKind) {
   }
 }
 
-/** Registers MongoDB completion for JSON editors and the script console. */
+/** Registers MongoDB completion for the query fields and the script console. */
 export function registerMongoCompletion(monaco: typeof Monaco) {
-  for (const language of ["json", "javascript"]) {
+  for (const language of [QUERY_LANGUAGE, "javascript"]) {
     monaco.languages.registerCompletionItemProvider(language, {
       triggerCharacters: ["$", '"', "'"],
       async provideCompletionItems(model, position) {

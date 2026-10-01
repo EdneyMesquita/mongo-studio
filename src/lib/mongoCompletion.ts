@@ -194,8 +194,12 @@ interface Scan {
   string: { quote: string; start: number } | null;
 }
 
-/** Brackets still open and string state at the end of `text`. */
-function scan(text: string, jsComments: boolean): Scan {
+/**
+ * Brackets still open and string state at the end of `text`. Comments are
+ * skipped everywhere (the query fields take them too); template strings
+ * only exist in the console's JavaScript.
+ */
+function scan(text: string, js: boolean): Scan {
   const stack: Opener[] = [];
   let string: Scan["string"] = null;
   for (let i = 0; i < text.length; i++) {
@@ -205,19 +209,19 @@ function scan(text: string, jsComments: boolean): Scan {
       else if (c === string.quote) string = null;
       continue;
     }
-    if (jsComments && c === "/" && text[i + 1] === "/") {
+    if (c === "/" && text[i + 1] === "/") {
       const end = text.indexOf("\n", i);
       if (end === -1) return { stack, string: null };
       i = end;
       continue;
     }
-    if (jsComments && c === "/" && text[i + 1] === "*") {
+    if (c === "/" && text[i + 1] === "*") {
       const end = text.indexOf("*/", i + 2);
       if (end === -1) return { stack, string: null };
       i = end + 1;
       continue;
     }
-    if (c === '"' || c === "'" || (jsComments && c === "`")) {
+    if (c === '"' || c === "'" || (js && c === "`")) {
       string = { quote: c, start: i };
     } else if (c === "{" || c === "[" || c === "(") {
       stack.push({ char: c, index: i });
@@ -236,10 +240,42 @@ function charBefore(text: string, index: number): string {
   return "";
 }
 
+/**
+ * `text` with its comments blanked to spaces (same length, so indexes
+ * still line up): a comment between a comma and the cursor mustn't hide
+ * the comma.
+ */
+function withoutComments(text: string): string {
+  let out = "";
+  let quote: string | null = null;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quote) {
+      if (c === "\\") {
+        out += c + (text[i + 1] ?? "");
+        i++;
+        continue;
+      }
+      if (c === quote) quote = null;
+      out += c;
+    } else if (c === "/" && (text[i + 1] === "/" || text[i + 1] === "*")) {
+      const block = text[i + 1] === "*";
+      const close = block ? text.indexOf("*/", i + 2) : text.indexOf("\n", i);
+      const end = close === -1 ? text.length : block ? close + 2 : close;
+      out += text.slice(i, end).replace(/[^\n]/g, " ");
+      i = end - 1;
+    } else {
+      if (c === '"' || c === "'" || c === "`") quote = c;
+      out += c;
+    }
+  }
+  return out;
+}
+
 /** Whether position `index` is where an object key goes. */
 function isKeyPosition(text: string, index: number, stack: Opener[]): boolean {
   const top = stack[stack.length - 1];
-  const prev = charBefore(text, index);
+  const prev = charBefore(withoutComments(text.slice(0, index)), index);
   return top?.char === "{" && (prev === "{" || prev === ",");
 }
 

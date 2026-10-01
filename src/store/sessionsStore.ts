@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { api } from "../lib/tauri";
+import { parseOptionalQueryObject, parseQueryArray, parseQueryObject } from "../lib/queryText";
 import type { CollectionInfo } from "../types/connection";
 import type { CollectionStats, QueryResultPage } from "../types/query";
 
@@ -139,22 +140,6 @@ export function selectActiveTab(state: SessionsState): Tab | null {
 /** Key of a database in `databaseTree`: database names can't contain "/". */
 export function databaseKey(connectionId: string, database: string): string {
   return `${connectionId}/${database}`;
-}
-
-function parseJsonObject(text: string): Record<string, unknown> {
-  const trimmed = text.trim();
-  if (!trimmed) return {};
-  return JSON.parse(trimmed);
-}
-
-function parseJsonArray(text: string): unknown[] {
-  const trimmed = text.trim();
-  if (!trimmed) return [];
-  const parsed = JSON.parse(trimmed);
-  if (!Array.isArray(parsed)) {
-    throw new Error("Pipeline must be a JSON array of stages");
-  }
-  return parsed;
 }
 
 function newTab(
@@ -328,8 +313,10 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       const started = performance.now();
       const elapsed = () => Math.round(performance.now() - started);
       try {
+        // The fields keep the text as typed (mongosh style or JSON); only
+        // the Extended JSON it reads as goes to the backend.
         if (tab.mode === "aggregate") {
-          const pipeline = parseJsonArray(tab.pipelineText);
+          const pipeline = parseQueryArray(tab.pipelineText);
           const results = await api.runAggregate(
             sessionId,
             tab.database,
@@ -338,8 +325,8 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
           );
           patchTab(id, { results, resultsMode: "aggregate", queryMs: elapsed(), loading: false });
         } else {
-          const filter = parseJsonObject(tab.filterText);
-          const sort = tab.sortText.trim() ? parseJsonObject(tab.sortText) : null;
+          const filter = parseQueryObject(tab.filterText, "filter");
+          const sort = parseOptionalQueryObject(tab.sortText, "sort");
           const results = await api.runFind(sessionId, tab.database, tab.collection, {
             filter,
             sort,

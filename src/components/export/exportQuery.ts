@@ -1,4 +1,5 @@
 import type { CollectionTab } from "../../store/sessionsStore";
+import { parseOptionalQueryObject, parseQueryArray, parseQueryObject } from "../../lib/queryText";
 
 export interface ExportQuery {
   filter: unknown;
@@ -7,13 +8,12 @@ export interface ExportQuery {
   limit: number | null;
 }
 
-/** The tab's current query to export; throws on invalid JSON. */
+/** The tab's current query to export; throws `QuerySyntaxError` on text it can't read. */
 export function exportQueryOf(tab: CollectionTab, capToLimit: boolean): ExportQuery {
   if (tab.mode === "aggregate") {
-    const trimmed = tab.pipelineText.trim();
-    return { filter: {}, sort: null, pipeline: trimmed ? JSON.parse(trimmed) : [], limit: null };
+    return { filter: {}, sort: null, pipeline: parseQueryArray(tab.pipelineText), limit: null };
   }
-  const filter = tab.filterText.trim() ? JSON.parse(tab.filterText) : {};
-  const sort = tab.sortText.trim() ? JSON.parse(tab.sortText) : null;
+  const filter = parseQueryObject(tab.filterText, "filter");
+  const sort = parseOptionalQueryObject(tab.sortText, "sort");
   return { filter, sort, pipeline: null, limit: capToLimit ? tab.limit : null };
 }

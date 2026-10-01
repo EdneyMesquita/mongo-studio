@@ -1,4 +1,5 @@
 import { dateIso, isPlainObject } from "./bsonValue";
+import { parseQueryValue } from "./queryText";
 
 /**
  * How a value is edited in place. Each kind keeps the value's BSON type:
@@ -78,7 +79,7 @@ export function editHint(kind: EditKind): string {
     case "boolean":
       return "true or false";
     case "null":
-      return "A JSON value: \"text\", 12, true or null";
+      return "A value: \"text\", 12, true, null or ObjectId(\"…\")";
     case "date":
       return "An ISO date, e.g. 2026-09-23T14:30:00Z";
     case "objectId":
@@ -114,11 +115,15 @@ export function parseEdit(text: string, kind: EditKind): ParsedEdit {
       return { ok: false, error: "Use true or false" };
     }
     case "null":
-      // A null field has no type to keep, so read a JSON literal ("text",
-      // 12, true, null) and fall back to a plain string.
+      // A null field has no type to keep, so read a literal the way the
+      // query fields do ("text", 12, true, null, ObjectId("…")) and fall
+      // back to a plain string.
       if (trimmed === "") return { ok: true, value: "" };
+      // A leading slash reads as a path ("/api/v1/"), not a regex literal.
+      if (trimmed.startsWith("/")) return { ok: true, value: text };
       try {
-        return { ok: true, value: JSON.parse(trimmed) };
+        const value = parseQueryValue(trimmed);
+        return { ok: true, value: value === undefined ? text : value };
       } catch {
         return { ok: true, value: text };
       }
