@@ -93,10 +93,11 @@ fn apply_advanced_overrides(
     if let Some(ms) = advanced.server_selection_timeout_ms {
         options.server_selection_timeout = Some(std::time::Duration::from_millis(ms));
     }
-    // Default to a single pooled connection per session rather than the
-    // driver's own defaults (min 0 / max 10) - a desktop client normally
-    // runs one query at a time per open connection tab.
-    options.max_pool_size = Some(advanced.max_pool_size.unwrap_or(1));
+    // A small pool per session rather than the driver's own defaults (min 0
+    // / max 10). One connection isn't enough: the session serves the tree,
+    // every tab and console on it, and a single slow query would hold up
+    // all of them.
+    options.max_pool_size = Some(advanced.max_pool_size.unwrap_or(4));
     options.min_pool_size = Some(advanced.min_pool_size.unwrap_or(1));
     if let Some(rs) = &advanced.replica_set {
         options.repl_set_name = Some(rs.clone());
@@ -613,7 +614,10 @@ pub async fn get_collection_stats(
     collection: &str,
 ) -> AppResult<CollectionStats> {
     let coll = client.database(db).collection::<Document>(collection);
-    let document_count = coll.count_documents(doc! {}).await?;
+    // From the collection's metadata, so it answers at once. An exact
+    // count_documents scans the whole collection, which takes minutes on a
+    // large one and holds the session's connection all that time.
+    let document_count = coll.estimated_document_count().await?;
     let indexes = list_indexes(client, db, collection).await?;
     Ok(CollectionStats {
         document_count,

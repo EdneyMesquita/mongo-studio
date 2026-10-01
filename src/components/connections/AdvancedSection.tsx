@@ -75,7 +75,7 @@ export function AdvancedSection({ input, update }: ConnectionSectionProps) {
       </FieldRow>
       <FieldRow>
         {text("replicaSet", "adv-replica-set", "Replica set", "Optional")}
-        {number("maxPoolSize", "adv-max-pool", "Max pool size", "1")}
+        {number("maxPoolSize", "adv-max-pool", "Max pool size", "4")}
       </FieldRow>
       <FieldRow>
         {number("serverSelectionTimeoutMs", "adv-sst", "Server selection timeout (ms)", "Driver default")}

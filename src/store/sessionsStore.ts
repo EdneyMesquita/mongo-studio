@@ -256,13 +256,14 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
         tabs: [...s.tabs, { ...newTab(connection, database, collection), loading: true }],
         activeTabId: id,
       }));
-      try {
-        const stats = await api.getCollectionStats(sessionId, database, collection);
-        patchTab(id, { stats, loading: false });
-        await get().runQuery(sessionId, id);
-      } catch (e) {
-        patchTab(id, { error: String(e), loading: false });
-      }
+      // The documents come first. The stats only feed the count in the
+      // header and status bar, so they load alongside and a failure there
+      // leaves the results alone.
+      api
+        .getCollectionStats(sessionId, database, collection)
+        .then((stats) => patchTab(id, { stats }))
+        .catch(() => {});
+      await get().runQuery(sessionId, id);
     },
 
     openConsole: (connection, database, collection, options) => {
