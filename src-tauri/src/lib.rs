@@ -8,6 +8,7 @@ mod error;
 mod export;
 mod logging;
 mod models;
+mod paths;
 mod saved_scripts;
 mod scripting;
 mod secrets;
@@ -102,8 +103,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
     app.manage(layout);
     // The agents run in an empty folder of the app's own, so they see none
-    // of the user's files.
-    let workdir = app.path().app_data_dir()?.join("assistant");
+    // of the user's files - one they can see at all, see `paths`.
+    let workdir = paths::shared_dir(app.path().app_data_dir()?.join("assistant"), "assistant");
     app.manage(Assistant::new(
         std::sync::Arc::new(app.handle().clone()),
         workdir,

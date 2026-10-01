@@ -53,8 +53,14 @@ fn local_offset() -> time::UtcOffset {
 /// builds). Dependencies log at warn and above only; the mongodb driver,
 /// rustls, russh and the webview stack are chatty at info.
 pub fn plugin<R: Runtime>() -> TauriPlugin<R> {
-    let mut targets = vec![Target::new(TargetKind::LogDir {
-        file_name: Some(FILE_NAME.to_string()),
+    let file_name = Some(FILE_NAME.to_string());
+    // A Store install keeps it where the file manager can open it, see `paths`.
+    let mut targets = vec![Target::new(match crate::paths::package_state_dir() {
+        Some(dir) => TargetKind::Folder {
+            path: dir.join("logs"),
+            file_name,
+        },
+        None => TargetKind::LogDir { file_name },
     })];
     if cfg!(debug_assertions) {
         targets.push(Target::new(TargetKind::Stdout));
@@ -114,12 +120,15 @@ fn short_target(target: &str) -> &str {
     }
 }
 
+/// The folder the log file is written to, matching `plugin`'s target.
+pub fn log_dir<R: Runtime, M: Manager<R>>(app: &M) -> tauri::Result<std::path::PathBuf> {
+    Ok(crate::paths::shared_dir(app.path().app_log_dir()?, "logs"))
+}
+
 /// The first lines of every session: which build, on what, and where its
 /// log lives.
 pub fn log_startup<R: Runtime, M: Manager<R>>(app: &M) {
-    let log_dir = app
-        .path()
-        .app_log_dir()
+    let log_dir = log_dir(app)
         .map(|p| p.display().to_string())
         .unwrap_or_else(|e| format!("unknown ({e})"));
     log::info!(

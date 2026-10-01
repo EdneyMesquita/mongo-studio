@@ -22,7 +22,7 @@ Mongo Studio keeps a log file, so a failed connection or a crash can be looked i
 
 | OS | Folder |
 | --- | --- |
-| Windows | `%LOCALAPPDATA%\com.matheuscaet.mongo-studio\logs` |
+| Windows | `%LOCALAPPDATA%\com.matheuscaet.mongo-studio\logs`; from the Microsoft Store, `%LOCALAPPDATA%\Packages\<package>\LocalState\logs` |
 | macOS | `~/Library/Logs/com.matheuscaet.mongo-studio` |
 | Linux | `$XDG_DATA_HOME/com.matheuscaet.mongo-studio/logs`, usually `~/.local/share/com.matheuscaet.mongo-studio/logs` |
 

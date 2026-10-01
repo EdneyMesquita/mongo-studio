@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use mongodb::Client;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_opener::OpenerExt;
 use uuid::Uuid;
 
@@ -938,7 +938,7 @@ pub fn assistant_workdir(assistant: State<Assistant>) -> AppResult<String> {
 #[tauri::command]
 pub async fn open_log_dir(app: AppHandle) -> AppResult<String> {
     let opened = (|| {
-        let dir = app.path().app_log_dir().map_err(std::io::Error::other)?;
+        let dir = crate::logging::log_dir(&app).map_err(std::io::Error::other)?;
         std::fs::create_dir_all(&dir)?;
         let dir = dir.to_string_lossy().into_owned();
         app.opener().open_path(&dir, None::<&str>).map_err(|e| {
