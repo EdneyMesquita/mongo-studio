@@ -140,7 +140,8 @@ interface AssistantState extends Settings {
   togglePanel: () => void;
   setAgent: (agent: AgentKind) => void;
   setShare: (key: "indexes" | "values", on: boolean) => void;
-  setAccess: (connectionId: string, allowed: boolean) => void;
+  /** Allows or denies several connections at once, e.g. a whole folder. */
+  setAccess: (connectionIds: string[], allowed: boolean) => void;
   setModel: (agent: AgentKind, model: string | null) => void;
   setEffort: (agent: AgentKind, effort: string | null) => void;
   setPanelWidth: (width: number) => void;
@@ -405,8 +406,10 @@ export const useAssistantStore = create<AssistantState>()(
 
         setAgent: (agent) => set({ agent }),
         setShare: (key, on) => set((st) => ({ share: { ...st.share, [key]: on } })),
-        setAccess: (connectionId, allowed) =>
-          set((st) => ({ access: { ...st.access, [connectionId]: allowed } })),
+        setAccess: (connectionIds, allowed) =>
+          set((st) => ({
+            access: { ...st.access, ...Object.fromEntries(connectionIds.map((id) => [id, allowed])) },
+          })),
         setModel: (agent, model) =>
           set((st) => {
             // An effort the new model doesn't take goes back to the default.
