@@ -39,7 +39,7 @@ In Partner Center, open the app and start a submission:
 1. **Pricing and availability:** Free, and the markets to publish in.
 2. **Properties:**
    - **Category:** *Developer tools*.
-   - **Privacy policy URL:** point it to [`PRIVACY.md`](../PRIVACY.md) on GitHub. It's required because the app connects to the network, and because the opt-in Assistant sends data to the provider of the agent the user chose.
+   - **Privacy policy URL:** `https://edneymesquita.github.io/mongo-studio/privacy/`, the [`PRIVACY.md`](../PRIVACY.md) text as a plain page served by GitHub Pages from the `gh-pages` branch. It's required because the app connects to the network, and because the opt-in Assistant sends data to the provider of the agent the user chose. Don't use a github.com link to the file: automated fetchers, the Store's validator among them, get a 503 page without the policy, and 1.1.0 was rejected for it (policy 10.5.1). When `PRIVACY.md` changes, update the page on `gh-pages` too.
    - **Support contact:** the repository's issues page works.
 3. **Age ratings:** the questionnaire. It's a developer tool with no user-generated content shared between users.
 4. **Packages:** upload the `.msix` and keep the *Desktop* device family.

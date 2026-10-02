@@ -1,12 +1,15 @@
 # Privacy policy
 
-Mongo Studio is a desktop app that runs on your computer. It has no account and no telemetry, and the project runs no server that the app talks to.
+Mongo Studio is a desktop app that runs on your computer. It has no account and no telemetry, and the project runs no server that the app talks to. We don't collect, store, sell or share any personal information.
+
+This policy is also published at <https://edneymesquita.github.io/mongo-studio/privacy/>, the address given to the Microsoft Store.
 
 ## What stays on your computer
 
 - **Connections:** the connections you save, including names, addresses and settings, are stored on your computer. Passwords and passphrases go to your system's credential store (Windows Credential Manager, macOS Keychain, or Secret Service on Linux), or to an encrypted file where none is available.
 - **Your data:** the app connects only to the MongoDB servers you set up. It reads and writes their data only when you ask it to: opening a collection, running a query or script, editing a value.
 - **Your files:** scripts and exports are saved only where you choose.
+- **Log file:** the app writes a log of its own activity and errors to your computer, to help diagnose problems: app start and exit, connection names and server hosts, failed or slow operations, and crashes. It never contains passwords, connection strings, queries or documents. It is never sent anywhere; you can open it from the app (Ctrl+K, "Open logs folder") and delete it at any time.
 
 ## The Assistant (optional)
 
