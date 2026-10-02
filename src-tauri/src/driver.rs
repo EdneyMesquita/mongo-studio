@@ -21,6 +21,8 @@ use crate::ssh_tunnel::{self, KnownHosts, SshTunnel, SshTunnelAuth, SshTunnelCon
 pub struct ActiveConnection {
     pub client: Client,
     pub tunnel: Option<SshTunnel>,
+    /// The connection's name, for log lines about this session.
+    pub name: String,
 }
 
 /// Builds a plain connection URI (no advanced overrides applied yet) from a
@@ -93,10 +95,11 @@ fn apply_advanced_overrides(
     if let Some(ms) = advanced.server_selection_timeout_ms {
         options.server_selection_timeout = Some(std::time::Duration::from_millis(ms));
     }
-    // Default to a single pooled connection per session rather than the
-    // driver's own defaults (min 0 / max 10) - a desktop client normally
-    // runs one query at a time per open connection tab.
-    options.max_pool_size = Some(advanced.max_pool_size.unwrap_or(1));
+    // A small pool per session rather than the driver's own defaults (min 0
+    // / max 10). One connection isn't enough: the session serves the tree,
+    // every tab and console on it, and a single slow query would hold up
+    // all of them.
+    options.max_pool_size = Some(advanced.max_pool_size.unwrap_or(4));
     options.min_pool_size = Some(advanced.min_pool_size.unwrap_or(1));
     if let Some(rs) = &advanced.replica_set {
         options.repl_set_name = Some(rs.clone());
@@ -119,6 +122,20 @@ fn apply_advanced_overrides(
         credential.source = Some(source.clone());
     }
     Ok(())
+}
+
+/// Whether the connection's auth mechanism takes a password: SCRAM (the
+/// default when none is set) and LDAP's PLAIN do; X.509, AWS and Kerberos
+/// don't.
+fn logs_in_with_password(options: &ClientOptions) -> bool {
+    use mongodb::options::AuthMechanism as Driver;
+    matches!(
+        options
+            .credential
+            .as_ref()
+            .and_then(|c| c.mechanism.as_ref()),
+        None | Some(Driver::ScramSha1 | Driver::ScramSha256 | Driver::Plain)
+    )
 }
 
 fn map_auth_mechanism(
@@ -148,9 +165,16 @@ pub async fn build_client_options(
     known_hosts: &Arc<KnownHosts>,
 ) -> AppResult<(ClientOptions, Option<SshTunnel>)> {
     let password = if profile.has_password {
-        secrets
+        let saved = secrets
             .get(&profile.id, SecretKind::Password)
-            .map_err(AppError::Secret)?
+            .map_err(AppError::Secret)?;
+        Some(saved.ok_or_else(|| {
+            AppError::PasswordMissing(
+                "The saved password for this connection is missing from the system keychain. \
+                 Edit the connection and enter it again."
+                    .to_string(),
+            )
+        })?)
     } else {
         None
     };
@@ -162,6 +186,17 @@ pub async fn build_client_options(
 
     apply_tls_overrides(&mut options, profile, secrets)?;
     apply_advanced_overrides(&mut options, &profile.advanced)?;
+
+    // Without a password the URI goes out with no user at all, and the
+    // server takes the connection as anonymous: the ping passes and the
+    // first real command fails as unauthorized. Say what's missing instead.
+    if let Some(user) = profile.username.as_deref().filter(|u| !u.is_empty()) {
+        if password.is_none() && logs_in_with_password(&options) {
+            return Err(AppError::PasswordMissing(format!(
+                "No password is saved for user \"{user}\". Edit the connection and enter it."
+            )));
+        }
+    }
 
     let tunnel = if let Some(ssh) = &profile.ssh_tunnel {
         if !ssh.enabled {
@@ -244,7 +279,11 @@ pub async fn connect(
         .database("admin")
         .run_command(doc! { "ping": 1 })
         .await?;
-    Ok(ActiveConnection { client, tunnel })
+    Ok(ActiveConnection {
+        client,
+        tunnel,
+        name: profile.name.clone(),
+    })
 }
 
 pub async fn test_connection(
@@ -584,7 +623,10 @@ pub async fn get_collection_stats(
     collection: &str,
 ) -> AppResult<CollectionStats> {
     let coll = client.database(db).collection::<Document>(collection);
-    let document_count = coll.count_documents(doc! {}).await?;
+    // From the collection's metadata, so it answers at once. An exact
+    // count_documents scans the whole collection, which takes minutes on a
+    // large one and holds the session's connection all that time.
+    let document_count = coll.estimated_document_count().await?;
     let indexes = list_indexes(client, db, collection).await?;
     Ok(CollectionStats {
         document_count,
@@ -698,9 +740,79 @@ pub async fn explain_query(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{AuthMechanism, ConnectionAdvancedOptions, TlsOptions};
+    use crate::secrets::InMemoryStore;
 
     fn segments(parts: &[&str]) -> Vec<String> {
         parts.iter().map(|p| p.to_string()).collect()
+    }
+
+    fn profile(username: Option<&str>, has_password: bool) -> ConnectionProfile {
+        ConnectionProfile {
+            id: "conn".to_string(),
+            name: "test".to_string(),
+            color: None,
+            source: ConnectionSource::Uri {
+                uri: "mongodb://localhost:27017/".to_string(),
+            },
+            database: None,
+            username: username.map(str::to_string),
+            has_password,
+            tls: TlsOptions::default(),
+            ssh_tunnel: None,
+            advanced: ConnectionAdvancedOptions::default(),
+            created_at: String::new(),
+            updated_at: String::new(),
+        }
+    }
+
+    async fn options_for(
+        profile: &ConnectionProfile,
+        secrets: &InMemoryStore,
+    ) -> AppResult<ClientOptions> {
+        let known_hosts = Arc::new(
+            KnownHosts::load(&std::env::temp_dir().join("mongo-studio-driver-test")).unwrap(),
+        );
+        build_client_options(profile, secrets, &known_hosts)
+            .await
+            .map(|(options, _)| options)
+    }
+
+    #[tokio::test]
+    async fn a_password_missing_from_the_keychain_fails_instead_of_going_anonymous() {
+        let err = options_for(&profile(Some("alice"), true), &InMemoryStore::new())
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::PasswordMissing(_)), "{err}");
+        assert!(err.to_string().contains("keychain"));
+    }
+
+    #[tokio::test]
+    async fn a_user_without_a_password_fails_unless_the_mechanism_needs_none() {
+        let secrets = InMemoryStore::new();
+        let err = options_for(&profile(Some("alice"), false), &secrets)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::PasswordMissing(_)), "{err}");
+        assert!(err.to_string().contains("\"alice\""));
+
+        let mut x509 = profile(Some("CN=alice"), false);
+        x509.advanced.auth_mechanism = Some(AuthMechanism::MongodbX509);
+        assert!(options_for(&x509, &secrets).await.is_ok());
+
+        assert!(options_for(&profile(None, false), &secrets).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_saved_password_goes_into_the_credential() {
+        let secrets = InMemoryStore::new();
+        secrets.set("conn", SecretKind::Password, "p@ss").unwrap();
+        let options = options_for(&profile(Some("alice"), true), &secrets)
+            .await
+            .unwrap();
+        let credential = options.credential.unwrap();
+        assert_eq!(credential.username.as_deref(), Some("alice"));
+        assert_eq!(credential.password.as_deref(), Some("p@ss"));
     }
 
     #[test]

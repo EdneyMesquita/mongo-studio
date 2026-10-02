@@ -16,6 +16,10 @@ pub enum AppError {
     InvalidInput(String),
     #[error("session {0} is not connected")]
     SessionNotFound(String),
+    /// A connection that logs in with a password has none to send. Shown
+    /// as it is, so the message carries no prefix.
+    #[error("{0}")]
+    PasswordMissing(String),
     /// Assistant failures are shown to the user as they are, so the message
     /// carries no prefix.
     #[error("{0}")]

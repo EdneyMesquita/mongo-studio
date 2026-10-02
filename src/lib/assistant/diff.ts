@@ -1,3 +1,5 @@
+import { parseQueryObject } from "../queryText";
+
 /** The changed span of `after` against `before`: common prefix and suffix trimmed. */
 export function changedSpan(before: string, after: string): { start: number; end: number } {
   let start = 0;
@@ -49,8 +51,10 @@ export function filterChangeSummary(before: string, after: string): string {
   let a: Record<string, unknown>;
   let b: Record<string, unknown>;
   try {
-    a = before.trim() ? JSON.parse(before) : {};
-    b = JSON.parse(after);
+    // Compared as values, so ObjectId("…") in one and {"$oid": "…"} in the
+    // other count as the same condition.
+    a = parseQueryObject(before);
+    b = parseQueryObject(after);
   } catch {
     return "filter rewritten";
   }

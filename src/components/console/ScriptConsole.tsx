@@ -12,8 +12,12 @@ import { runCurrentConsole, useRunDuration } from "./useTimedRun";
 import { useAssistantStore } from "../../store/assistantStore";
 import { InlineAskStrip } from "../assistant/InlineAskStrip";
 
-/** The script console of a tab: a console tab, or a collection tab's own. */
-export function ScriptConsole({ tab }: { tab: Tab }) {
+/**
+ * The script console of a tab: a console tab, or a collection tab's own.
+ * `active` is the one on screen alone or in the focused pane; only it takes
+ * the window-wide shortcuts, so a split with two consoles saves once.
+ */
+export function ScriptConsole({ tab, active = true }: { tab: Tab; active?: boolean }) {
   const session = useConnectionsStore((s) => s.sessions[tab.connection.id]);
 
   const key = tab.id;
@@ -36,6 +40,7 @@ export function ScriptConsole({ tab }: { tab: Tab }) {
   // than as a Monaco command so it also works with the editor unfocused;
   // Monaco has no binding of its own for it, so the event still gets here.
   useEffect(() => {
+    if (!active) return;
     function onKeyDown(e: KeyboardEvent) {
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "s") return;
       e.preventDefault();
@@ -43,7 +48,7 @@ export function ScriptConsole({ tab }: { tab: Tab }) {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [active]);
 
   if (!session) return null;
 

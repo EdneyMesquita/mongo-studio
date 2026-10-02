@@ -1,7 +1,6 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 import { RefreshCw, Shield, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ConnectionChip } from "@/components/ui/ConnectionChip";
 import { Switch } from "@/components/ui/switch";
 import { connectionColor } from "@/lib/connectionColor";
@@ -14,6 +13,7 @@ import {
 } from "../../store/assistantStore";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import type { AgentKind } from "../../types/assistant";
+import { AssistantAccessDialog } from "./AssistantAccessDialog";
 import { ModelSettings } from "./ModelSettings";
 
 function SectionTitle({ children }: { children: string }) {
@@ -40,6 +40,43 @@ function ShareSwitch({ title, help, checked, onChange }: ShareSwitchProps) {
   );
 }
 
+/** How many connections the Assistant may read, and the way to change it. */
+function ConnectionAccessSummary() {
+  const profiles = useConnectionsStore((s) => s.profiles);
+  const access = useAssistantStore((s) => s.access);
+  const [choosing, setChoosing] = useState(false);
+  const allowed = profiles.filter((p) => access[p.id] ?? defaultAccess(p.summary));
+  const SHOWN = 4;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-line bg-editor p-2.5">
+      <div className="flex items-center gap-2">
+        <span className="text-base">
+          <b className="font-medium tabular-nums">{allowed.length}</b>
+          <span className="text-fg-2"> of {profiles.length} connections allowed</span>
+        </span>
+        <Button size="sm" className="ml-auto" onClick={() => setChoosing(true)}>
+          Choose…
+        </Button>
+      </div>
+      {allowed.length > 0 && (
+        <ul className="flex flex-col gap-1">
+          {allowed.slice(0, SHOWN).map((p) => (
+            <li key={p.id} className="flex min-w-0 items-center gap-2 text-sm">
+              <ConnectionChip name={p.name} color={connectionColor(p.id, p.color)} size="sm" />
+              <span className="truncate">{p.name}</span>
+            </li>
+          ))}
+          {allowed.length > SHOWN && (
+            <li className="text-sm text-fg-3">and {allowed.length - SHOWN} more</li>
+          )}
+        </ul>
+      )}
+      {choosing && <AssistantAccessDialog onClose={() => setChoosing(false)} />}
+    </div>
+  );
+}
+
 /**
  * First run, and the settings after it: which agent, what it may read,
  * which connections, and plainly where what it reads goes. The Assistant
@@ -51,9 +88,7 @@ export function AssistantSetup() {
   const agents = useAssistantStore((s) => s.agents);
   const detecting = useAssistantStore((s) => s.detecting);
   const share = useAssistantStore((s) => s.share);
-  const access = useAssistantStore((s) => s.access);
-  const { detect, setAgent, setShare, setAccess, enable, closePanel, openPanel } = useAssistantStore.getState();
-  const profiles = useConnectionsStore((s) => s.profiles);
+  const { detect, setAgent, setShare, enable, closePanel, openPanel } = useAssistantStore.getState();
   const chosen = agents?.find((a) => a.id === agent);
   const name = AGENT_NAMES[agent];
 
@@ -157,20 +192,7 @@ export function AssistantSetup() {
         />
 
         <SectionTitle>Connections it may read</SectionTitle>
-        <div role="group" aria-label="Connections the Assistant may read" className="-mx-1.5 flex flex-col">
-          {profiles.map((p) => {
-            const allowed = access[p.id] ?? defaultAccess(p.summary);
-            const id = `assistant-access-${p.id}`;
-            return (
-              <label key={p.id} htmlFor={id} className="flex h-7 cursor-pointer items-center gap-2 rounded-sm px-1.5 hover:bg-hover">
-                <Checkbox id={id} checked={allowed} onCheckedChange={(on) => setAccess(p.id, on === true)} />
-                <ConnectionChip name={p.name} color={connectionColor(p.id, p.color)} size="sm" />
-                <span className="min-w-0 truncate">{p.name}</span>
-                <span className="ml-auto text-xs text-fg-3">{defaultAccess(p.summary) ? "This computer" : "Remote"}</span>
-              </label>
-            );
-          })}
-        </div>
+        <ConnectionAccessSummary />
         <p className="m-0 text-sm leading-normal text-fg-2">
           Connections on this machine (localhost) start allowed; remote ones stay unchecked until you allow them here.
           Connection strings and passwords never reach the agent.

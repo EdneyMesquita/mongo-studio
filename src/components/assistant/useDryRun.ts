@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../lib/tauri";
 import { pipelineWrites } from "../../lib/assistant/answer";
+import { parseQueryValue } from "../../lib/queryText";
 import type { Proposal } from "../../lib/assistant/answer";
 import { useConnectionsStore } from "../../store/connectionsStore";
 
@@ -17,12 +18,14 @@ const CAP = 1000;
 const runs = new Map<string, Promise<DryRun>>();
 
 async function dryRun(sessionId: string, database: string, collection: string, proposal: Proposal): Promise<DryRun> {
+  // Read the way the Find bar reads it, so a proposal that dry-runs also runs.
   let parsed: unknown;
   try {
-    parsed = JSON.parse(proposal.code);
-  } catch {
-    return { state: "error", message: "Not valid JSON" };
+    parsed = parseQueryValue(proposal.code);
+  } catch (e) {
+    return { state: "error", message: String(e) };
   }
+  if (parsed === undefined) return { state: "error", message: `Empty ${proposal.kind}` };
   const started = performance.now();
   try {
     if (proposal.kind === "filter") {

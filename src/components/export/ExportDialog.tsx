@@ -88,8 +88,8 @@ export function ExportDialog({ target, onClose }: ExportDialogProps) {
           collection: t.collection,
           query: exportQueryOf(t, capToLimit),
         };
-      } catch {
-        useExportStore.setState({ error: "Current filter/pipeline is not valid JSON" });
+      } catch (e) {
+        useExportStore.setState({ error: String(e) });
         return;
       }
       baseName = t.collection;

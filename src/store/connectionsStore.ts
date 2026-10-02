@@ -124,7 +124,12 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     }));
     try {
       const handle = await api.connect(id);
-      const databases = await api.listDatabases(handle.sessionId);
+      // Connecting only pings; listing is the first command that needs the
+      // login, so close the session it opened when that fails.
+      const databases = await api.listDatabases(handle.sessionId).catch(async (e) => {
+        await api.disconnect(handle.sessionId).catch(() => {});
+        throw e;
+      });
       set((s) => ({
         sessions: {
           ...s.sessions,

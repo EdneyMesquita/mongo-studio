@@ -34,6 +34,7 @@ pub(crate) async fn ensure_server(inner: &Arc<Inner>) -> AppResult<u16> {
         .await
         .map_err(|e| AppError::Assistant(format!("Couldn't start the Assistant's server: {e}")))?;
     let port = listener.local_addr()?.port();
+    log::info!("Assistant tool server listening on 127.0.0.1:{port}");
     let inner_for_loop = inner.clone();
     tokio::spawn(async move {
         loop {

@@ -21,15 +21,23 @@ export interface VirtualRows {
   reveal: (index: number) => void;
 }
 
+/** A document opened under its row: `height` px of extra content after row `index`. */
+export interface ExpandedRow {
+  index: number;
+  height: number;
+}
+
 /**
  * Windowing for a table of equal-height rows inside `scroller`: only the
  * rows in view (plus a margin) are rendered, spacers keep the scrollbar
- * true to the whole list. `headerHeight` is the sticky header's height.
+ * true to the whole list. `headerHeight` is the sticky header's height;
+ * `expanded`, a document open under one row, pushes the rows after it down.
  */
 export function useVirtualRows(
   scroller: RefObject<HTMLElement | null>,
   count: number,
   headerHeight: number,
+  expanded: ExpandedRow | null = null,
 ): VirtualRows {
   const enabled = count > VIRTUALIZE_FROM;
   const [rowHeight, setRowHeight] = useState(ESTIMATED_ROW);
@@ -62,25 +70,41 @@ export function useVirtualRows(
         el.querySelector(`tr[data-row="${index}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
         return;
       }
-      const top = index * rowHeight;
+      const top = index * rowHeight + (expanded && index > expanded.index ? expanded.height : 0);
       const visible = el.clientHeight - headerHeight;
       if (top < el.scrollTop) el.scrollTop = top;
       else if (top + rowHeight > el.scrollTop + visible) el.scrollTop = top + rowHeight - visible;
     },
-    [scroller, enabled, rowHeight, headerHeight],
+    [scroller, enabled, rowHeight, headerHeight, expanded],
   );
 
   if (!enabled) return { enabled, start: 0, end: count, padTop: 0, padBottom: 0, reveal };
-  // row i sits at header + i * rowHeight; the sticky header covers the top
-  const first = Math.floor(view.top / rowHeight);
+  return { enabled, ...rowWindow(count, rowHeight, view, expanded), reveal };
+}
+
+/**
+ * The rows to render for a scroll position, and the spacers around them.
+ * Row i sits at i * rowHeight below the header, plus the open document's
+ * height once past it.
+ */
+export function rowWindow(
+  count: number,
+  rowHeight: number,
+  view: { top: number; height: number },
+  expanded: ExpandedRow | null,
+): Pick<VirtualRows, "start" | "end" | "padTop" | "padBottom"> {
+  const extra = expanded?.height ?? 0;
+  const openAt = expanded?.index ?? Infinity;
+  let first: number;
+  if (view.top >= (openAt + 1) * rowHeight + extra) first = Math.floor((view.top - extra) / rowHeight);
+  else if (view.top >= (openAt + 1) * rowHeight) first = openAt; // inside the open document
+  else first = Math.floor(view.top / rowHeight);
   const start = Math.max(0, first - OVERSCAN);
   const end = Math.min(count, first + Math.ceil(view.height / rowHeight) + OVERSCAN);
   return {
-    enabled,
     start,
     end,
-    padTop: start * rowHeight,
-    padBottom: (count - end) * rowHeight,
-    reveal,
+    padTop: start * rowHeight + (openAt < start ? extra : 0),
+    padBottom: (count - end) * rowHeight + (openAt >= end && openAt < count ? extra : 0),
   };
 }

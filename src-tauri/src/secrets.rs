@@ -69,29 +69,42 @@ impl KeyringStore {
     }
 }
 
+/// Keychain failures are logged here, where the operation and the entry are
+/// known; some callers ignore them (cleanup after a delete or a test).
+/// The entry's key holds only the connection id and the kind of secret.
+fn keyring_error(op: &str, connection_id: &str, kind: SecretKind, e: keyring::v1::Error) -> String {
+    log::warn!(
+        "keychain {op} of {} failed: {e}",
+        entry_key(connection_id, kind)
+    );
+    e.to_string()
+}
+
 impl SecretStore for KeyringStore {
     fn set(&self, connection_id: &str, kind: SecretKind, value: &str) -> Result<(), String> {
         let entry = KeyringEntry::new(SERVICE_NAME, &entry_key(connection_id, kind))
-            .map_err(|e| e.to_string())?;
-        entry.set_password(value).map_err(|e| e.to_string())
+            .map_err(|e| keyring_error("write", connection_id, kind, e))?;
+        entry
+            .set_password(value)
+            .map_err(|e| keyring_error("write", connection_id, kind, e))
     }
 
     fn get(&self, connection_id: &str, kind: SecretKind) -> Result<Option<String>, String> {
         let entry = KeyringEntry::new(SERVICE_NAME, &entry_key(connection_id, kind))
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| keyring_error("read", connection_id, kind, e))?;
         match entry.get_password() {
             Ok(password) => Ok(Some(password)),
             Err(keyring::v1::Error::NoEntry) => Ok(None),
-            Err(e) => Err(e.to_string()),
+            Err(e) => Err(keyring_error("read", connection_id, kind, e)),
         }
     }
 
     fn delete(&self, connection_id: &str, kind: SecretKind) -> Result<(), String> {
         let entry = KeyringEntry::new(SERVICE_NAME, &entry_key(connection_id, kind))
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| keyring_error("delete", connection_id, kind, e))?;
         match entry.delete_credential() {
             Ok(()) | Err(keyring::v1::Error::NoEntry) => Ok(()),
-            Err(e) => Err(e.to_string()),
+            Err(e) => Err(keyring_error("delete", connection_id, kind, e)),
         }
     }
 }

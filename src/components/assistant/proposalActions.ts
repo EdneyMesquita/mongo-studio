@@ -38,7 +38,7 @@ export async function applyToQuery(session: AssistantSession, cardId: string, pr
   } else sessions.activateTab(id);
   const tab = useSessionsStore.getState().tabs.find((t) => t.id === id) as CollectionTab | undefined;
   if (!tab) return;
-  useUiStore.getState().setMainTab("browse");
+  useUiStore.getState().setMainTab(id, "browse");
   useAssistantStore.getState().markApplied(cardId, {
     kind: "query",
     tabId: id,
