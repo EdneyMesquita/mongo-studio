@@ -142,10 +142,20 @@ export function databaseKey(connectionId: string, database: string): string {
   return `${connectionId}/${database}`;
 }
 
+/**
+ * Newest first, as people usually want to look. Not for time series: they
+ * have no `_id` index, so on a large one the sort would run in memory and
+ * can fail.
+ */
+function defaultSort(collectionType: string | undefined): string {
+  return collectionType === "timeseries" ? "" : "{ _id: -1 }";
+}
+
 function newTab(
   connection: TabConnection,
   database: string,
   collection: string,
+  collectionType?: string,
 ): CollectionTab {
   return {
     kind: "collection",
@@ -159,7 +169,7 @@ function newTab(
     queryMs: null,
     mode: "find",
     filterText: "{}",
-    sortText: "",
+    sortText: defaultSort(collectionType),
     limit: 50,
     skip: 0,
     pipelineText: "[\n  { \"$limit\": 50 }\n]",
@@ -237,8 +247,11 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
         set({ activeTabId: id });
         return;
       }
+      const collectionType = get()
+        .databaseTree[databaseKey(connection.id, database)]?.collections.find((c) => c.name === collection)
+        ?.collectionType;
       set((s) => ({
-        tabs: [...s.tabs, { ...newTab(connection, database, collection), loading: true }],
+        tabs: [...s.tabs, { ...newTab(connection, database, collection, collectionType), loading: true }],
         activeTabId: id,
       }));
       // The documents come first. The stats only feed the count in the
