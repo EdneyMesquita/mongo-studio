@@ -1,5 +1,3 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::time::Instant;
 
 use mongodb::Client;
@@ -29,7 +27,7 @@ use crate::saved_scripts::{SavedScript, SavedScriptsStore};
 use crate::scripting;
 use crate::secrets::SecretKind;
 use crate::sidebar_layout::SidebarLayoutStore;
-use crate::state::AppState;
+use crate::state::{AppState, CancelToken};
 
 fn now_iso() -> String {
     let now = std::time::SystemTime::now()
@@ -515,14 +513,52 @@ async fn on_session<T>(
     op: Op<'_>,
     run: impl AsyncFnOnce(&Client) -> AppResult<T>,
 ) -> AppResult<T> {
-    let sessions = state.sessions.read().await;
-    let active = sessions.get(session_id);
-    let connection = active.map_or("not connected", |a| a.name.as_str());
+    // The client is cloned out so the sessions lock isn't held while the
+    // operation runs: a slow query would otherwise hold up disconnecting,
+    // and every operation queued behind that.
+    let session = session_client(state, session_id).await;
+    let connection = session
+        .as_ref()
+        .map_or("not connected", |(_, name)| name.as_str());
     logging::timed(&op, connection, async {
-        let active = active.ok_or_else(|| AppError::SessionNotFound(session_id.to_string()))?;
-        run(&active.client).await
+        let (client, _) = session
+            .as_ref()
+            .map_err(|_| AppError::SessionNotFound(session_id.to_string()))?;
+        run(client).await
     })
     .await
+}
+
+/// Registers a cancel switch under `execution_id` for `cancel_query` and
+/// friends to reach; `forget_task` removes it when the task ends.
+fn track_task(state: &AppState, execution_id: &str) -> CancelToken {
+    let token = CancelToken::default();
+    state
+        .running_tasks
+        .lock()
+        .unwrap()
+        .insert(execution_id.to_string(), token.clone());
+    token
+}
+
+fn forget_task(state: &AppState, execution_id: &str) {
+    state.running_tasks.lock().unwrap().remove(execution_id);
+}
+
+/// Runs a query that `cancel_query(execution_id)` can stop; without an id
+/// it just runs.
+async fn cancellable<T>(
+    state: &AppState,
+    execution_id: Option<&str>,
+    task: impl std::future::Future<Output = AppResult<T>>,
+) -> AppResult<T> {
+    let Some(id) = execution_id else {
+        return task.await;
+    };
+    let token = track_task(state, id);
+    let result = token.guard(task).await;
+    forget_task(state, id);
+    result
 }
 
 #[tauri::command]
@@ -601,10 +637,12 @@ pub async fn run_find(
     database: String,
     collection: String,
     query: FindQueryInput,
+    execution_id: Option<String>,
 ) -> AppResult<QueryResultPage> {
     let op = Op::new("find", &database, Some(&collection));
     on_session(&state, &session_id, op, async |client| {
-        driver::run_find(client, &database, &collection, &query).await
+        let find = driver::run_find(client, &database, &collection, &query);
+        cancellable(&state, execution_id.as_deref(), find).await
     })
     .await
 }
@@ -635,10 +673,12 @@ pub async fn run_aggregate(
     database: String,
     collection: String,
     pipeline: serde_json::Value,
+    execution_id: Option<String>,
 ) -> AppResult<QueryResultPage> {
     let op = Op::new("aggregate", &database, Some(&collection));
     on_session(&state, &session_id, op, async |client| {
-        driver::run_aggregate(client, &database, &collection, pipeline).await
+        let aggregate = driver::run_aggregate(client, &database, &collection, pipeline);
+        cancellable(&state, execution_id.as_deref(), aggregate).await
     })
     .await
 }
@@ -650,12 +690,26 @@ pub async fn count_documents(
     database: String,
     collection: String,
     filter: serde_json::Value,
+    execution_id: Option<String>,
 ) -> AppResult<u64> {
     let op = Op::new("count", &database, Some(&collection));
     on_session(&state, &session_id, op, async |client| {
-        driver::count_documents(client, &database, &collection, filter).await
+        let count = driver::count_documents(client, &database, &collection, filter);
+        cancellable(&state, execution_id.as_deref(), count).await
     })
     .await
+}
+
+/// Stops a query started with this execution id, if it's still running.
+#[tauri::command]
+pub fn cancel_query(state: State<AppState>, execution_id: String) {
+    cancel_task(&state, &execution_id);
+}
+
+fn cancel_task(state: &AppState, execution_id: &str) {
+    if let Some(token) = state.running_tasks.lock().unwrap().get(execution_id) {
+        token.cancel();
+    }
 }
 
 #[tauri::command]
@@ -670,12 +724,7 @@ pub async fn run_script(
 ) -> AppResult<ScriptResult> {
     let (client, connection) = logged("run_script", session_client(&state, &session_id).await)?;
 
-    let cancel_flag = Arc::new(AtomicBool::new(false));
-    state
-        .running_tasks
-        .lock()
-        .unwrap()
-        .insert(execution_id.clone(), cancel_flag.clone());
+    let cancel = track_task(&state, &execution_id);
 
     let log_execution_id = execution_id.clone();
     let on_log = move |message: String| {
@@ -691,18 +740,11 @@ pub async fn run_script(
     let result = logging::timed(
         &op,
         &connection,
-        scripting::run_script(
-            client,
-            database.clone(),
-            script,
-            timeout_ms,
-            cancel_flag,
-            on_log,
-        ),
+        scripting::run_script(client, database.clone(), script, timeout_ms, cancel, on_log),
     )
     .await;
 
-    state.running_tasks.lock().unwrap().remove(&execution_id);
+    forget_task(&state, &execution_id);
 
     let result = result?;
     Ok(ScriptResult {
@@ -713,9 +755,7 @@ pub async fn run_script(
 
 #[tauri::command]
 pub fn cancel_script(state: State<AppState>, execution_id: String) {
-    if let Some(flag) = state.running_tasks.lock().unwrap().get(&execution_id) {
-        flag.store(true, Ordering::Relaxed);
-    }
+    cancel_task(&state, &execution_id);
 }
 
 #[tauri::command]
@@ -733,12 +773,7 @@ pub async fn export_query(
 ) -> AppResult<ExportSummary> {
     let (client, connection) = logged("export_query", session_client(&state, &session_id).await)?;
 
-    let cancel_flag = Arc::new(AtomicBool::new(false));
-    state
-        .running_tasks
-        .lock()
-        .unwrap()
-        .insert(execution_id.clone(), cancel_flag.clone());
+    let cancel = track_task(&state, &execution_id);
 
     let progress_execution_id = execution_id.clone();
     let on_progress = move |rows_written: u64| {
@@ -756,12 +791,12 @@ pub async fn export_query(
         query,
         options,
         std::path::Path::new(&dest_path),
-        cancel_flag,
+        cancel.flag(),
         on_progress,
     )
     .await;
 
-    state.running_tasks.lock().unwrap().remove(&execution_id);
+    forget_task(&state, &execution_id);
     // Exports are slow by nature, so a finished one is logged as such
     // rather than through `logging::timed`'s slow-operation warning.
     let op = Op::new("export", &database, Some(&collection));
@@ -777,7 +812,7 @@ pub async fn export_query(
 }
 
 /// A session's client and connection name, for work that runs without
-/// holding the sessions lock (scripts and exports, which can be cancelled).
+/// holding the sessions lock.
 async fn session_client(state: &AppState, session_id: &str) -> AppResult<(Client, String)> {
     state
         .sessions
@@ -806,9 +841,7 @@ pub async fn export_value(
 
 #[tauri::command]
 pub fn cancel_export(state: State<AppState>, execution_id: String) {
-    if let Some(flag) = state.running_tasks.lock().unwrap().get(&execution_id) {
-        flag.store(true, Ordering::Relaxed);
-    }
+    cancel_task(&state, &execution_id);
 }
 
 /// The sidebar's folder tree, or null before one was saved.
@@ -953,7 +986,7 @@ pub async fn open_log_dir(app: AppHandle) -> AppResult<String> {
 mod tests {
     use std::collections::HashMap;
     use std::path::PathBuf;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     use tokio::sync::RwLock;
 

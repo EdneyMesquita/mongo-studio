@@ -38,6 +38,8 @@ export interface CollectionTab {
   skip: number;
   pipelineText: string;
   loading: boolean;
+  /** The running query's execution id, for Cancel; null when none runs. */
+  runId?: string | null;
   error: string | null;
   /** The query field the Assistant last wrote, until the user edits it. */
   assistantSource?: "filter" | "pipeline" | null;
@@ -118,6 +120,8 @@ interface SessionsState {
   /** Puts a query the Assistant wrote into the tab, marked as its. */
   applyQuery: (id: string, patch: Partial<TabQueryFields>, source: "filter" | "pipeline") => void;
   runQuery: (sessionId: string, id: string) => Promise<void>;
+  /** Stops the tab's running query; its last results stay. */
+  cancelQuery: (id: string) => void;
   /** Swaps in a document as stored after an edit, matched on _id. */
   replaceDocument: (id: string, updated: unknown) => void;
   /** Forgets a connection going away: its tabs and its sidebar state. */
@@ -322,7 +326,12 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
     runQuery: async (sessionId, id) => {
       const tab = collectionTab(id);
       if (!tab) return;
-      patchTab(id, { loading: true, error: null });
+      // running again replaces a query still going
+      if (tab.runId) void api.cancelQuery(tab.runId);
+      const runId = crypto.randomUUID();
+      // a cancelled or superseded run must not overwrite what came after it
+      const current = () => collectionTab(id)?.runId === runId;
+      patchTab(id, { loading: true, error: null, runId });
       const started = performance.now();
       const elapsed = () => Math.round(performance.now() - started);
       try {
@@ -335,8 +344,11 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
             tab.database,
             tab.collection,
             pipeline,
+            runId,
           );
-          patchTab(id, { results, resultsMode: "aggregate", queryMs: elapsed(), loading: false });
+          if (current()) {
+            patchTab(id, { results, resultsMode: "aggregate", queryMs: elapsed(), loading: false, runId: null });
+          }
         } else {
           const filter = parseQueryObject(tab.filterText, "filter");
           const sort = parseOptionalQueryObject(tab.sortText, "sort");
@@ -346,12 +358,26 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
             projection: null,
             limit: tab.limit,
             skip: tab.skip,
-          });
-          patchTab(id, { results, resultsMode: "find", queryMs: elapsed(), loading: false });
+          }, runId);
+          if (current()) {
+            patchTab(id, { results, resultsMode: "find", queryMs: elapsed(), loading: false, runId: null });
+          }
         }
       } catch (e) {
-        patchTab(id, { error: String(e), loading: false });
+        if (current()) patchTab(id, { error: String(e), loading: false, runId: null });
       }
+    },
+
+    cancelQuery: (id) => {
+      const tab = collectionTab(id);
+      if (!tab?.runId) return;
+      void api.cancelQuery(tab.runId);
+      // the results stay as they were, and say they're not this query's
+      patchTab(id, {
+        loading: false,
+        runId: null,
+        error: tab.results ? "Cancelled. The documents below are from the previous run." : "Cancelled.",
+      });
     },
 
     replaceDocument: (id, updated) => {

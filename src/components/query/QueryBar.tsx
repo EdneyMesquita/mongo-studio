@@ -1,4 +1,4 @@
-import { Play, Sparkles } from "lucide-react";
+import { Play, Sparkles, Square } from "lucide-react";
 import { useAssistantStore } from "../../store/assistantStore";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import { useSessionsStore } from "../../store/sessionsStore";
@@ -27,6 +27,7 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
   const session = useConnectionsStore((s) => s.sessions[tab.connection.id]);
   const updateTab = useSessionsStore((s) => s.updateTab);
   const runQuery = useSessionsStore((s) => s.runQuery);
+  const cancelQuery = useSessionsStore((s) => s.cancelQuery);
   const ask = useAssistantStore((s) => (s.inline[tab.id]?.kind === "filter" ? s.inline[tab.id] : undefined));
   const askInline = useAssistantStore((s) => s.askInline);
   const flash = useAssistantFlash(tab.id);
@@ -140,16 +141,23 @@ export function QueryBar({ tab }: { tab: CollectionTab }) {
         </>
       )}
       <div className={cn("flex flex-col items-start gap-1.5", aggregate && "mt-px")}>
-        <Button
-          variant={pending ? "secondary" : "primary"}
-          disabled={loading || pending}
-          title={pending ? "Accept or reject the proposal first" : undefined}
-          onClick={submit}
-        >
-          <Play />
-          Run
-          <Kbd>{aggregate ? "Ctrl ⏎" : "⏎"}</Kbd>
-        </Button>
+        {loading ? (
+          <Button title="Stop the running query" onClick={() => cancelQuery(tab.id)}>
+            <Square />
+            Cancel
+          </Button>
+        ) : (
+          <Button
+            variant={pending ? "secondary" : "primary"}
+            disabled={pending}
+            title={pending ? "Accept or reject the proposal first" : undefined}
+            onClick={submit}
+          >
+            <Play />
+            Run
+            <Kbd>{aggregate ? "Ctrl ⏎" : "⏎"}</Kbd>
+          </Button>
+        )}
         {aggregate && tab.assistantSource === "pipeline" && <FromAssistantTag />}
       </div>
     </div>

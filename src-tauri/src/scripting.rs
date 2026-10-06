@@ -12,6 +12,7 @@ use serde_json::Value as JsonValue;
 use crate::driver;
 use crate::error::{AppError, AppResult};
 use crate::models::FindQueryInput;
+use crate::state::CancelToken;
 
 /// Scripts run until they finish or this timeout elapses, whichever comes
 /// first. 60s comfortably covers slow aggregations without letting a runaway
@@ -82,11 +83,14 @@ pub async fn run_script(
     database: String,
     script: String,
     timeout_ms: Option<u64>,
-    cancel_flag: Arc<AtomicBool>,
+    cancel: CancelToken,
     on_log: impl Fn(String) + Send + 'static,
 ) -> AppResult<ScriptExecutionResult> {
     let timeout_ms = timeout_ms.unwrap_or(DEFAULT_TIMEOUT_MS);
-    let watchdog_flag = cancel_flag.clone();
+    // The timeout stops runaway JavaScript; unlike Cancel it doesn't cut a
+    // query short, so a long aggregation can still finish.
+    let timed_out = Arc::new(AtomicBool::new(false));
+    let watchdog_flag = timed_out.clone();
     let watchdog = tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(timeout_ms)).await;
         watchdog_flag.store(true, Ordering::Relaxed);
@@ -95,7 +99,7 @@ pub async fn run_script(
     let handle = tokio::runtime::Handle::current();
     let (tx, rx) = tokio::sync::oneshot::channel();
     std::thread::spawn(move || {
-        let outcome = handle.block_on(execute(client, database, script, cancel_flag, on_log));
+        let outcome = handle.block_on(execute(client, database, script, cancel, timed_out, on_log));
         let _ = tx.send(outcome);
     });
 
@@ -110,13 +114,15 @@ async fn execute(
     client: Client,
     database: String,
     script: String,
-    interrupt_flag: Arc<AtomicBool>,
+    cancel: CancelToken,
+    timed_out: Arc<AtomicBool>,
     on_log: impl Fn(String) + Send + 'static,
 ) -> AppResult<ScriptExecutionResult> {
     let js_rt = AsyncRuntime::new().map_err(|e| AppError::InvalidInput(e.to_string()))?;
+    let interrupt = cancel.flag();
     js_rt
         .set_interrupt_handler(Some(Box::new(move || {
-            interrupt_flag.load(Ordering::Relaxed)
+            interrupt.load(Ordering::Relaxed) || timed_out.load(Ordering::Relaxed)
         })))
         .await;
     let ctx = AsyncContext::full(&js_rt)
@@ -127,7 +133,7 @@ async fn execute(
 
     let outcome: Result<JsonValue, String> = ctx
         .async_with(async |ctx| {
-            install_globals(&ctx, client, database, logs.clone(), on_log)
+            install_globals(&ctx, client, database, cancel.clone(), logs.clone(), on_log)
                 .map_err(|e| describe_js_error(&ctx, e))?;
             let promise = ctx
                 .eval_promise(script)
@@ -192,6 +198,7 @@ fn install_globals<'js>(
     ctx: &Ctx<'js>,
     client: Client,
     database: String,
+    cancel: CancelToken,
     logs: Rc<RefCell<Vec<String>>>,
     on_log: impl Fn(String) + 'js,
 ) -> rquickjs::Result<()> {
@@ -215,6 +222,8 @@ fn install_globals<'js>(
     globals.set("console", console)?;
 
     let find_client = client.clone();
+
+    let find_cancel = cancel.clone();
     let find_database = database.clone();
     globals.set(
         "__native_find",
@@ -223,6 +232,7 @@ fn install_globals<'js>(
             Async(
                 move |ctx: Ctx<'js>, coll: String, filter: Value<'js>, options: Value<'js>| {
                     let client = find_client.clone();
+                    let cancel = find_cancel.clone();
                     let database = find_database.clone();
                     async move {
                         let filter_json =
@@ -231,7 +241,8 @@ fn install_globals<'js>(
                             js_to_json(&options).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
                         let query = find_query_from_json(filter_json, options_json)
                             .map_err(|e| app_err_to_js(&ctx, e))?;
-                        let page = driver::run_find(&client, &database, &coll, &query)
+                        let page = cancel
+                            .guard(driver::run_find(&client, &database, &coll, &query))
                             .await
                             .map_err(|e| app_err_to_js(&ctx, e))?;
                         json_to_js(&ctx, &JsonValue::Array(page.documents))
@@ -242,6 +253,8 @@ fn install_globals<'js>(
     )?;
 
     let find_one_client = client.clone();
+
+    let find_one_cancel = cancel.clone();
     let find_one_database = database.clone();
     globals.set(
         "__native_find_one",
@@ -249,6 +262,7 @@ fn install_globals<'js>(
             ctx.clone(),
             Async(move |ctx: Ctx<'js>, coll: String, filter: Value<'js>| {
                 let client = find_one_client.clone();
+                let cancel = find_one_cancel.clone();
                 let database = find_one_database.clone();
                 async move {
                     let filter_json =
@@ -260,7 +274,8 @@ fn install_globals<'js>(
                         limit: Some(1),
                         skip: None,
                     };
-                    let page = driver::run_find(&client, &database, &coll, &query)
+                    let page = cancel
+                        .guard(driver::run_find(&client, &database, &coll, &query))
                         .await
                         .map_err(|e| app_err_to_js(&ctx, e))?;
                     let first = page.documents.into_iter().next().unwrap_or(JsonValue::Null);
@@ -271,6 +286,8 @@ fn install_globals<'js>(
     )?;
 
     let insert_client = client.clone();
+
+    let insert_cancel = cancel.clone();
     let insert_database = database.clone();
     globals.set(
         "__native_insert_one",
@@ -278,11 +295,13 @@ fn install_globals<'js>(
             ctx.clone(),
             Async(move |ctx: Ctx<'js>, coll: String, document: Value<'js>| {
                 let client = insert_client.clone();
+                let cancel = insert_cancel.clone();
                 let database = insert_database.clone();
                 async move {
                     let document_json =
                         js_to_json(&document).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
-                    let result = driver::insert_one(&client, &database, &coll, document_json)
+                    let result = cancel
+                        .guard(driver::insert_one(&client, &database, &coll, document_json))
                         .await
                         .map_err(|e| app_err_to_js(&ctx, e))?;
                     json_to_js(&ctx, &serde_json::json!({ "insertedId": result }))
@@ -292,6 +311,8 @@ fn install_globals<'js>(
     )?;
 
     let insert_many_client = client.clone();
+
+    let insert_many_cancel = cancel.clone();
     let insert_many_database = database.clone();
     globals.set(
         "__native_insert_many",
@@ -299,11 +320,18 @@ fn install_globals<'js>(
             ctx.clone(),
             Async(move |ctx: Ctx<'js>, coll: String, documents: Value<'js>| {
                 let client = insert_many_client.clone();
+                let cancel = insert_many_cancel.clone();
                 let database = insert_many_database.clone();
                 async move {
                     let documents_json =
                         js_to_json(&documents).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
-                    let result = driver::insert_many(&client, &database, &coll, documents_json)
+                    let result = cancel
+                        .guard(driver::insert_many(
+                            &client,
+                            &database,
+                            &coll,
+                            documents_json,
+                        ))
                         .await
                         .map_err(|e| app_err_to_js(&ctx, e))?;
                     json_to_js(&ctx, &result)
@@ -313,6 +341,8 @@ fn install_globals<'js>(
     )?;
 
     let update_client = client.clone();
+
+    let update_cancel = cancel.clone();
     let update_database = database.clone();
     globals.set(
         "__native_update_one",
@@ -321,16 +351,23 @@ fn install_globals<'js>(
             Async(
                 move |ctx: Ctx<'js>, coll: String, filter: Value<'js>, update: Value<'js>| {
                     let client = update_client.clone();
+                    let cancel = update_cancel.clone();
                     let database = update_database.clone();
                     async move {
                         let filter_json =
                             js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
                         let update_json =
                             js_to_json(&update).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
-                        let result =
-                            driver::update_one(&client, &database, &coll, filter_json, update_json)
-                                .await
-                                .map_err(|e| app_err_to_js(&ctx, e))?;
+                        let result = cancel
+                            .guard(driver::update_one(
+                                &client,
+                                &database,
+                                &coll,
+                                filter_json,
+                                update_json,
+                            ))
+                            .await
+                            .map_err(|e| app_err_to_js(&ctx, e))?;
                         json_to_js(&ctx, &result)
                     }
                 },
@@ -339,6 +376,8 @@ fn install_globals<'js>(
     )?;
 
     let update_many_client = client.clone();
+
+    let update_many_cancel = cancel.clone();
     let update_many_database = database.clone();
     globals.set(
         "__native_update_many",
@@ -347,21 +386,23 @@ fn install_globals<'js>(
             Async(
                 move |ctx: Ctx<'js>, coll: String, filter: Value<'js>, update: Value<'js>| {
                     let client = update_many_client.clone();
+                    let cancel = update_many_cancel.clone();
                     let database = update_many_database.clone();
                     async move {
                         let filter_json =
                             js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
                         let update_json =
                             js_to_json(&update).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
-                        let result = driver::update_many(
-                            &client,
-                            &database,
-                            &coll,
-                            filter_json,
-                            update_json,
-                        )
-                        .await
-                        .map_err(|e| app_err_to_js(&ctx, e))?;
+                        let result = cancel
+                            .guard(driver::update_many(
+                                &client,
+                                &database,
+                                &coll,
+                                filter_json,
+                                update_json,
+                            ))
+                            .await
+                            .map_err(|e| app_err_to_js(&ctx, e))?;
                         json_to_js(&ctx, &result)
                     }
                 },
@@ -370,6 +411,8 @@ fn install_globals<'js>(
     )?;
 
     let delete_client = client.clone();
+
+    let delete_cancel = cancel.clone();
     let delete_database = database.clone();
     globals.set(
         "__native_delete_one",
@@ -377,11 +420,13 @@ fn install_globals<'js>(
             ctx.clone(),
             Async(move |ctx: Ctx<'js>, coll: String, filter: Value<'js>| {
                 let client = delete_client.clone();
+                let cancel = delete_cancel.clone();
                 let database = delete_database.clone();
                 async move {
                     let filter_json =
                         js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
-                    let result = driver::delete_one(&client, &database, &coll, filter_json)
+                    let result = cancel
+                        .guard(driver::delete_one(&client, &database, &coll, filter_json))
                         .await
                         .map_err(|e| app_err_to_js(&ctx, e))?;
                     json_to_js(&ctx, &result)
@@ -391,6 +436,8 @@ fn install_globals<'js>(
     )?;
 
     let delete_many_client = client.clone();
+
+    let delete_many_cancel = cancel.clone();
     let delete_many_database = database.clone();
     globals.set(
         "__native_delete_many",
@@ -398,11 +445,13 @@ fn install_globals<'js>(
             ctx.clone(),
             Async(move |ctx: Ctx<'js>, coll: String, filter: Value<'js>| {
                 let client = delete_many_client.clone();
+                let cancel = delete_many_cancel.clone();
                 let database = delete_many_database.clone();
                 async move {
                     let filter_json =
                         js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
-                    let result = driver::delete_many(&client, &database, &coll, filter_json)
+                    let result = cancel
+                        .guard(driver::delete_many(&client, &database, &coll, filter_json))
                         .await
                         .map_err(|e| app_err_to_js(&ctx, e))?;
                     json_to_js(&ctx, &result)
@@ -412,6 +461,8 @@ fn install_globals<'js>(
     )?;
 
     let aggregate_client = client.clone();
+
+    let aggregate_cancel = cancel.clone();
     let aggregate_database = database.clone();
     globals.set(
         "__native_aggregate",
@@ -419,11 +470,18 @@ fn install_globals<'js>(
             ctx.clone(),
             Async(move |ctx: Ctx<'js>, coll: String, pipeline: Value<'js>| {
                 let client = aggregate_client.clone();
+                let cancel = aggregate_cancel.clone();
                 let database = aggregate_database.clone();
                 async move {
                     let pipeline_json =
                         js_to_json(&pipeline).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
-                    let page = driver::run_aggregate(&client, &database, &coll, pipeline_json)
+                    let page = cancel
+                        .guard(driver::run_aggregate(
+                            &client,
+                            &database,
+                            &coll,
+                            pipeline_json,
+                        ))
                         .await
                         .map_err(|e| app_err_to_js(&ctx, e))?;
                     json_to_js(&ctx, &JsonValue::Array(page.documents))
@@ -433,6 +491,8 @@ fn install_globals<'js>(
     )?;
 
     let count_client = client.clone();
+
+    let count_cancel = cancel.clone();
     let count_database = database.clone();
     globals.set(
         "__native_count",
@@ -440,11 +500,18 @@ fn install_globals<'js>(
             ctx.clone(),
             Async(move |ctx: Ctx<'js>, coll: String, filter: Value<'js>| {
                 let client = count_client.clone();
+                let cancel = count_cancel.clone();
                 let database = count_database.clone();
                 async move {
                     let filter_json =
                         js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
-                    let count = driver::count_documents(&client, &database, &coll, filter_json)
+                    let count = cancel
+                        .guard(driver::count_documents(
+                            &client,
+                            &database,
+                            &coll,
+                            filter_json,
+                        ))
                         .await
                         .map_err(|e| app_err_to_js(&ctx, e))?;
                     json_to_js(&ctx, &JsonValue::from(count))
@@ -620,7 +687,7 @@ mod live_tests {
             database,
             "1 + 1".to_string(),
             Some(5_000),
-            Arc::new(AtomicBool::new(false)),
+            CancelToken::default(),
             noop_log(),
         )
         .await
@@ -639,7 +706,7 @@ mod live_tests {
             database,
             "console.log('hello', 42); 'done'".to_string(),
             Some(5_000),
-            Arc::new(AtomicBool::new(false)),
+            CancelToken::default(),
             move |m| logs_for_cb.lock().unwrap().push(m),
         )
         .await
@@ -675,7 +742,7 @@ mod live_tests {
             db_name,
             script,
             Some(10_000),
-            Arc::new(AtomicBool::new(false)),
+            CancelToken::default(),
             noop_log(),
         )
         .await
@@ -705,7 +772,7 @@ mod live_tests {
             "mongo_studio_test".to_string(),
             script,
             Some(10_000),
-            Arc::new(AtomicBool::new(false)),
+            CancelToken::default(),
             noop_log(),
         )
         .await;
@@ -736,7 +803,7 @@ mod live_tests {
             "mongo_studio_test".to_string(),
             "await db.collection(\"x\").insertMany({ n: 1 })".to_string(),
             Some(5_000),
-            Arc::new(AtomicBool::new(false)),
+            CancelToken::default(),
             noop_log(),
         )
         .await
@@ -753,7 +820,7 @@ mod live_tests {
             database,
             "throw new Error('boom')".to_string(),
             Some(5_000),
-            Arc::new(AtomicBool::new(false)),
+            CancelToken::default(),
             noop_log(),
         )
         .await
@@ -771,7 +838,7 @@ mod live_tests {
             database,
             "while (true) {}".to_string(),
             Some(300),
-            Arc::new(AtomicBool::new(false)),
+            CancelToken::default(),
             noop_log(),
         )
         .await
@@ -781,5 +848,67 @@ mod live_tests {
             "timeout took too long to take effect"
         );
         println!("timeout error: {err}");
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_script_cancel_stops_a_query_in_flight() {
+        let (client, database) = live_client().await;
+        let coll = format!("cancel_probe_{}", uuid::Uuid::new_v4().simple());
+        let setup = format!(
+            "await db.collection('{coll}').insertMany([{{a: 1}}, {{a: 2}}, {{a: 3}}]); true"
+        );
+        run_script(
+            client.clone(),
+            database.clone(),
+            setup,
+            Some(5_000),
+            CancelToken::default(),
+            noop_log(),
+        )
+        .await
+        .unwrap();
+
+        // each document sleeps 3s on the server: the query takes 9s unless cut short
+        let cancel = CancelToken::default();
+        let canceller = cancel.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            canceller.cancel();
+        });
+        let started = std::time::Instant::now();
+        let slow =
+            format!("await db.collection('{coll}').find({{ $where: 'sleep(3000) || true' }})");
+        let err = run_script(
+            client.clone(),
+            database.clone(),
+            slow,
+            Some(60_000),
+            cancel,
+            noop_log(),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "cancel took {:?}",
+            started.elapsed()
+        );
+        assert!(
+            err.to_string().contains("cancelled"),
+            "unexpected error: {err}"
+        );
+
+        let drop = format!("await db.collection('{coll}').deleteMany({{}}); true");
+        run_script(
+            client,
+            database,
+            drop,
+            Some(5_000),
+            CancelToken::default(),
+            noop_log(),
+        )
+        .await
+        .unwrap();
     }
 }
