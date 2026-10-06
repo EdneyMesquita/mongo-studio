@@ -105,6 +105,8 @@ interface SessionsState {
     database: string,
     collection: string,
   ) => Promise<void>;
+  /** Points a console tab at another database of its connection, as `use <db>` does. */
+  switchConsoleDatabase: (id: string, database: string) => void;
   /** Opens a new console on the database, however many it already has; returns its tab id. */
   openConsole: (
     connection: TabConnection,
@@ -139,6 +141,14 @@ export function tabIdFor(connectionId: string, database: string, collection: str
 
 export function selectActiveTab(state: SessionsState): Tab | null {
   return state.tabs.find((t) => t.id === state.activeTabId) ?? null;
+}
+
+/** Numbers consoles on one database apart: one past the highest open. */
+function nextConsoleNumber(tabs: Tab[], connectionId: string, database: string): number {
+  const numbers = tabs
+    .filter((t) => t.kind === "console" && t.connection.id === connectionId && t.database === database)
+    .map((t) => (t as ConsoleTab).number);
+  return Math.max(0, ...numbers) + 1;
 }
 
 /** Key of a database in `databaseTree`: database names can't contain "/". */
@@ -269,23 +279,33 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
     },
 
     openConsole: (connection, database, collection, options) => {
-      const numbers = get()
-        .tabs.filter(
-          (t) => t.kind === "console" && t.connection.id === connection.id && t.database === database,
-        )
-        .map((t) => (t as ConsoleTab).number);
       const tab: ConsoleTab = {
         kind: "console",
         id: `console:${crypto.randomUUID()}`,
         connection,
         database,
         collection,
-        number: Math.max(0, ...numbers) + 1,
+        number: nextConsoleNumber(get().tabs, connection.id, database),
         fromAssistant: options?.fromAssistant ?? false,
       };
       set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
       return tab.id;
     },
+
+    switchConsoleDatabase: (id, database) =>
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.id === id && t.kind === "console" && t.database !== database
+            ? {
+                ...t,
+                database,
+                // the collection it was opened from belongs to the old database
+                collection: null,
+                number: nextConsoleNumber(s.tabs, t.connection.id, database),
+              }
+            : t,
+        ),
+      })),
 
     activateTab: (id) => set({ activeTabId: id }),
 

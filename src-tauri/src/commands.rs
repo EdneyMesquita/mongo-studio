@@ -750,6 +750,7 @@ pub async fn run_script(
     Ok(ScriptResult {
         value: result.value,
         logs: result.logs,
+        database: result.database,
     })
 }
 

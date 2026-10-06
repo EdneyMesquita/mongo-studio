@@ -8,7 +8,7 @@ import type { ScriptLogEvent } from "../types/script";
 /** The script a console starts with, pointed at its collection if it has one. */
 export function defaultScript(database: string, collection: string | null): string {
   const header = `// db.collection("name") gives you find/findOne/insertOne/insertMany/updateOne/updateMany/deleteOne/deleteMany/aggregate/countDocuments.
-// Top-level await is supported.`;
+// Top-level await is supported; "use other_db" switches databases.`;
   if (collection) {
     return `// Console for ${database}.${collection} - runs against the "${database}" database.
 ${header}
@@ -106,6 +106,13 @@ export const useConsoleStore = create<ConsoleState>((set, get) => {
         const result = await api.runScript(sessionId, database, script, executionId, null);
         if (stillCurrent()) {
           patch(key, { running: false, result: result.value, hasResult: true, logs: result.logs });
+          // A console tab stays where `use` took it, as in mongosh. A
+          // collection tab's console belongs to its collection: there `use`
+          // lasts one run.
+          const tab = useSessionsStore.getState().tabs.find((t) => t.id === key);
+          if (tab?.kind === "console" && result.database !== tab.database) {
+            useSessionsStore.getState().switchConsoleDatabase(key, result.database);
+          }
         }
       } catch (e) {
         if (stillCurrent()) patch(key, { running: false, error: String(e) });

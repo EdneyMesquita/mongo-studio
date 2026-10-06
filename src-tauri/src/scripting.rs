@@ -19,46 +19,64 @@ use crate::state::CancelToken;
 /// `while(true){}` hang the app indefinitely.
 const DEFAULT_TIMEOUT_MS: u64 = 60_000;
 
+/// The script's globals. `db` is a database handle built by `__makeDb`;
+/// `use <name>` lines become `db = __use("<name>")` (see `rewrite_use`),
+/// which also records the name in `__currentDb` for the caller to read.
 const PRELUDE: &str = r#"
-globalThis.db = {
-    getCollection: function(name) {
+globalThis.__makeDb = function(dbName) {
+    const getCollection = function(name) {
         return {
             find: function(filter, options) {
-                return __native_find(name, filter || {}, options || {});
+                return __native_find(dbName, name, filter || {}, options || {});
             },
             findOne: function(filter) {
-                return __native_find_one(name, filter || {});
+                return __native_find_one(dbName, name, filter || {});
             },
             insertOne: function(doc) {
-                return __native_insert_one(name, doc);
+                return __native_insert_one(dbName, name, doc);
             },
             insertMany: function(docs) {
-                return __native_insert_many(name, docs);
+                return __native_insert_many(dbName, name, docs);
             },
             updateOne: function(filter, update) {
-                return __native_update_one(name, filter, update);
+                return __native_update_one(dbName, name, filter, update);
             },
             updateMany: function(filter, update) {
-                return __native_update_many(name, filter, update);
+                return __native_update_many(dbName, name, filter, update);
             },
             deleteOne: function(filter) {
-                return __native_delete_one(name, filter);
+                return __native_delete_one(dbName, name, filter);
             },
             deleteMany: function(filter) {
-                return __native_delete_many(name, filter);
+                return __native_delete_many(dbName, name, filter);
             },
             aggregate: function(pipeline) {
-                return __native_aggregate(name, pipeline || []);
+                return __native_aggregate(dbName, name, pipeline || []);
             },
             countDocuments: function(filter) {
-                return __native_count(name, filter || {});
+                return __native_count(dbName, name, filter || {});
             },
         };
-    },
-    collection: function(name) {
-        return this.getCollection(name);
-    },
+    };
+    return {
+        getName: function() { return dbName; },
+        getSiblingDB: function(name) { return __makeDb(__dbName(name)); },
+        getCollection: getCollection,
+        collection: getCollection,
+    };
 };
+globalThis.__dbName = function(name) {
+    if (typeof name !== "string" || name === "" || /[\/\\. "$\0]/.test(name)) {
+        throw "Invalid database name: " + JSON.stringify(name);
+    }
+    return name;
+};
+globalThis.__use = function(name) {
+    globalThis.__currentDb = __dbName(name);
+    console.log("switched to db " + name);
+    return __makeDb(name);
+};
+globalThis.db = __makeDb(globalThis.__currentDb);
 globalThis.print = function(...args) { console.log(...args); };
 globalThis.ObjectId = function(hex) { return { $oid: hex }; };
 globalThis.ISODate = function(str) { return { $date: str }; };
@@ -68,6 +86,9 @@ globalThis.ISODate = function(str) { return { $date: str }; };
 pub struct ScriptExecutionResult {
     pub value: JsonValue,
     pub logs: Vec<String>,
+    /// The database `db` pointed at when the script ended: the one it
+    /// started on, unless a `use` line switched it.
+    pub database: String,
 }
 
 /// Runs `script` against `database` on a dedicated OS thread so the
@@ -131,12 +152,12 @@ async fn execute(
 
     let logs = Rc::new(RefCell::new(Vec::<String>::new()));
 
-    let outcome: Result<JsonValue, String> = ctx
+    let outcome: Result<(JsonValue, String), String> = ctx
         .async_with(async |ctx| {
             install_globals(&ctx, client, database, cancel.clone(), logs.clone(), on_log)
                 .map_err(|e| describe_js_error(&ctx, e))?;
             let promise = ctx
-                .eval_promise(script)
+                .eval_promise(rewrite_use(&script))
                 .map_err(|e| describe_js_error(&ctx, e))?;
             let value: Value = promise
                 .into_future()
@@ -152,17 +173,54 @@ async fn execute(
                 }
                 _ => value,
             };
-            js_to_json(&unwrapped).map_err(|e| describe_js_error(&ctx, e))
+            let value = js_to_json(&unwrapped).map_err(|e| describe_js_error(&ctx, e))?;
+            let database: String = ctx
+                .globals()
+                .get("__currentDb")
+                .map_err(|e| describe_js_error(&ctx, e))?;
+            Ok((value, database))
         })
         .await;
 
     match outcome {
-        Ok(value) => Ok(ScriptExecutionResult {
+        Ok((value, database)) => Ok(ScriptExecutionResult {
             value,
             logs: logs.borrow().clone(),
+            database,
         }),
         Err(message) => Err(AppError::InvalidInput(message)),
     }
+}
+
+/// mongosh's `use <name>` isn't JavaScript. A line holding only that (a
+/// `;` and a `//` comment may follow) becomes `db = __use("<name>");`,
+/// on the same line so error positions still match the text.
+fn rewrite_use(script: &str) -> String {
+    script
+        .split('\n')
+        .map(|line| use_target(line).map_or_else(|| line.to_string(), use_call))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The database a `use` line names, if the line is one.
+fn use_target(line: &str) -> Option<&str> {
+    let rest = line.trim_start().strip_prefix("use")?;
+    if !rest.starts_with(char::is_whitespace) {
+        return None;
+    }
+    let rest = rest.trim_start();
+    let end = rest
+        .find(|c: char| c.is_whitespace() || c == ';' || c == '/')
+        .unwrap_or(rest.len());
+    let (name, tail) = rest.split_at(end);
+    let tail = tail.trim_start();
+    let tail = tail.strip_prefix(';').unwrap_or(tail).trim();
+    (!name.is_empty() && (tail.is_empty() || tail.starts_with("//"))).then_some(name)
+}
+
+fn use_call(name: &str) -> String {
+    format!("db = __use({});", serde_json::Value::from(name))
 }
 
 fn describe_js_error(ctx: &Ctx<'_>, err: rquickjs::Error) -> String {
@@ -220,20 +278,24 @@ fn install_globals<'js>(
         }),
     )?;
     globals.set("console", console)?;
+    // where `db` starts; `use` moves it
+    globals.set("__currentDb", database)?;
 
     let find_client = client.clone();
 
     let find_cancel = cancel.clone();
-    let find_database = database.clone();
     globals.set(
         "__native_find",
         Function::new(
             ctx.clone(),
             Async(
-                move |ctx: Ctx<'js>, coll: String, filter: Value<'js>, options: Value<'js>| {
+                move |ctx: Ctx<'js>,
+                      database: String,
+                      coll: String,
+                      filter: Value<'js>,
+                      options: Value<'js>| {
                     let client = find_client.clone();
                     let cancel = find_cancel.clone();
-                    let database = find_database.clone();
                     async move {
                         let filter_json =
                             js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
@@ -255,104 +317,106 @@ fn install_globals<'js>(
     let find_one_client = client.clone();
 
     let find_one_cancel = cancel.clone();
-    let find_one_database = database.clone();
     globals.set(
         "__native_find_one",
         Function::new(
             ctx.clone(),
-            Async(move |ctx: Ctx<'js>, coll: String, filter: Value<'js>| {
-                let client = find_one_client.clone();
-                let cancel = find_one_cancel.clone();
-                let database = find_one_database.clone();
-                async move {
-                    let filter_json =
-                        js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
-                    let query = FindQueryInput {
-                        filter: filter_json,
-                        sort: None,
-                        projection: None,
-                        limit: Some(1),
-                        skip: None,
-                    };
-                    let page = cancel
-                        .guard(driver::run_find(&client, &database, &coll, &query))
-                        .await
-                        .map_err(|e| app_err_to_js(&ctx, e))?;
-                    let first = page.documents.into_iter().next().unwrap_or(JsonValue::Null);
-                    json_to_js(&ctx, &first)
-                }
-            }),
+            Async(
+                move |ctx: Ctx<'js>, database: String, coll: String, filter: Value<'js>| {
+                    let client = find_one_client.clone();
+                    let cancel = find_one_cancel.clone();
+                    async move {
+                        let filter_json =
+                            js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
+                        let query = FindQueryInput {
+                            filter: filter_json,
+                            sort: None,
+                            projection: None,
+                            limit: Some(1),
+                            skip: None,
+                        };
+                        let page = cancel
+                            .guard(driver::run_find(&client, &database, &coll, &query))
+                            .await
+                            .map_err(|e| app_err_to_js(&ctx, e))?;
+                        let first = page.documents.into_iter().next().unwrap_or(JsonValue::Null);
+                        json_to_js(&ctx, &first)
+                    }
+                },
+            ),
         )?,
     )?;
 
     let insert_client = client.clone();
 
     let insert_cancel = cancel.clone();
-    let insert_database = database.clone();
     globals.set(
         "__native_insert_one",
         Function::new(
             ctx.clone(),
-            Async(move |ctx: Ctx<'js>, coll: String, document: Value<'js>| {
-                let client = insert_client.clone();
-                let cancel = insert_cancel.clone();
-                let database = insert_database.clone();
-                async move {
-                    let document_json =
-                        js_to_json(&document).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
-                    let result = cancel
-                        .guard(driver::insert_one(&client, &database, &coll, document_json))
-                        .await
-                        .map_err(|e| app_err_to_js(&ctx, e))?;
-                    json_to_js(&ctx, &serde_json::json!({ "insertedId": result }))
-                }
-            }),
+            Async(
+                move |ctx: Ctx<'js>, database: String, coll: String, document: Value<'js>| {
+                    let client = insert_client.clone();
+                    let cancel = insert_cancel.clone();
+                    async move {
+                        let document_json =
+                            js_to_json(&document).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
+                        let result = cancel
+                            .guard(driver::insert_one(&client, &database, &coll, document_json))
+                            .await
+                            .map_err(|e| app_err_to_js(&ctx, e))?;
+                        json_to_js(&ctx, &serde_json::json!({ "insertedId": result }))
+                    }
+                },
+            ),
         )?,
     )?;
 
     let insert_many_client = client.clone();
 
     let insert_many_cancel = cancel.clone();
-    let insert_many_database = database.clone();
     globals.set(
         "__native_insert_many",
         Function::new(
             ctx.clone(),
-            Async(move |ctx: Ctx<'js>, coll: String, documents: Value<'js>| {
-                let client = insert_many_client.clone();
-                let cancel = insert_many_cancel.clone();
-                let database = insert_many_database.clone();
-                async move {
-                    let documents_json =
-                        js_to_json(&documents).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
-                    let result = cancel
-                        .guard(driver::insert_many(
-                            &client,
-                            &database,
-                            &coll,
-                            documents_json,
-                        ))
-                        .await
-                        .map_err(|e| app_err_to_js(&ctx, e))?;
-                    json_to_js(&ctx, &result)
-                }
-            }),
+            Async(
+                move |ctx: Ctx<'js>, database: String, coll: String, documents: Value<'js>| {
+                    let client = insert_many_client.clone();
+                    let cancel = insert_many_cancel.clone();
+                    async move {
+                        let documents_json =
+                            js_to_json(&documents).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
+                        let result = cancel
+                            .guard(driver::insert_many(
+                                &client,
+                                &database,
+                                &coll,
+                                documents_json,
+                            ))
+                            .await
+                            .map_err(|e| app_err_to_js(&ctx, e))?;
+                        json_to_js(&ctx, &result)
+                    }
+                },
+            ),
         )?,
     )?;
 
     let update_client = client.clone();
 
     let update_cancel = cancel.clone();
-    let update_database = database.clone();
     globals.set(
         "__native_update_one",
         Function::new(
             ctx.clone(),
             Async(
-                move |ctx: Ctx<'js>, coll: String, filter: Value<'js>, update: Value<'js>| {
+                move |ctx: Ctx<'js>,
+                      database: String,
+                      coll: String,
+                      filter: Value<'js>,
+                      update: Value<'js>| {
                     let client = update_client.clone();
                     let cancel = update_cancel.clone();
-                    let database = update_database.clone();
                     async move {
                         let filter_json =
                             js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
@@ -378,16 +442,18 @@ fn install_globals<'js>(
     let update_many_client = client.clone();
 
     let update_many_cancel = cancel.clone();
-    let update_many_database = database.clone();
     globals.set(
         "__native_update_many",
         Function::new(
             ctx.clone(),
             Async(
-                move |ctx: Ctx<'js>, coll: String, filter: Value<'js>, update: Value<'js>| {
+                move |ctx: Ctx<'js>,
+                      database: String,
+                      coll: String,
+                      filter: Value<'js>,
+                      update: Value<'js>| {
                     let client = update_many_client.clone();
                     let cancel = update_many_cancel.clone();
-                    let database = update_many_database.clone();
                     async move {
                         let filter_json =
                             js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
@@ -413,110 +479,110 @@ fn install_globals<'js>(
     let delete_client = client.clone();
 
     let delete_cancel = cancel.clone();
-    let delete_database = database.clone();
     globals.set(
         "__native_delete_one",
         Function::new(
             ctx.clone(),
-            Async(move |ctx: Ctx<'js>, coll: String, filter: Value<'js>| {
-                let client = delete_client.clone();
-                let cancel = delete_cancel.clone();
-                let database = delete_database.clone();
-                async move {
-                    let filter_json =
-                        js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
-                    let result = cancel
-                        .guard(driver::delete_one(&client, &database, &coll, filter_json))
-                        .await
-                        .map_err(|e| app_err_to_js(&ctx, e))?;
-                    json_to_js(&ctx, &result)
-                }
-            }),
+            Async(
+                move |ctx: Ctx<'js>, database: String, coll: String, filter: Value<'js>| {
+                    let client = delete_client.clone();
+                    let cancel = delete_cancel.clone();
+                    async move {
+                        let filter_json =
+                            js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
+                        let result = cancel
+                            .guard(driver::delete_one(&client, &database, &coll, filter_json))
+                            .await
+                            .map_err(|e| app_err_to_js(&ctx, e))?;
+                        json_to_js(&ctx, &result)
+                    }
+                },
+            ),
         )?,
     )?;
 
     let delete_many_client = client.clone();
 
     let delete_many_cancel = cancel.clone();
-    let delete_many_database = database.clone();
     globals.set(
         "__native_delete_many",
         Function::new(
             ctx.clone(),
-            Async(move |ctx: Ctx<'js>, coll: String, filter: Value<'js>| {
-                let client = delete_many_client.clone();
-                let cancel = delete_many_cancel.clone();
-                let database = delete_many_database.clone();
-                async move {
-                    let filter_json =
-                        js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
-                    let result = cancel
-                        .guard(driver::delete_many(&client, &database, &coll, filter_json))
-                        .await
-                        .map_err(|e| app_err_to_js(&ctx, e))?;
-                    json_to_js(&ctx, &result)
-                }
-            }),
+            Async(
+                move |ctx: Ctx<'js>, database: String, coll: String, filter: Value<'js>| {
+                    let client = delete_many_client.clone();
+                    let cancel = delete_many_cancel.clone();
+                    async move {
+                        let filter_json =
+                            js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
+                        let result = cancel
+                            .guard(driver::delete_many(&client, &database, &coll, filter_json))
+                            .await
+                            .map_err(|e| app_err_to_js(&ctx, e))?;
+                        json_to_js(&ctx, &result)
+                    }
+                },
+            ),
         )?,
     )?;
 
     let aggregate_client = client.clone();
 
     let aggregate_cancel = cancel.clone();
-    let aggregate_database = database.clone();
     globals.set(
         "__native_aggregate",
         Function::new(
             ctx.clone(),
-            Async(move |ctx: Ctx<'js>, coll: String, pipeline: Value<'js>| {
-                let client = aggregate_client.clone();
-                let cancel = aggregate_cancel.clone();
-                let database = aggregate_database.clone();
-                async move {
-                    let pipeline_json =
-                        js_to_json(&pipeline).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
-                    let page = cancel
-                        .guard(driver::run_aggregate(
-                            &client,
-                            &database,
-                            &coll,
-                            pipeline_json,
-                        ))
-                        .await
-                        .map_err(|e| app_err_to_js(&ctx, e))?;
-                    json_to_js(&ctx, &JsonValue::Array(page.documents))
-                }
-            }),
+            Async(
+                move |ctx: Ctx<'js>, database: String, coll: String, pipeline: Value<'js>| {
+                    let client = aggregate_client.clone();
+                    let cancel = aggregate_cancel.clone();
+                    async move {
+                        let pipeline_json =
+                            js_to_json(&pipeline).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
+                        let page = cancel
+                            .guard(driver::run_aggregate(
+                                &client,
+                                &database,
+                                &coll,
+                                pipeline_json,
+                            ))
+                            .await
+                            .map_err(|e| app_err_to_js(&ctx, e))?;
+                        json_to_js(&ctx, &JsonValue::Array(page.documents))
+                    }
+                },
+            ),
         )?,
     )?;
 
     let count_client = client.clone();
 
     let count_cancel = cancel.clone();
-    let count_database = database.clone();
     globals.set(
         "__native_count",
         Function::new(
             ctx.clone(),
-            Async(move |ctx: Ctx<'js>, coll: String, filter: Value<'js>| {
-                let client = count_client.clone();
-                let cancel = count_cancel.clone();
-                let database = count_database.clone();
-                async move {
-                    let filter_json =
-                        js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
-                    let count = cancel
-                        .guard(driver::count_documents(
-                            &client,
-                            &database,
-                            &coll,
-                            filter_json,
-                        ))
-                        .await
-                        .map_err(|e| app_err_to_js(&ctx, e))?;
-                    json_to_js(&ctx, &JsonValue::from(count))
-                }
-            }),
+            Async(
+                move |ctx: Ctx<'js>, database: String, coll: String, filter: Value<'js>| {
+                    let client = count_client.clone();
+                    let cancel = count_cancel.clone();
+                    async move {
+                        let filter_json =
+                            js_to_json(&filter).map_err(|e| app_err_to_js(&ctx, invalid(e)))?;
+                        let count = cancel
+                            .guard(driver::count_documents(
+                                &client,
+                                &database,
+                                &coll,
+                                filter_json,
+                            ))
+                            .await
+                            .map_err(|e| app_err_to_js(&ctx, e))?;
+                        json_to_js(&ctx, &JsonValue::from(count))
+                    }
+                },
+            ),
         )?,
     )?;
 
@@ -614,6 +680,39 @@ fn json_to_js<'js>(ctx: &Ctx<'js>, value: &JsonValue) -> rquickjs::Result<Value<
                 obj.set(k.as_str(), json_to_js(ctx, v)?)?;
             }
             Ok(obj.into_value())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn use_lines_become_database_switches() {
+        assert_eq!(rewrite_use("use chat"), r#"db = __use("chat");"#);
+        assert_eq!(
+            rewrite_use("  use users;  // the users db"),
+            r#"db = __use("users");"#
+        );
+        assert_eq!(
+            rewrite_use("use chat\nawait db.collection('x').find({});"),
+            "db = __use(\"chat\");\nawait db.collection('x').find({});"
+        );
+    }
+
+    #[test]
+    fn other_lines_are_left_alone() {
+        for line in [
+            "const use = 1;",
+            "use = 2",
+            "use(x)",
+            "user.find()",
+            "\"use strict\";",
+            "use chat extra",
+            "// use chat",
+        ] {
+            assert_eq!(rewrite_use(line), line);
         }
     }
 }
@@ -910,5 +1009,29 @@ mod live_tests {
         )
         .await
         .unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_script_use_switches_the_database() {
+        let (client, database) = live_client().await;
+        let other = format!("{database}_use_probe");
+        let script = format!(
+            "use {other}\nawait db.collection('x').insertOne({{ a: 1 }});\nconst n = await db.collection('x').countDocuments({{}});\nconst back = await db.getSiblingDB('{database}').collection('x').countDocuments({{ a: 1 }});\nawait db.collection('x').deleteMany({{}});\n[db.getName(), n, back]"
+        );
+        let result = run_script(
+            client,
+            database.clone(),
+            script,
+            Some(10_000),
+            CancelToken::default(),
+            noop_log(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.database, other);
+        assert_eq!(result.value[0], JsonValue::from(other.as_str()));
+        assert_eq!(result.value[1], JsonValue::from(1));
+        assert_eq!(result.logs, vec![format!("switched to db {other}")]);
     }
 }
