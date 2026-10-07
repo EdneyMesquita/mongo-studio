@@ -6,18 +6,13 @@ import { ConnectionChip } from "@/components/ui/ConnectionChip";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/Modal";
 import { connectionColor } from "@/lib/connectionColor";
-import { reconcile, type TreeNode } from "@/lib/sidebarTree";
+import { connectionIds, reconcile, type TreeNode } from "@/lib/sidebarTree";
 import { defaultAccess, useAssistantStore } from "../../store/assistantStore";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import { useSidebarLayoutStore } from "../../store/sidebarLayoutStore";
 import type { ConnectionProfileMeta } from "../../types/connection";
 
 type CheckState = boolean | "indeterminate";
-
-/** The connections under a node, in tree order. */
-function connectionIds(nodes: TreeNode[]): string[] {
-  return nodes.flatMap((n) => (n.type === "connection" ? [n.id] : connectionIds(n.children)));
-}
 
 /**
  * The tree narrowed to `query`. A folder whose name matches keeps all it

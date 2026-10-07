@@ -69,10 +69,14 @@ interface MongoStudioCollection {
   deleteMany(filter: object): Promise<{ deletedCount: number }>;
 }
 interface MongoStudioDb {
-  /** A collection of the console's database. */
+  /** A collection of this database. */
   collection(name: string): MongoStudioCollection;
   /** Same as collection(name). */
   getCollection(name: string): MongoStudioCollection;
+  /** This database's name. */
+  getName(): string;
+  /** Another database on the same server, without switching to it (\`use other\` switches). */
+  getSiblingDB(name: string): MongoStudioDb;
 }
 declare const db: MongoStudioDb;
 declare function ObjectId(hex: string): { $oid: string };

@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { useUiStore } from "../../store/uiStore";
+import { ConfirmDialog } from "../common/ConfirmDialog";
 
 // Loaded on first use, keeping them out of the startup bundle.
 const ConnectionForm = lazy(() =>
@@ -16,7 +17,8 @@ const EditConnectionDialog = lazy(() =>
 
 /**
  * App-level dialogs, opened from anywhere through uiStore: the connection
- * form (for a new connection or a saved one) and import / export.
+ * form (for a new connection or a saved one) and import / export; and the
+ * questions `confirm()` asks, above them.
  */
 export function DialogHost() {
   const dialog = useUiStore((s) => s.connectionDialog);
@@ -32,5 +34,10 @@ export function DialogHost() {
   } else if (importExportOpen) {
     content = <ConnectionsImportExportDialog onClose={() => setImportExportOpen(false)} />;
   }
-  return <Suspense fallback={null}>{content}</Suspense>;
+  return (
+    <>
+      <Suspense fallback={null}>{content}</Suspense>
+      <ConfirmDialog />
+    </>
+  );
 }

@@ -2,27 +2,12 @@ import { useEffect, useState } from "react";
 import { Command, CommandEmpty, CommandInput, CommandList } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
+import { matchKeywords } from "../../lib/paletteMatch";
 import { useScriptsStore } from "../../store/scriptsStore";
 import { useUiStore } from "../../store/uiStore";
 import { PaletteActions } from "./PaletteActions";
 import { PaletteCollections } from "./PaletteCollections";
 import { PaletteScripts } from "./PaletteScripts";
-
-/**
- * Items carry a unique value (the same collection can live on two servers);
- * what's matched is their keywords: the label first, then where it lives.
- * Every typed word must appear somewhere; a hit in the label ranks higher.
- */
-function matchKeywords(_value: string, search: string, keywords: string[] = []) {
-  const query = search.trim().toLowerCase();
-  if (!query) return 1;
-  const [label = "", ...rest] = keywords.map((k) => k.toLowerCase());
-  const haystack = [label, ...rest].join(" ");
-  if (!query.split(/\s+/).every((word) => haystack.includes(word))) return 0;
-  if (label.startsWith(query)) return 1;
-  if (label.includes(query)) return 0.8;
-  return 0.5;
-}
 
 /** Ctrl+K: jump to any listed collection, saved script or action. */
 export function QuickOpenPalette() {

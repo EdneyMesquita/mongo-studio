@@ -38,6 +38,8 @@ export interface CollectionTab {
   skip: number;
   pipelineText: string;
   loading: boolean;
+  /** The running query's execution id, for Cancel; null when none runs. */
+  runId?: string | null;
   error: string | null;
   /** The query field the Assistant last wrote, until the user edits it. */
   assistantSource?: "filter" | "pipeline" | null;
@@ -103,6 +105,8 @@ interface SessionsState {
     database: string,
     collection: string,
   ) => Promise<void>;
+  /** Points a console tab at another database of its connection, as `use <db>` does. */
+  switchConsoleDatabase: (id: string, database: string) => void;
   /** Opens a new console on the database, however many it already has; returns its tab id. */
   openConsole: (
     connection: TabConnection,
@@ -118,6 +122,8 @@ interface SessionsState {
   /** Puts a query the Assistant wrote into the tab, marked as its. */
   applyQuery: (id: string, patch: Partial<TabQueryFields>, source: "filter" | "pipeline") => void;
   runQuery: (sessionId: string, id: string) => Promise<void>;
+  /** Stops the tab's running query; its last results stay. */
+  cancelQuery: (id: string) => void;
   /** Swaps in a document as stored after an edit, matched on _id. */
   replaceDocument: (id: string, updated: unknown) => void;
   /** Forgets a connection going away: its tabs and its sidebar state. */
@@ -137,15 +143,33 @@ export function selectActiveTab(state: SessionsState): Tab | null {
   return state.tabs.find((t) => t.id === state.activeTabId) ?? null;
 }
 
+/** Numbers consoles on one database apart: one past the highest open. */
+function nextConsoleNumber(tabs: Tab[], connectionId: string, database: string): number {
+  const numbers = tabs
+    .filter((t) => t.kind === "console" && t.connection.id === connectionId && t.database === database)
+    .map((t) => (t as ConsoleTab).number);
+  return Math.max(0, ...numbers) + 1;
+}
+
 /** Key of a database in `databaseTree`: database names can't contain "/". */
 export function databaseKey(connectionId: string, database: string): string {
   return `${connectionId}/${database}`;
+}
+
+/**
+ * Newest first, as people usually want to look. Not for time series: they
+ * have no `_id` index, so on a large one the sort would run in memory and
+ * can fail.
+ */
+function defaultSort(collectionType: string | undefined): string {
+  return collectionType === "timeseries" ? "" : "{ _id: -1 }";
 }
 
 function newTab(
   connection: TabConnection,
   database: string,
   collection: string,
+  collectionType?: string,
 ): CollectionTab {
   return {
     kind: "collection",
@@ -159,7 +183,7 @@ function newTab(
     queryMs: null,
     mode: "find",
     filterText: "{}",
-    sortText: "",
+    sortText: defaultSort(collectionType),
     limit: 50,
     skip: 0,
     pipelineText: "[\n  { \"$limit\": 50 }\n]",
@@ -237,8 +261,11 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
         set({ activeTabId: id });
         return;
       }
+      const collectionType = get()
+        .databaseTree[databaseKey(connection.id, database)]?.collections.find((c) => c.name === collection)
+        ?.collectionType;
       set((s) => ({
-        tabs: [...s.tabs, { ...newTab(connection, database, collection), loading: true }],
+        tabs: [...s.tabs, { ...newTab(connection, database, collection, collectionType), loading: true }],
         activeTabId: id,
       }));
       // The documents come first. The stats only feed the count in the
@@ -252,23 +279,33 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
     },
 
     openConsole: (connection, database, collection, options) => {
-      const numbers = get()
-        .tabs.filter(
-          (t) => t.kind === "console" && t.connection.id === connection.id && t.database === database,
-        )
-        .map((t) => (t as ConsoleTab).number);
       const tab: ConsoleTab = {
         kind: "console",
         id: `console:${crypto.randomUUID()}`,
         connection,
         database,
         collection,
-        number: Math.max(0, ...numbers) + 1,
+        number: nextConsoleNumber(get().tabs, connection.id, database),
         fromAssistant: options?.fromAssistant ?? false,
       };
       set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
       return tab.id;
     },
+
+    switchConsoleDatabase: (id, database) =>
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.id === id && t.kind === "console" && t.database !== database
+            ? {
+                ...t,
+                database,
+                // the collection it was opened from belongs to the old database
+                collection: null,
+                number: nextConsoleNumber(s.tabs, t.connection.id, database),
+              }
+            : t,
+        ),
+      })),
 
     activateTab: (id) => set({ activeTabId: id }),
 
@@ -309,7 +346,12 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
     runQuery: async (sessionId, id) => {
       const tab = collectionTab(id);
       if (!tab) return;
-      patchTab(id, { loading: true, error: null });
+      // running again replaces a query still going
+      if (tab.runId) void api.cancelQuery(tab.runId);
+      const runId = crypto.randomUUID();
+      // a cancelled or superseded run must not overwrite what came after it
+      const current = () => collectionTab(id)?.runId === runId;
+      patchTab(id, { loading: true, error: null, runId });
       const started = performance.now();
       const elapsed = () => Math.round(performance.now() - started);
       try {
@@ -322,8 +364,11 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
             tab.database,
             tab.collection,
             pipeline,
+            runId,
           );
-          patchTab(id, { results, resultsMode: "aggregate", queryMs: elapsed(), loading: false });
+          if (current()) {
+            patchTab(id, { results, resultsMode: "aggregate", queryMs: elapsed(), loading: false, runId: null });
+          }
         } else {
           const filter = parseQueryObject(tab.filterText, "filter");
           const sort = parseOptionalQueryObject(tab.sortText, "sort");
@@ -333,12 +378,26 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
             projection: null,
             limit: tab.limit,
             skip: tab.skip,
-          });
-          patchTab(id, { results, resultsMode: "find", queryMs: elapsed(), loading: false });
+          }, runId);
+          if (current()) {
+            patchTab(id, { results, resultsMode: "find", queryMs: elapsed(), loading: false, runId: null });
+          }
         }
       } catch (e) {
-        patchTab(id, { error: String(e), loading: false });
+        if (current()) patchTab(id, { error: String(e), loading: false, runId: null });
       }
+    },
+
+    cancelQuery: (id) => {
+      const tab = collectionTab(id);
+      if (!tab?.runId) return;
+      void api.cancelQuery(tab.runId);
+      // the results stay as they were, and say they're not this query's
+      patchTab(id, {
+        loading: false,
+        runId: null,
+        error: tab.results ? "Cancelled. The documents below are from the previous run." : "Cancelled.",
+      });
     },
 
     replaceDocument: (id, updated) => {

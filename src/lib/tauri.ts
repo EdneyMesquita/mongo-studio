@@ -81,7 +81,9 @@ export const api = {
     database: string,
     collection: string,
     query: FindQueryInput,
-  ) => invoke<QueryResultPage>("run_find", { sessionId, database, collection, query }),
+    /** Lets cancelQuery stop it. */
+    executionId: string | null = null,
+  ) => invoke<QueryResultPage>("run_find", { sessionId, database, collection, query, executionId }),
 
   /** Sets one field of the document with this _id; returns it as stored. */
   updateField: (
@@ -99,12 +101,15 @@ export const api = {
     database: string,
     collection: string,
     pipeline: unknown,
+    /** Lets cancelQuery stop it. */
+    executionId: string | null = null,
   ) =>
     invoke<QueryResultPage>("run_aggregate", {
       sessionId,
       database,
       collection,
       pipeline,
+      executionId,
     }),
 
   countDocuments: (
@@ -112,7 +117,12 @@ export const api = {
     database: string,
     collection: string,
     filter: unknown,
-  ) => invoke<number>("count_documents", { sessionId, database, collection, filter }),
+    /** Lets cancelQuery stop it. */
+    executionId: string | null = null,
+  ) => invoke<number>("count_documents", { sessionId, database, collection, filter, executionId }),
+
+  /** Stops a find, aggregate or count started with this execution id. */
+  cancelQuery: (executionId: string) => invoke<void>("cancel_query", { executionId }),
 
   runScript: (
     sessionId: string,

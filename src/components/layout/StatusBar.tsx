@@ -1,7 +1,9 @@
 import { Loader2, Plug } from "lucide-react";
 import type { ReactNode } from "react";
 import { ConnectionChip } from "@/components/ui/ConnectionChip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { OpenConnectionsItems } from "./OpenConnectionsMenu";
 import { useActiveConnection, useConnectedCount } from "./useActiveConnection";
 import { AssistantStatusItem } from "../assistant/AssistantStatusItem";
 
@@ -20,7 +22,8 @@ function StatusItem({ className, children }: StatusItemProps) {
 
 /**
  * The 26px strip at the bottom: which server the active tab runs on and how
- * many are connected; on the right, the tab's namespace and document count.
+ * many are connected (a menu to jump to or disconnect them); on the right,
+ * the tab's namespace and document count.
  */
 export function StatusBar() {
   const active = useActiveConnection();
@@ -39,10 +42,21 @@ export function StatusBar() {
         connected === 0 && <StatusItem>No connection open</StatusItem>
       )}
       {connected > 0 && (
-        <StatusItem>
-          <Plug className="size-3" />
-          {connected} connected
-        </StatusItem>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex h-[22px] items-center gap-1.5 rounded-sm px-[7px] whitespace-nowrap hover:bg-hover hover:text-fg"
+              title="Manage open connections"
+            >
+              <Plug className="size-3" />
+              {connected} connected
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start" className="w-64">
+            <OpenConnectionsItems activeId={active?.tab.connection.id ?? null} />
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
       <span className="flex-1" />
       {tab?.kind === "collection" && (

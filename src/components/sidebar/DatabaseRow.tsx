@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Layers } from "lucide-react";
 import { databaseKey, selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
 import type { TabConnection } from "../../store/sessionsStore";
@@ -7,6 +8,7 @@ import { CollectionRow } from "./CollectionRow";
 import { TreeNote } from "./TreeNote";
 import { TreeRow } from "./TreeRow";
 import { databaseMenuEntries } from "./treeMenus";
+import { useWindowedRows } from "./useWindowedRows";
 
 interface DatabaseRowProps {
   db: DatabaseInfo;
@@ -46,6 +48,11 @@ export function DatabaseRow({ db, sessionId, connection, depth, query, matches }
       ? activeTabCollection
       : null;
   const showsActiveInline = !isOpen && activeCollection !== null;
+  // A search naming some of them narrows the list to those.
+  const shown = isOpen ? (matches ?? collections) : [];
+  // A database can hold tens of thousands: render the ones in view.
+  const listRef = useRef<HTMLDivElement>(null);
+  const rows = useWindowedRows(listRef, shown.length);
 
   return (
     <>
@@ -73,7 +80,7 @@ export function DatabaseRow({ db, sessionId, connection, depth, query, matches }
         />
       </RowContextMenu>
       {isOpen && (
-        <div role="group">
+        <div role="group" ref={listRef}>
           {collectionsError ? (
             <TreeNote depth={depth + 1} tone="danger">
               {collectionsError}
@@ -83,8 +90,8 @@ export function DatabaseRow({ db, sessionId, connection, depth, query, matches }
           ) : (
             collections.length === 0 && <TreeNote depth={depth + 1}>No collections</TreeNote>
           )}
-          {/* A search naming some of them narrows the list to those. */}
-          {(matches ?? collections).map((coll) => (
+          {rows.padTop > 0 && <div aria-hidden style={{ height: rows.padTop }} />}
+          {shown.slice(rows.start, rows.end).map((coll) => (
             <CollectionRow
               key={coll.name}
               collection={coll}
@@ -96,6 +103,7 @@ export function DatabaseRow({ db, sessionId, connection, depth, query, matches }
               onOpenConsole={() => openConsole(connection, db.name, coll.name)}
             />
           ))}
+          {rows.padBottom > 0 && <div aria-hidden style={{ height: rows.padBottom }} />}
         </div>
       )}
     </>
