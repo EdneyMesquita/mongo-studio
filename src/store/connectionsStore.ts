@@ -40,6 +40,8 @@ interface ConnectionsState {
   connect: (id: string) => Promise<void>;
   /** Ends the connection's session and closes its tabs. */
   disconnect: (id: string) => Promise<void>;
+  /** Disconnects these connections, or every connected one. */
+  disconnectAll: (ids?: string[]) => Promise<void>;
 }
 
 /** The live session id for a connection, read at call time. */
@@ -159,5 +161,10 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     } catch {
       // best-effort - the session is gone from the app either way
     }
+  },
+
+  disconnectAll: async (ids) => {
+    const targets = (ids ?? Object.keys(get().sessions)).filter((id) => get().sessions[id]);
+    await Promise.all(targets.map((id) => get().disconnect(id)));
   },
 }));

@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
 import type { PointerEvent } from "react";
 import { Folder, FolderOpen } from "lucide-react";
+import { useConnectionsStore } from "../../store/connectionsStore";
 import { useSidebarLayoutStore } from "../../store/sidebarLayoutStore";
-import { containsConnections } from "../../lib/sidebarTree";
+import { connectionIds, containsConnections } from "../../lib/sidebarTree";
 import type { FolderNode } from "../../lib/sidebarTree";
 import { RowContextMenu } from "@/components/common/ActionMenu";
 import { Input } from "@/components/ui/input";
@@ -38,14 +39,19 @@ export function FolderRow({ folder, depth, expanded, dragClass, onPress }: Folde
     if (renaming) inputRef.current?.select();
   }, [renaming]);
 
-  // built when a menu opens, so "holds connections" is current
-  const entries = () =>
-    folderMenuEntries({
+  // built when a menu opens, so "holds connections" and what's connected are current
+  const entries = () => {
+    const { sessions, disconnectAll } = useConnectionsStore.getState();
+    const connected = connectionIds(folder.children).filter((id) => sessions[id]);
+    return folderMenuEntries({
       hasConnections: containsConnections(folder),
+      connectedCount: connected.length,
       onNewFolder: () => createFolder(folder.id),
       onRename: () => startRename(folder.id),
+      onDisconnectAll: () => void disconnectAll(connected),
       onDelete: () => deleteFolder(folder.id),
     });
+  };
 
   const Icon = expanded ? FolderOpen : Folder;
   const count = countConnections(folder);

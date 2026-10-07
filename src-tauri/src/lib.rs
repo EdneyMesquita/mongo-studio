@@ -56,6 +56,7 @@ pub fn run() {
             commands::count_documents,
             commands::run_script,
             commands::cancel_script,
+            commands::cancel_query,
             commands::export_query,
             commands::export_value,
             commands::cancel_export,

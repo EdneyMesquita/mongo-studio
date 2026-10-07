@@ -259,6 +259,8 @@ pub struct CollectionStats {
 pub struct ScriptResult {
     pub value: serde_json::Value,
     pub logs: Vec<String>,
+    /// Where the script ended up: its database, or the one a `use` switched to.
+    pub database: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

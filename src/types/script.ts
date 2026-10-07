@@ -1,6 +1,8 @@
 export interface ScriptResult {
   value: unknown;
   logs: string[];
+  /** Where the script ended up: its database, or the one a `use` line switched to. */
+  database: string;
 }
 
 export interface ScriptLogEvent {

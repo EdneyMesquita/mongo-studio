@@ -67,6 +67,11 @@ export function findFolder(root: TreeNode[], id: string): FolderNode | null {
 }
 
 /** Whether a folder holds any connection, however deep. */
+/** The connections under these nodes, at any depth, in tree order. */
+export function connectionIds(nodes: TreeNode[]): string[] {
+  return nodes.flatMap((n) => (n.type === "connection" ? [n.id] : connectionIds(n.children)));
+}
+
 export function containsConnections(folder: FolderNode): boolean {
   return folder.children.some((c) => c.type === "connection" || containsConnections(c));
 }

@@ -12,8 +12,11 @@ function copyName(name: string) {
 
 interface FolderMenu {
   hasConnections: boolean;
+  /** How many connections in the folder, at any depth, are connected. */
+  connectedCount: number;
   onNewFolder: () => void;
   onRename: () => void;
+  onDisconnectAll: () => void;
   onDelete: () => void;
 }
 
@@ -21,6 +24,16 @@ export function folderMenuEntries(m: FolderMenu): MenuEntry[] {
   return [
     { label: "New folder inside", icon: FolderPlus, onSelect: m.onNewFolder },
     { label: "Rename folder", icon: Pencil, onSelect: m.onRename },
+    ...(m.connectedCount > 0
+      ? [
+          { separator: true } as const,
+          {
+            label: m.connectedCount === 1 ? "Disconnect 1 connection" : `Disconnect all ${m.connectedCount} connections`,
+            icon: Unplug,
+            onSelect: m.onDisconnectAll,
+          },
+        ]
+      : []),
     { separator: true },
     {
       label: m.hasConnections ? "Delete folder (move its connections out first)" : "Delete folder",

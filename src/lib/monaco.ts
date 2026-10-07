@@ -3,6 +3,7 @@ import * as monaco from "monaco-editor";
 import EditorWorker from "monaco-editor/editor/editor.worker.js?worker";
 import JsonWorker from "monaco-editor/language/json/json.worker.js?worker";
 import TsWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
+import { allowUseLines } from "./consoleUse";
 import { registerMongoCompletion } from "./monacoCompletion";
 import { registerQueryLanguage } from "./monacoQueryLanguage";
 
@@ -22,6 +23,7 @@ self.MonacoEnvironment = {
 loader.config({ monaco });
 registerQueryLanguage(monaco);
 registerMongoCompletion(monaco);
+allowUseLines(monaco);
 
 // Editor themes in the app's own colors (DESIGN.md tokens), so the console
 // and the query fields read as part of the window rather than as VS Code.

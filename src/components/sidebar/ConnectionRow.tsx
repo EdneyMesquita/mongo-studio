@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { HTMLAttributes } from "react";
-import { ask } from "@tauri-apps/plugin-dialog";
+import { confirm } from "../../store/confirmStore";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import { databaseKey } from "../../store/sessionsStore";
 import { useUiStore } from "../../store/uiStore";
@@ -52,10 +52,12 @@ export function ConnectionRow({
   }, [isActive]);
 
   async function handleDelete() {
-    const confirmed = await ask(
-      `Delete the connection "${profile.name}"? Its saved passwords are removed too.`,
-      { title: "Delete connection", kind: "warning", okLabel: "Delete", cancelLabel: "Cancel" },
-    );
+    const confirmed = await confirm({
+      title: "Delete connection",
+      message: `Delete the connection "${profile.name}"? Its saved passwords are removed too.`,
+      confirmLabel: "Delete",
+      danger: true,
+    });
     if (confirmed) await deleteProfile(profile.id);
   }
 

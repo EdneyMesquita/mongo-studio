@@ -10,6 +10,7 @@ import { ExplorerSearch } from "./ExplorerSearch";
 import { PanelHeader } from "./PanelHeader";
 import { PanelNotice } from "./PanelNotice";
 import { useCollectionMatches } from "./useCollectionMatches";
+import { TREE_SCROLLER_ATTR } from "./useWindowedRows";
 
 function newConnection() {
   useUiStore.getState().setConnectionDialog({ mode: "new" });
@@ -96,7 +97,7 @@ export function Sidebar() {
       {secretBackend?.warning && <PanelNotice>{secretBackend.warning}</PanelNotice>}
       {layoutError && <PanelNotice>{layoutError}</PanelNotice>}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto" {...{ [TREE_SCROLLER_ATTR]: "" }}>
         {profiles.length === 0 && profilesLoaded ? (
           <div className="flex flex-col items-start gap-2 px-3 py-2.5 text-sm text-fg-3">
             <p>No connections yet. Add one to browse its databases.</p>
