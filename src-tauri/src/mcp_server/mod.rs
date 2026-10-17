@@ -375,7 +375,26 @@ impl McpServer {
 
     /// Applies new settings: starts, stops or restarts the listener.
     pub async fn set_config(&self, config: McpConfig) -> AppResult<McpStatus> {
+        // Clients added at the old port would point nowhere after a port
+        // change: they're rewritten with the new URL.
+        let old_port = self.inner.config.lock().unwrap().port;
+        let moved = config.enabled && old_port != 0 && config.port != old_port;
+        let registered: Vec<String> = if moved {
+            clients::targets(&self.inner)
+                .await
+                .into_iter()
+                .filter(|t| t.registered)
+                .map(|t| t.id)
+                .collect()
+        } else {
+            Vec::new()
+        };
         server::apply_config(&self.inner, config).await;
+        for id in registered {
+            if let Err(e) = clients::register(&self.inner, &id).await {
+                log::warn!("MCP server: couldn't move {id} to the new port: {e}");
+            }
+        }
         Ok(self.inner.status())
     }
 
@@ -538,6 +557,36 @@ pub(crate) mod test_support {
 mod tests {
     use super::test_support::inner;
     use super::*;
+
+    fn free_port() -> u16 {
+        std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port()
+    }
+
+    #[tokio::test]
+    async fn a_port_change_moves_the_registered_clients() {
+        let (host, inner) = inner(ASK_TIMEOUT);
+        let cursor = host.dir.join("home/.cursor");
+        std::fs::create_dir_all(&cursor).unwrap();
+        let server = McpServer { inner };
+        let config = |port| McpConfig {
+            enabled: true,
+            port,
+            ..McpConfig::default()
+        };
+        let (first, second) = (free_port(), free_port());
+        server.set_config(config(first)).await.unwrap();
+        server.register_client("cursor").await.unwrap();
+        server.set_config(config(second)).await.unwrap();
+        let file = std::fs::read_to_string(cursor.join("mcp.json")).unwrap();
+        assert!(file.contains(&format!("127.0.0.1:{second}/mcp")), "{file}");
+        let target = server.client_targets().await;
+        assert!(target.iter().any(|t| t.id == "cursor" && t.registered));
+        server.set_config(McpConfig::default()).await.unwrap();
+    }
 
     #[test]
     fn the_token_is_created_once_and_kept_in_the_secret_store() {
