@@ -26,7 +26,7 @@ The MCP server is off until you turn it on in Settings, and runs only while the 
 - It listens only on your computer (127.0.0.1) and answers only clients that present its token, which is kept in your system's credential store.
 - Clients get only what you allow: per capability (reading, writing, schema changes, scripts, managing connections, saving scripts) and per connection. Calls you set to "Ask" wait for your approval in the app.
 - What a client reads goes to that client, and to the AI provider it uses, under your terms with them. Clients never receive passwords or full connection strings.
-- "Add to <client>" writes the server's address and token into that client's own configuration file on your computer.
+- "Add to Claude Code" (and the other clients) writes the server's address and token into that client's own configuration file on your computer.
 
 ## mongosh download (optional)
 
