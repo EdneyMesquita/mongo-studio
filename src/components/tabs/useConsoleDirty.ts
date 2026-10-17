@@ -1,6 +1,7 @@
 import { defaultScript, useConsoleStore } from "../../store/consoleStore";
 import { hasUnsavedEdits, useScriptsStore } from "../../store/scriptsStore";
 import type { Tab } from "../../store/sessionsStore";
+import { useTabEngine } from "../../store/settingsStore";
 
 /** Whether a console tab holds edits that aren't saved to its file. */
 export function useConsoleDirty(tab: Tab): boolean {
@@ -8,7 +9,8 @@ export function useConsoleDirty(tab: Tab): boolean {
     tab.kind === "console" ? (s.consoles[tab.id]?.script ?? null) : null,
   );
   const file = useScriptsStore((s) => (tab.kind === "console" ? s.files[tab.id] : undefined));
+  const engine = useTabEngine(tab.id);
   if (tab.kind !== "console") return false;
-  const untouched = defaultScript(tab.database, tab.collection);
+  const untouched = defaultScript(tab.database, tab.collection, engine);
   return hasUnsavedEdits(script ?? untouched, file, untouched);
 }

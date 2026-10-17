@@ -5,10 +5,10 @@ import { AppErrorBoundary } from "./components/layout/AppErrorBoundary";
 import "./lib/monaco";
 import "./index.css";
 import { installErrorLogging } from "./lib/log";
-import { applyTheme, getStoredTheme } from "./lib/themes";
+import { applyTheme, getStoredPreference, getStoredTheme } from "./lib/themes";
 
 installErrorLogging();
-applyTheme(getStoredTheme());
+applyTheme(getStoredTheme(), getStoredPreference());
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

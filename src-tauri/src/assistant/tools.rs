@@ -841,7 +841,7 @@ fn find_key<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
     }
 }
 
-fn str_arg(args: &Value, key: &str) -> Option<String> {
+pub(crate) fn str_arg(args: &Value, key: &str) -> Option<String> {
     args.get(key)
         .and_then(Value::as_str)
         .map(str::trim)
@@ -850,7 +850,7 @@ fn str_arg(args: &Value, key: &str) -> Option<String> {
 }
 
 /// An integer argument clamped to `1..=max`.
-fn int_arg(args: &Value, key: &str, default: i64, max: i64) -> i64 {
+pub(crate) fn int_arg(args: &Value, key: &str, default: i64, max: i64) -> i64 {
     args.get(key)
         .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
         .unwrap_or(default)
@@ -859,7 +859,7 @@ fn int_arg(args: &Value, key: &str, default: i64, max: i64) -> i64 {
 
 /// A JSON argument; agents sometimes send objects as JSON-encoded strings,
 /// so those are decoded.
-fn opt_json_arg(args: &Value, key: &str) -> Result<Option<Value>, String> {
+pub(crate) fn opt_json_arg(args: &Value, key: &str) -> Result<Option<Value>, String> {
     match args.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(s)) if s.trim().is_empty() => Ok(None),
@@ -870,7 +870,7 @@ fn opt_json_arg(args: &Value, key: &str) -> Result<Option<Value>, String> {
     }
 }
 
-fn opt_doc_arg(args: &Value, key: &str) -> Result<Option<Document>, String> {
+pub(crate) fn opt_doc_arg(args: &Value, key: &str) -> Result<Option<Document>, String> {
     match opt_json_arg(args, key)? {
         None => Ok(None),
         Some(value @ Value::Object(_)) => json_to_document(value)
@@ -881,7 +881,7 @@ fn opt_doc_arg(args: &Value, key: &str) -> Result<Option<Document>, String> {
 }
 
 /// A document argument that defaults to `{}`.
-fn doc_arg(args: &Value, key: &str) -> Result<Document, String> {
+pub(crate) fn doc_arg(args: &Value, key: &str) -> Result<Document, String> {
     Ok(opt_doc_arg(args, key)?.unwrap_or_default())
 }
 
@@ -905,7 +905,7 @@ pub(crate) fn thousands(n: u64) -> String {
     out
 }
 
-fn plural(n: u64, one: &str, many: &str) -> String {
+pub(crate) fn plural(n: u64, one: &str, many: &str) -> String {
     if n == 1 {
         format!("1 {one}")
     } else {

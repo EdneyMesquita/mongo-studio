@@ -15,6 +15,12 @@ export type SidePanel = "explorer" | "scripts" | null;
 /** The connection dialog: a new connection, or editing a saved one. */
 export type ConnectionDialog = { mode: "new" } | { mode: "edit"; id: string } | null;
 
+/** The import / export dialog: which side, and the connections an export starts with. */
+export type TransferDialog = { tab: "export" | "import"; ids: string[] | null };
+
+/** Settings' sections. */
+export type SettingsSection = "general" | "results" | "console" | "connections" | "assistant" | "mcp";
+
 /** The console's editor and output: side by side, or editor above output. */
 export type ConsoleLayout = "side" | "stacked";
 
@@ -22,8 +28,17 @@ interface UiState {
   /** Each collection tab's view (Documents, Indexes, Console); unset is Documents. */
   mainTabs: Record<string, MainTab>;
   setMainTab: (tabId: string, view: MainTab) => void;
-  resultView: ResultView;
-  setResultView: (view: ResultView) => void;
+  /**
+   * Each result pane's view, by `resultViewKey`; a pane with none uses
+   * `defaultResultView`. Panes switch on their own, never together.
+   */
+  resultViews: Record<string, ResultView>;
+  setResultView: (key: string, view: ResultView) => void;
+  /** Drops the views of a closed tab's panes. */
+  forgetResultViews: (tabId: string) => void;
+  /** The view new tabs and consoles start in, set in Settings. */
+  defaultResultView: ResultView;
+  setDefaultResultView: (view: ResultView) => void;
   consoleLayout: ConsoleLayout;
   setConsoleLayout: (layout: ConsoleLayout) => void;
   /** The editor's share of the console, remembered per layout. */
@@ -42,8 +57,13 @@ interface UiState {
   connectionDialog: ConnectionDialog;
   setConnectionDialog: (dialog: ConnectionDialog) => void;
   /** The import / export connections dialog. */
-  importExportOpen: boolean;
-  setImportExportOpen: (open: boolean) => void;
+  transfer: TransferDialog | null;
+  /** Opens it on `tab`; an export starts with `ids` ticked (all when null). */
+  openTransfer: (tab: TransferDialog["tab"], ids?: string[] | null) => void;
+  closeTransfer: () => void;
+  /** The Settings dialog's section, or null when it's closed. */
+  settingsSection: SettingsSection | null;
+  setSettingsSection: (section: SettingsSection | null) => void;
   /** The Ctrl+K quick-open palette. */
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
@@ -58,8 +78,18 @@ export const useUiStore = create<UiState>()(
     (set) => ({
       mainTabs: {},
       setMainTab: (tabId, view) => set((s) => ({ mainTabs: { ...s.mainTabs, [tabId]: view } })),
-      resultView: "grid",
-      setResultView: (view) => set({ resultView: view }),
+      resultViews: {},
+      setResultView: (key, view) => set((s) => ({ resultViews: { ...s.resultViews, [key]: view } })),
+      forgetResultViews: (tabId) =>
+        set((s) => {
+          const keys = Object.keys(s.resultViews).filter((k) => k === tabId || k.startsWith(`${tabId}#`));
+          if (keys.length === 0) return s;
+          const resultViews = { ...s.resultViews };
+          for (const k of keys) delete resultViews[k];
+          return { resultViews };
+        }),
+      defaultResultView: "grid",
+      setDefaultResultView: (view) => set({ defaultResultView: view }),
       consoleLayout: "stacked",
       setConsoleLayout: (layout) => set({ consoleLayout: layout }),
       consoleSplit: { side: DEFAULT_CONSOLE_SPLIT, stacked: DEFAULT_CONSOLE_SPLIT },
@@ -74,8 +104,11 @@ export const useUiStore = create<UiState>()(
       setInspectorWidth: (width) => set({ inspectorWidth: width }),
       connectionDialog: null,
       setConnectionDialog: (dialog) => set({ connectionDialog: dialog }),
-      importExportOpen: false,
-      setImportExportOpen: (open) => set({ importExportOpen: open }),
+      transfer: null,
+      openTransfer: (tab, ids = null) => set({ transfer: { tab, ids }, settingsSection: null }),
+      closeTransfer: () => set({ transfer: null }),
+      settingsSection: null,
+      setSettingsSection: (section) => set({ settingsSection: section }),
       paletteOpen: false,
       setPaletteOpen: (open) => set({ paletteOpen: open }),
     }),
@@ -88,15 +121,28 @@ export const useUiStore = create<UiState>()(
         consoleSplit: s.consoleSplit,
         sidebarWidth: s.sidebarWidth,
         inspectorWidth: s.inspectorWidth,
-        resultView: s.resultView,
+        defaultResultView: s.defaultResultView,
       }),
-      version: 1,
-      // Views from before the redesign: "table" became the grid.
+      version: 2,
       migrate: (state) => {
-        const s = state as { resultView?: string };
-        if (s.resultView !== "tree" && s.resultView !== "json") s.resultView = "grid";
+        // v1 kept one view for every pane; it becomes the default for new
+        // ones. Views from before the redesign: "table" became the grid.
+        const s = state as { resultView?: string; defaultResultView?: string };
+        const view = s.defaultResultView ?? s.resultView;
+        s.defaultResultView = view === "tree" || view === "json" ? view : "grid";
+        delete s.resultView;
         return s as never;
       },
     },
   ),
 );
+
+/** The key of a collection tab's results pane, or of a console's output. */
+export function resultViewKey(tabId: string, pane: "documents" | "console"): string {
+  return pane === "documents" ? tabId : `${tabId}#console`;
+}
+
+/** A result pane's view: its own, or the default until it's switched. */
+export function useResultView(key: string): ResultView {
+  return useUiStore((s) => s.resultViews[key] ?? s.defaultResultView);
+}

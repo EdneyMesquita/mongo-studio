@@ -203,8 +203,9 @@ fn rewrite_use(script: &str) -> String {
         .join("\n")
 }
 
-/// The database a `use` line names, if the line is one.
-fn use_target(line: &str) -> Option<&str> {
+/// The database a `use` line names, if the line is one. Also used by the
+/// mongosh engine, which rewrites the same lines its own way.
+pub(crate) fn use_target(line: &str) -> Option<&str> {
     let rest = line.trim_start().strip_prefix("use")?;
     if !rest.starts_with(char::is_whitespace) {
         return None;

@@ -1,4 +1,4 @@
-import { Copy, FolderPlus, Pencil, Plug, SquareTerminal, Table, Trash2, Unplug } from "lucide-react";
+import { Copy, Download, FolderPlus, Pencil, Plug, SquareTerminal, Table, Trash2, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import type { MenuEntry } from "@/components/common/ActionMenu";
 
@@ -17,6 +17,7 @@ interface FolderMenu {
   onNewFolder: () => void;
   onRename: () => void;
   onDisconnectAll: () => void;
+  onExport: () => void;
   onDelete: () => void;
 }
 
@@ -24,6 +25,7 @@ export function folderMenuEntries(m: FolderMenu): MenuEntry[] {
   return [
     { label: "New folder inside", icon: FolderPlus, onSelect: m.onNewFolder },
     { label: "Rename folder", icon: Pencil, onSelect: m.onRename },
+    ...(m.hasConnections ? [{ label: "Export connections in folder...", icon: Download, onSelect: m.onExport }] : []),
     ...(m.connectedCount > 0
       ? [
           { separator: true } as const,
@@ -50,6 +52,7 @@ interface ConnectionMenu {
   onConnect: () => void;
   onDisconnect: () => void;
   onEdit: () => void;
+  onExport: () => void;
   onDelete: () => void;
 }
 
@@ -59,6 +62,7 @@ export function connectionMenuEntries(m: ConnectionMenu): MenuEntry[] {
       ? { label: "Disconnect", icon: Unplug, onSelect: m.onDisconnect }
       : { label: "Connect", icon: Plug, onSelect: m.onConnect },
     { label: "Edit connection...", icon: Pencil, onSelect: m.onEdit },
+    { label: "Export connection...", icon: Download, onSelect: m.onExport },
     { separator: true },
     { label: "Delete connection...", icon: Trash2, danger: true, onSelect: m.onDelete },
   ];

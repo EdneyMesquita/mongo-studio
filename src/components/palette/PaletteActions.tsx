@@ -1,9 +1,12 @@
 import {
+  ArrowLeftRight,
   Database,
   FolderOpen,
   Moon,
   PanelRight,
   Plus,
+  Server,
+  Settings,
   SlidersHorizontal,
   Sparkles,
   SquareTerminal,
@@ -93,6 +96,25 @@ export function PaletteActions({ search, run }: PaletteActionsProps) {
       icon: other === "light" ? <Sun /> : <Moon />,
       label: `Switch to ${other} theme`,
       perform: () => useThemeStore.getState().setTheme(other),
+    },
+    {
+      id: "settings",
+      icon: <Settings />,
+      label: "Settings",
+      shortcut: "Ctrl ,",
+      perform: () => useUiStore.getState().setSettingsSection("general"),
+    },
+    {
+      id: "mcp-settings",
+      icon: <Server />,
+      label: "MCP server settings",
+      perform: () => useUiStore.getState().setSettingsSection("mcp"),
+    },
+    {
+      id: "transfer",
+      icon: <ArrowLeftRight />,
+      label: "Import / export connections",
+      perform: () => useUiStore.getState().openTransfer("export"),
     },
     {
       id: "toggle-explorer",

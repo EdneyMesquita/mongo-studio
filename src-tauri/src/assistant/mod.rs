@@ -15,8 +15,8 @@
 //! - `prompt` builds the system prompt.
 
 mod agents;
-mod detect;
-mod http;
+pub(crate) mod detect;
+pub(crate) mod http;
 mod mcp;
 mod models;
 mod prompt;
@@ -38,6 +38,12 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 
 pub use detect::DetectedAgent;
+// Shared with the MCP server for external clients (`crate::mcp_server`).
+pub(crate) use schema::{infer as infer_schema, render as render_schema};
+pub(crate) use tools::{
+    doc_arg, int_arg, opt_doc_arg, opt_json_arg, pipeline_writes, plural, str_arg,
+    summarize_explain, thousands, truncate,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
