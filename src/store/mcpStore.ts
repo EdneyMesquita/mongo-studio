@@ -6,11 +6,15 @@ import type {
   McpCapability,
   McpClientTarget,
   McpConfig,
+  McpConnectionChange,
   McpRequest,
   McpRequestChoice,
   McpStatus,
 } from "../types/mcp";
 import { useSettingsStore, type McpSettings } from "./settingsStore";
+import { useConnectionsStore } from "./connectionsStore";
+import { useScriptsStore } from "./scriptsStore";
+import { useSidebarLayoutStore } from "./sidebarLayoutStore";
 
 /** How many activity lines Settings keeps. */
 const ACTIVITY_KEPT = 50;
@@ -91,9 +95,28 @@ export function startMcp() {
   void listen<{ requestId: string }>("mcp-request-closed", ({ payload }) =>
     useMcpStore.setState((s) => ({ requests: s.requests.filter((r) => r.requestId !== payload.requestId) })),
   );
-  void listen<McpActivity>("mcp-activity", ({ payload }) =>
-    useMcpStore.setState((s) => ({ activity: [payload, ...s.activity].slice(0, ACTIVITY_KEPT) })),
-  );
+  void listen<McpActivity>("mcp-activity", ({ payload }) => {
+    useMcpStore.setState((s) => ({ activity: [payload, ...s.activity].slice(0, ACTIVITY_KEPT) }));
+    if (payload.tool === "save_script" && payload.result === "ok") void useScriptsStore.getState().refresh();
+  });
+  // A connection a client created starts at Read; one it deleted loses its grants.
+  void listen<McpConnectionChange>("mcp-connection", ({ payload }) => {
+    const settings = useSettingsStore.getState();
+    if (payload.change === "created") {
+      settings.setMcpLevels([payload.connectionId], payload.level ?? "read");
+      if (payload.folderId) {
+        useSidebarLayoutStore.getState().placeConnections([payload.connectionId], { kind: "folder", id: payload.folderId });
+      }
+    } else if (payload.change === "deleted") {
+      const { connections, always } = settings.mcp;
+      const nextConnections = { ...connections };
+      const nextAlways = { ...always };
+      delete nextConnections[payload.connectionId];
+      delete nextAlways[payload.connectionId];
+      settings.setMcp({ connections: nextConnections, always: nextAlways });
+    }
+    void useConnectionsStore.getState().refreshProfiles();
+  });
   void listen<{ connectionId: string; capability: McpCapability }>("mcp-always", ({ payload }) =>
     useSettingsStore.getState().addMcpAlways(payload.connectionId, payload.capability),
   );

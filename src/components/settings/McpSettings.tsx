@@ -300,12 +300,13 @@ function AlwaysAllowed() {
       <RowGroup>
         {rows.map(({ id, cap }) => {
           const p = profiles.find((x) => x.id === id);
+          const any = id === "*";
           return (
             <GroupRow
               key={`${id}:${cap}`}
               className="py-1.5"
               leading={p && <ConnectionChip name={p.name} color={connectionColor(p.id, p.color)} size="sm" />}
-              title={p?.name ?? "A deleted connection"}
+              title={any ? "Any connection" : (p?.name ?? "A deleted connection")}
               description={`${CAP_LABELS[cap]}, without asking`}
             >
               <Button size="sm" variant="ghost" onClick={() => remove(id, cap)}>

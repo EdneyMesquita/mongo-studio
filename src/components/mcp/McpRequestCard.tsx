@@ -67,7 +67,8 @@ export function McpRequestCard() {
       <div className="flex items-start gap-2 border-b border-line-soft bg-warn/9 px-2.5 py-2 text-sm leading-[1.45] text-fg-2">
         <TriangleAlert className="mt-px size-3.5 shrink-0 text-warn" />
         <span>
-          <b className="font-medium text-fg">{request.title}</b> on{" "}
+          <b className="font-medium text-fg">{request.title}</b>
+          {request.connectionName && " on "}
           {profile && (
             <span className="mx-0.5 inline-block">
               <ConnectionChip name={profile.name} color={connectionColor(profile.id, profile.color)} size="dot" />
@@ -93,10 +94,11 @@ export function McpRequestCard() {
         </Button>
         <Button
           size="sm"
-          title={`Set ${POLICY_NAME[request.capability].toLowerCase()} on ${request.connectionName} to Allow`}
+          title={`Set ${POLICY_NAME[request.capability].toLowerCase()}${request.connectionName ? ` on ${request.connectionName}` : ""} to Allow`}
           onClick={() => void respond("always")}
+          aria-label={request.connectionId ? "Always allow here" : "Always allow"}
         >
-          Always allow here
+          {request.connectionId ? "Always allow here" : "Always allow"}
         </Button>
         <Button size="sm" variant="primary" onClick={() => void respond("once")}>
           <Check />

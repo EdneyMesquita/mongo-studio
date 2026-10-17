@@ -21,6 +21,7 @@ export interface McpConfig {
   port: number;
   caps: Partial<Record<McpCapability, McpPolicy>>;
   connections: Record<string, McpLevel>;
+  /** Per connection id, or "*" for capabilities that aren't about one. */
   always: Record<string, McpCapability[]>;
 }
 
@@ -58,9 +59,10 @@ export interface McpRequest {
   clientName: string;
   tool: string;
   capability: McpCapability;
-  connectionId: string;
-  connectionName: string;
-  database: string;
+  /** Null for calls that aren't about one connection, e.g. create_connection. */
+  connectionId: string | null;
+  connectionName: string | null;
+  database: string | null;
   collection: string | null;
   /** e.g. "updateMany on shop.users" */
   title: string;
@@ -86,3 +88,13 @@ export interface McpActivity {
 }
 
 export type McpRequestChoice = "once" | "always" | "deny";
+
+/** Payload of `mcp-connection`: a client created, changed or deleted a saved connection. */
+export interface McpConnectionChange {
+  change: "created" | "updated" | "deleted";
+  connectionId: string;
+  name: string;
+  folderId: string | null;
+  /** On "created": the level it starts at ("read"). */
+  level: McpLevel | null;
+}
