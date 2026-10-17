@@ -7,7 +7,9 @@ mod ejson;
 mod error;
 mod export;
 mod logging;
+mod mcp_server;
 mod models;
+mod mongosh;
 mod paths;
 mod saved_scripts;
 mod scripting;
@@ -19,6 +21,8 @@ mod state;
 use tauri::Manager;
 
 use assistant::Assistant;
+use mcp_server::McpServer;
+use mongosh::Mongosh;
 use saved_scripts::SavedScriptsStore;
 use sidebar_layout::SidebarLayoutStore;
 use state::AppState;
@@ -80,6 +84,17 @@ pub fn run() {
             commands::assistant_answer,
             commands::assistant_workdir,
             commands::open_log_dir,
+            commands::mongosh_detect,
+            commands::mongosh_download,
+            commands::mcp_set_config,
+            commands::mcp_status,
+            commands::mcp_token,
+            commands::mcp_regenerate_token,
+            commands::mcp_answer,
+            commands::mcp_disconnect_client,
+            commands::mcp_client_targets,
+            commands::mcp_register_client,
+            commands::mcp_unregister_client,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
@@ -110,5 +125,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         std::sync::Arc::new(app.handle().clone()),
         workdir,
     ));
+    app.manage(Mongosh::new(app.path().app_data_dir()?.join("mongosh")));
+    app.manage(McpServer::new(app.handle().clone()));
     Ok(())
 }
