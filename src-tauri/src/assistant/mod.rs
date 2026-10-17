@@ -15,7 +15,7 @@
 //! - `prompt` builds the system prompt.
 
 mod agents;
-mod detect;
+pub(crate) mod detect;
 mod http;
 mod mcp;
 mod models;
