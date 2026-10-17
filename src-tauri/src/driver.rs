@@ -23,6 +23,8 @@ pub struct ActiveConnection {
     pub tunnel: Option<SshTunnel>,
     /// The connection's name, for log lines about this session.
     pub name: String,
+    /// The saved profile the session was opened from.
+    pub profile_id: String,
 }
 
 /// Builds a plain connection URI (no advanced overrides applied yet) from a
@@ -157,6 +159,154 @@ fn map_auth_mechanism(
     }
 }
 
+/// The profile's password from the secret store, when it has one.
+fn saved_password(
+    profile: &ConnectionProfile,
+    secrets: &dyn SecretStore,
+) -> AppResult<Option<String>> {
+    if !profile.has_password {
+        return Ok(None);
+    }
+    let saved = secrets
+        .get(&profile.id, SecretKind::Password)
+        .map_err(AppError::Secret)?;
+    saved.map(Some).ok_or_else(|| {
+        AppError::PasswordMissing(
+            "The saved password for this connection is missing from the system keychain. \
+             Edit the connection and enter it again."
+                .to_string(),
+        )
+    })
+}
+
+/// A connection string for another MongoDB client (mongosh) that connects
+/// the way `build_client_options` does: the saved credentials, the TLS
+/// files and the advanced options as URI options, and through the session's
+/// SSH tunnel when `tunnel_port` is set (straight to that local port, like
+/// the driver).
+pub(crate) fn shell_uri(
+    profile: &ConnectionProfile,
+    secrets: &dyn SecretStore,
+    tunnel_port: Option<u16>,
+) -> AppResult<String> {
+    let password = saved_password(profile, secrets)?;
+    let uri = build_uri(profile, profile.username.as_deref(), password.as_deref());
+    let (scheme, rest) = uri
+        .split_once("://")
+        .ok_or_else(|| AppError::InvalidInput("invalid connection string".to_string()))?;
+    let srv = scheme == "mongodb+srv";
+    // the userinfo is percent-encoded, so the authority ends at the first `/` or `?`
+    let authority_end = rest.find(['/', '?']).unwrap_or(rest.len());
+    let (authority, tail) = rest.split_at(authority_end);
+    let (userinfo, mut hosts) = match authority.rsplit_once('@') {
+        Some((user, hosts)) => (Some(user), hosts.to_string()),
+        None => (None, authority.to_string()),
+    };
+    let tail = tail.strip_prefix('/').unwrap_or(tail);
+    let (path, query) = tail.split_once('?').unwrap_or((tail, ""));
+
+    let mut params: Vec<(String, String)> = query
+        .split('&')
+        .filter(|pair| !pair.is_empty())
+        .map(|pair| {
+            let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+            (key.to_string(), value.to_string())
+        })
+        .collect();
+    let has = |params: &[(String, String)], key: &str| {
+        params.iter().any(|(k, _)| k.eq_ignore_ascii_case(key))
+    };
+    let set = |params: &mut Vec<(String, String)>, key: &str, value: &str| {
+        params.retain(|(k, _)| !k.eq_ignore_ascii_case(key));
+        params.push((key.to_string(), urlencoding::encode(value).into_owned()));
+    };
+
+    let advanced = &profile.advanced;
+    set(
+        &mut params,
+        "appName",
+        advanced.app_name.as_deref().unwrap_or("mongo-studio"),
+    );
+    if let Some(ms) = advanced.connect_timeout_ms {
+        set(&mut params, "connectTimeoutMS", &ms.to_string());
+    }
+    if let Some(ms) = advanced.server_selection_timeout_ms {
+        set(&mut params, "serverSelectionTimeoutMS", &ms.to_string());
+    }
+    if let Some(rs) = &advanced.replica_set {
+        set(&mut params, "replicaSet", rs);
+    }
+    if let Some(retry) = advanced.retry_writes {
+        set(&mut params, "retryWrites", &retry.to_string());
+    }
+    if let Some(direct) = advanced.direct_connection {
+        set(&mut params, "directConnection", &direct.to_string());
+    }
+    if let Some(mechanism) = advanced.auth_mechanism {
+        let name = match mechanism {
+            models::AuthMechanism::ScramSha1 => "SCRAM-SHA-1",
+            models::AuthMechanism::ScramSha256 => "SCRAM-SHA-256",
+            models::AuthMechanism::MongodbX509 => "MONGODB-X509",
+            models::AuthMechanism::MongodbAws => "MONGODB-AWS",
+            models::AuthMechanism::Gssapi => "GSSAPI",
+        };
+        set(&mut params, "authMechanism", name);
+    }
+    if let Some(source) = &advanced.auth_source {
+        set(&mut params, "authSource", source);
+    }
+
+    let tls = &profile.tls;
+    if tls.enabled {
+        set(&mut params, "tls", "true");
+        if let Some(ca) = &tls.ca_file {
+            set(&mut params, "tlsCAFile", ca);
+        }
+        if let Some(cert) = &tls.cert_key_file {
+            set(&mut params, "tlsCertificateKeyFile", cert);
+        }
+        if tls.cert_key_has_passphrase {
+            if let Some(passphrase) = secrets
+                .get(&profile.id, SecretKind::TlsCertKeyPassphrase)
+                .map_err(AppError::Secret)?
+            {
+                set(&mut params, "tlsCertificateKeyFilePassword", &passphrase);
+            }
+        }
+        if tls.allow_invalid_certificates {
+            set(&mut params, "tlsAllowInvalidCertificates", "true");
+        }
+        if tls.allow_invalid_hostnames {
+            set(&mut params, "tlsAllowInvalidHostnames", "true");
+        }
+    }
+
+    let mut scheme = scheme;
+    if let Some(port) = tunnel_port {
+        hosts = format!("127.0.0.1:{port}");
+        if srv {
+            // what the SRV lookup would have implied for the remote host
+            scheme = "mongodb";
+            if !has(&params, "tls") && !has(&params, "ssl") {
+                set(&mut params, "tls", "true");
+            }
+            if !has(&params, "authSource") {
+                set(&mut params, "authSource", "admin");
+            }
+        }
+        params.retain(|(k, _)| !k.eq_ignore_ascii_case("replicaSet"));
+        set(&mut params, "directConnection", "true");
+    }
+
+    let userinfo = userinfo.map(|u| format!("{u}@")).unwrap_or_default();
+    let query = params
+        .iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join("&");
+    Ok(format!("{scheme}://{userinfo}{hosts}/{path}?{query}"))
+}
+
 /// Resolves credentials/secrets for a profile and builds a ready-to-use
 /// `ClientOptions`, starting an SSH tunnel first if one is configured.
 pub async fn build_client_options(
@@ -164,20 +314,7 @@ pub async fn build_client_options(
     secrets: &dyn SecretStore,
     known_hosts: &Arc<KnownHosts>,
 ) -> AppResult<(ClientOptions, Option<SshTunnel>)> {
-    let password = if profile.has_password {
-        let saved = secrets
-            .get(&profile.id, SecretKind::Password)
-            .map_err(AppError::Secret)?;
-        Some(saved.ok_or_else(|| {
-            AppError::PasswordMissing(
-                "The saved password for this connection is missing from the system keychain. \
-                 Edit the connection and enter it again."
-                    .to_string(),
-            )
-        })?)
-    } else {
-        None
-    };
+    let password = saved_password(profile, secrets)?;
     let uri = build_uri(profile, profile.username.as_deref(), password.as_deref());
 
     let mut options = ClientOptions::parse(&uri)
@@ -283,6 +420,7 @@ pub async fn connect(
         client,
         tunnel,
         name: profile.name.clone(),
+        profile_id: profile.id.clone(),
     })
 }
 
