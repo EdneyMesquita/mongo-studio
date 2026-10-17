@@ -32,14 +32,14 @@
 <body>
 <main>
   <h1>Mongo Studio privacy policy</h1>
-  <p class="updated">Last updated: October 2, 2026 · applies to Mongo Studio 1.1 and later</p>
+  <p class="updated">Last updated: October 17, 2026 · applies to Mongo Studio 1.3 and later</p>
 
   <p>Mongo Studio is a desktop app for working with MongoDB databases. It runs on your computer, has no account and no telemetry, and the project runs no server that the app talks to. We don't collect, store, sell or share any personal information.</p>
 
   <h2>What stays on your computer</h2>
   <ul>
     <li><strong>Connections.</strong> The connections you save, including names, addresses and settings, are stored on your computer. Passwords and passphrases go to your system's credential store (Windows Credential Manager, macOS Keychain, or Secret Service on Linux), or to an encrypted file where none is available.</li>
-    <li><strong>Your data.</strong> The app connects only to the MongoDB servers you set up, and reads or writes their data only when you ask it to: opening a collection, running a query or script, editing a value.</li>
+    <li><strong>Your data.</strong> The app connects only to the MongoDB servers you set up, and reads or writes their data only when you ask it to: opening a collection, running a query or script, editing a value - or when an AI client you allowed asks it to (see the MCP server below).</li>
     <li><strong>Your files.</strong> Scripts and exports are saved only where you choose.</li>
     <li><strong>Log file.</strong> The app writes a log of its own activity and errors to your computer, to help diagnose problems: app start and exit, connection names and server hosts, failed or slow operations, and crashes. It never contains passwords, connection strings, queries or documents. It is never sent anywhere; you can open it from the app (Ctrl+K, "Open logs folder") and delete it at any time.</li>
   </ul>
@@ -51,6 +51,18 @@
     <li>What the agent reads is limited to the connections you allow in the Assistant's settings: collection names, field names and types, indexes and query plans. It reads document values only if you allow it, each time or always for a connection.</li>
     <li>Mongo Studio itself stores no API key and sends nothing to Anthropic or OpenAI on its own.</li>
   </ul>
+
+  <h2>The MCP server (optional)</h2>
+  <p>The MCP server is off until you turn it on in Settings, and runs only while the app is open. It lets AI clients on your computer that you connect to it (such as Claude Code, Cursor, Codex or VS Code) work with your saved connections.</p>
+  <ul>
+    <li>It listens only on your computer (127.0.0.1) and answers only clients that present its token, which is kept in your system's credential store.</li>
+    <li>Clients get only what you allow: per capability (reading, writing, schema changes, scripts, managing connections, saving scripts) and per connection. Calls you set to "Ask" wait for your approval in the app.</li>
+    <li>What a client reads goes to that client, and to the AI provider it uses, under your terms with them. Clients never receive passwords or full connection strings.</li>
+    <li>"Add to &lt;client&gt;" writes the server's address and token into that client's own configuration file on your computer.</li>
+  </ul>
+
+  <h2>mongosh download (optional)</h2>
+  <p>If you choose to run consoles with the MongoDB Shell (mongosh) and click Download, the app downloads MongoDB's official mongosh build from downloads.mongodb.com and keeps it on your computer. Nothing is sent besides that download request. A mongosh you installed yourself is used as is.</p>
 
   <h2>Children</h2>
   <p>Mongo Studio is a developer tool and is not directed at children. It collects no information from anyone.</p>
