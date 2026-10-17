@@ -22,10 +22,12 @@ interface ConsoleOutputPaneProps {
   exportLabel: string;
   /** File name the export suggests, without extension. */
   exportName: string;
+  /** This output's own result view, see `resultViewKey`. */
+  viewKey: string;
 }
 
 /** The console's output: Result and Logs tabs over the run's state. */
-export function ConsoleOutputPane({ session, durationMs, exportLabel, exportName }: ConsoleOutputPaneProps) {
+export function ConsoleOutputPane({ session, durationMs, exportLabel, exportName, viewKey }: ConsoleOutputPaneProps) {
   const [tab, setTab] = useState<OutputTab>("result");
   const [exporting, setExporting] = useState(false);
   const idPrefix = useId();
@@ -56,9 +58,7 @@ export function ConsoleOutputPane({ session, durationMs, exportLabel, exportName
       <div className="flex h-[34px] shrink-0 items-center gap-2 border-b border-line-soft pr-2.5 pl-1.5">
         <ConsoleOutputTabs tabs={tabs} value={tab} onChange={setTab} idPrefix={idPrefix} />
         <span className="flex-1" />
-        {/* ConsoleOutput follows the shared result view but has no switch
-            of its own yet. */}
-        {tab === "result" && hasResult && <ResultViewToggle />}
+        {tab === "result" && hasResult && <ResultViewToggle viewKey={viewKey} />}
         {hasResult && !running && (
           <Button variant="ghost" size="sm" onClick={() => setExporting(true)} title="Export the result to CSV or JSON">
             <Download />
@@ -91,7 +91,7 @@ export function ConsoleOutputPane({ session, durationMs, exportLabel, exportName
         ) : tab === "logs" ? (
           <ConsoleLogs logs={logs ?? []} />
         ) : (
-          <ConsoleOutput session={resultSession} />
+          <ConsoleOutput session={resultSession} viewKey={viewKey} />
         )}
       </div>
       {exporting && session?.hasResult && (

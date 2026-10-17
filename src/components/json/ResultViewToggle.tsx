@@ -1,7 +1,7 @@
 import { Braces, ListTree, Table } from "lucide-react";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import type { SegmentOption } from "@/components/ui/segmented-control";
-import { useUiStore } from "../../store/uiStore";
+import { useResultView, useUiStore } from "../../store/uiStore";
 import type { ResultView } from "../../store/uiStore";
 
 const OPTIONS: SegmentOption<ResultView>[] = [
@@ -10,16 +10,16 @@ const OPTIONS: SegmentOption<ResultView>[] = [
   { value: "json", label: "JSON", title: "JSON", icon: <Braces /> },
 ];
 
-/** Switches every result pane at once - Browse and the console share it. */
-export function ResultViewToggle() {
-  const resultView = useUiStore((s) => s.resultView);
+/** Switches one result pane's view; the other panes keep theirs. */
+export function ResultViewToggle({ viewKey }: { viewKey: string }) {
+  const resultView = useResultView(viewKey);
   const setResultView = useUiStore((s) => s.setResultView);
   return (
     <SegmentedControl
       aria-label="Result view"
       iconOnly
       value={resultView}
-      onChange={setResultView}
+      onChange={(view) => setResultView(viewKey, view)}
       options={OPTIONS}
     />
   );

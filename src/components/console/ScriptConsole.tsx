@@ -3,7 +3,7 @@ import { useConnectionsStore } from "../../store/connectionsStore";
 import type { Tab } from "../../store/sessionsStore";
 import { defaultScript, useConsoleStore } from "../../store/consoleStore";
 import { hasUnsavedEdits, useScriptsStore } from "../../store/scriptsStore";
-import { DEFAULT_CONSOLE_SPLIT, useUiStore } from "../../store/uiStore";
+import { DEFAULT_CONSOLE_SPLIT, resultViewKey, useUiStore } from "../../store/uiStore";
 import { SplitPane } from "../ui/SplitPane";
 import { ConsoleEditor } from "./ConsoleEditor";
 import { ConsoleOutputPane } from "./ConsoleOutputPane";
@@ -89,6 +89,7 @@ export function ScriptConsole({ tab, active = true }: { tab: Tab; active?: boole
         second={
           <ConsoleOutputPane
             session={consoleSession}
+            viewKey={resultViewKey(tab.id, "console")}
             durationMs={durationMs}
             exportLabel={tab.kind === "collection" ? `${tab.database}.${tab.collection} console` : `${tab.database} console`}
             exportName={`${tab.database}-result`}

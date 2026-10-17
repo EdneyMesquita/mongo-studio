@@ -22,8 +22,17 @@ interface UiState {
   /** Each collection tab's view (Documents, Indexes, Console); unset is Documents. */
   mainTabs: Record<string, MainTab>;
   setMainTab: (tabId: string, view: MainTab) => void;
-  resultView: ResultView;
-  setResultView: (view: ResultView) => void;
+  /**
+   * Each result pane's view, by `resultViewKey`; a pane with none uses
+   * `defaultResultView`. Panes switch on their own, never together.
+   */
+  resultViews: Record<string, ResultView>;
+  setResultView: (key: string, view: ResultView) => void;
+  /** Drops the views of a closed tab's panes. */
+  forgetResultViews: (tabId: string) => void;
+  /** The view new tabs and consoles start in, set in Settings. */
+  defaultResultView: ResultView;
+  setDefaultResultView: (view: ResultView) => void;
   consoleLayout: ConsoleLayout;
   setConsoleLayout: (layout: ConsoleLayout) => void;
   /** The editor's share of the console, remembered per layout. */
@@ -58,8 +67,18 @@ export const useUiStore = create<UiState>()(
     (set) => ({
       mainTabs: {},
       setMainTab: (tabId, view) => set((s) => ({ mainTabs: { ...s.mainTabs, [tabId]: view } })),
-      resultView: "grid",
-      setResultView: (view) => set({ resultView: view }),
+      resultViews: {},
+      setResultView: (key, view) => set((s) => ({ resultViews: { ...s.resultViews, [key]: view } })),
+      forgetResultViews: (tabId) =>
+        set((s) => {
+          const keys = Object.keys(s.resultViews).filter((k) => k === tabId || k.startsWith(`${tabId}#`));
+          if (keys.length === 0) return s;
+          const resultViews = { ...s.resultViews };
+          for (const k of keys) delete resultViews[k];
+          return { resultViews };
+        }),
+      defaultResultView: "grid",
+      setDefaultResultView: (view) => set({ defaultResultView: view }),
       consoleLayout: "stacked",
       setConsoleLayout: (layout) => set({ consoleLayout: layout }),
       consoleSplit: { side: DEFAULT_CONSOLE_SPLIT, stacked: DEFAULT_CONSOLE_SPLIT },
@@ -88,15 +107,28 @@ export const useUiStore = create<UiState>()(
         consoleSplit: s.consoleSplit,
         sidebarWidth: s.sidebarWidth,
         inspectorWidth: s.inspectorWidth,
-        resultView: s.resultView,
+        defaultResultView: s.defaultResultView,
       }),
-      version: 1,
-      // Views from before the redesign: "table" became the grid.
+      version: 2,
       migrate: (state) => {
-        const s = state as { resultView?: string };
-        if (s.resultView !== "tree" && s.resultView !== "json") s.resultView = "grid";
+        // v1 kept one view for every pane; it becomes the default for new
+        // ones. Views from before the redesign: "table" became the grid.
+        const s = state as { resultView?: string; defaultResultView?: string };
+        const view = s.defaultResultView ?? s.resultView;
+        s.defaultResultView = view === "tree" || view === "json" ? view : "grid";
+        delete s.resultView;
         return s as never;
       },
     },
   ),
 );
+
+/** The key of a collection tab's results pane, or of a console's output. */
+export function resultViewKey(tabId: string, pane: "documents" | "console"): string {
+  return pane === "documents" ? tabId : `${tabId}#console`;
+}
+
+/** A result pane's view: its own, or the default until it's switched. */
+export function useResultView(key: string): ResultView {
+  return useUiStore((s) => s.resultViews[key] ?? s.defaultResultView);
+}

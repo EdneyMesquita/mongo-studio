@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { api } from "../lib/tauri";
+import { useUiStore } from "./uiStore";
 import { parseOptionalQueryObject, parseQueryArray, parseQueryObject } from "../lib/queryText";
 import type { CollectionInfo } from "../types/connection";
 import type { CollectionStats, QueryResultPage } from "../types/query";
@@ -430,4 +431,13 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
         };
       }),
   };
+});
+
+// A closed tab's result views go with it, so the record doesn't grow.
+useSessionsStore.subscribe((state, prev) => {
+  if (state.tabs === prev.tabs) return;
+  const open = new Set(state.tabs.map((t) => t.id));
+  for (const tab of prev.tabs) {
+    if (!open.has(tab.id)) useUiStore.getState().forgetResultViews(tab.id);
+  }
 });
