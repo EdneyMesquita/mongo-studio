@@ -101,6 +101,8 @@ pub fn pick(feed: &Feed, distro: &str, arch: &str) -> AppResult<Release> {
 pub fn http_client(timeout: Option<Duration>) -> AppResult<reqwest::Client> {
     let mut builder = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(10))
+        // a stalled download fails instead of hanging
+        .read_timeout(Duration::from_secs(30))
         .user_agent(concat!("mongo-studio/", env!("CARGO_PKG_VERSION")));
     if let Some(timeout) = timeout {
         builder = builder.timeout(timeout);
