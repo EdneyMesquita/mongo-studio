@@ -7,7 +7,7 @@ This policy is also published at <https://edneymesquita.github.io/mongo-studio/p
 ## What stays on your computer
 
 - **Connections:** the connections you save, including names, addresses and settings, are stored on your computer. Passwords and passphrases go to your system's credential store (Windows Credential Manager, macOS Keychain, or Secret Service on Linux), or to an encrypted file where none is available.
-- **Your data:** the app connects only to the MongoDB servers you set up. It reads and writes their data only when you ask it to: opening a collection, running a query or script, editing a value.
+- **Your data:** the app connects only to the MongoDB servers you set up. It reads and writes their data only when you ask it to: opening a collection, running a query or script, editing a value - or when an AI client you allowed asks it to, see the MCP server below.
 - **Your files:** scripts and exports are saved only where you choose.
 - **Log file:** the app writes a log of its own activity and errors to your computer, to help diagnose problems: app start and exit, connection names and server hosts, failed or slow operations, and crashes. It never contains passwords, connection strings, queries or documents. It is never sent anywhere; you can open it from the app (Ctrl+K, "Open logs folder") and delete it at any time.
 
@@ -18,6 +18,19 @@ The Assistant is off until you set it up. When it's on, it runs an AI coding age
 - Your messages, and what the agent reads through the app's read-only tools, are sent to that agent's provider under the terms of your account with them.
 - What the agent reads is limited to the connections you allow in the Assistant's settings: collection names, field names and types, indexes and query plans. It reads document values only if you allow it, each time or always for a connection.
 - Mongo Studio itself stores no API key and sends nothing to Anthropic or OpenAI on its own.
+
+## The MCP server (optional)
+
+The MCP server is off until you turn it on in Settings, and runs only while the app is open. It lets AI clients on your computer that you connect to it (such as Claude Code, Cursor, Codex or VS Code) work with your saved connections.
+
+- It listens only on your computer (127.0.0.1) and answers only clients that present its token, which is kept in your system's credential store.
+- Clients get only what you allow: per capability (reading, writing, schema changes, scripts, managing connections, saving scripts) and per connection. Calls you set to "Ask" wait for your approval in the app.
+- What a client reads goes to that client, and to the AI provider it uses, under your terms with them. Clients never receive passwords or full connection strings.
+- "Add to <client>" writes the server's address and token into that client's own configuration file on your computer.
+
+## mongosh download (optional)
+
+If you choose to run consoles with the MongoDB Shell (mongosh) and click Download, the app downloads MongoDB's official mongosh build from downloads.mongodb.com and keeps it on your computer. Nothing is sent besides that download request. A mongosh you installed yourself is used as is.
 
 ## Contact
 
