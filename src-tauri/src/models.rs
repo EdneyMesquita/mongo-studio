@@ -128,6 +128,8 @@ pub struct ConnectionProfileMeta {
     pub color: Option<String>,
     pub summary: String,
     pub database: Option<String>,
+    /// Whether a password is saved for it, for the export picker.
+    pub has_password: bool,
 }
 
 impl From<&ConnectionProfile> for ConnectionProfileMeta {
@@ -148,6 +150,7 @@ impl From<&ConnectionProfile> for ConnectionProfileMeta {
             color: profile.color.clone(),
             summary,
             database: profile.database.clone(),
+            has_password: profile.has_password,
         }
     }
 }

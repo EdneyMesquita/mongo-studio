@@ -1,5 +1,6 @@
 import type { CollectionTab } from "../../store/sessionsStore";
 import { ResultViewToggle } from "../json/ResultViewToggle";
+import { resultViewKey } from "../../store/uiStore";
 import { ResultsPager } from "./ResultsPager";
 
 /** A find with no filter matches the whole collection, whose count the stats have. */
@@ -40,7 +41,7 @@ export function ResultsHeader({ tab }: { tab: CollectionTab }) {
         <span className="tabular-nums max-sm:hidden">{queryMs.toLocaleString("en")} ms</span>
       )}
       <span className="flex-1" />
-      <ResultViewToggle />
+      <ResultViewToggle viewKey={resultViewKey(tab.id, "documents")} />
       <ResultsPager tab={tab} total={total} />
     </div>
   );

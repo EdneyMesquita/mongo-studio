@@ -15,6 +15,7 @@ use crate::driver;
 use crate::error::{AppError, AppResult};
 use crate::export;
 use crate::logging::{self, logged, Op};
+use crate::mcp_server::{ClientTarget, McpConfig, McpServer, McpStatus, RequestChoice};
 use crate::models::{
     validate_color, CollectionInfo, CollectionStats, ConnectionAdvancedOptions, ConnectionHandle,
     ConnectionImportPreview, ConnectionProfile, ConnectionProfileInput, ConnectionProfileMeta,
@@ -23,6 +24,7 @@ use crate::models::{
     ExportSummary, FindQueryInput, QueryResultPage, ScriptResult, SecretBackendInfo,
     SecretBackendKind, TlsOptions,
 };
+use crate::mongosh::{Mongosh, MongoshInfo, MongoshRunOptions};
 use crate::saved_scripts::{SavedScript, SavedScriptsStore};
 use crate::scripting;
 use crate::secrets::SecretKind;
@@ -193,8 +195,13 @@ pub async fn export_connections(
     state: State<'_, AppState>,
     dest_path: String,
     include_secrets: bool,
+    ids: Option<Vec<String>>,
 ) -> AppResult<ConnectionsExportSummary> {
-    let profiles = state.connection_store.list();
+    let mut profiles = state.connection_store.list();
+    // Only the chosen ones when the user picked; every saved one otherwise.
+    if let Some(ids) = &ids {
+        profiles.retain(|p| ids.contains(&p.id));
+    }
     let exported = logged(
         "export_connections",
         connections_io::export_connections(
@@ -713,6 +720,7 @@ fn cancel_task(state: &AppState, execution_id: &str) {
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn run_script(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -721,7 +729,24 @@ pub async fn run_script(
     script: String,
     execution_id: String,
     timeout_ms: Option<u64>,
+    engine: Option<ScriptEngine>,
+    mongosh_options: Option<MongoshRunOptions>,
+    mongosh: State<'_, Mongosh>,
 ) -> AppResult<ScriptResult> {
+    if engine == Some(ScriptEngine::Mongosh) {
+        return run_mongosh_script(
+            &state,
+            &mongosh,
+            app,
+            session_id,
+            database,
+            script,
+            execution_id,
+            timeout_ms,
+            mongosh_options.unwrap_or_default(),
+        )
+        .await;
+    }
     let (client, connection) = logged("run_script", session_client(&state, &session_id).await)?;
 
     let cancel = track_task(&state, &execution_id);
@@ -752,6 +777,125 @@ pub async fn run_script(
         logs: result.logs,
         database: result.database,
     })
+}
+
+/// Which engine runs a console script.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ScriptEngine {
+    Builtin,
+    Mongosh,
+}
+
+/// `run_script` through mongosh: the same cancel switch and `script-log`
+/// events as the built-in engine.
+#[allow(clippy::too_many_arguments)]
+async fn run_mongosh_script(
+    state: &AppState,
+    mongosh: &Mongosh,
+    app: AppHandle,
+    session_id: String,
+    database: String,
+    script: String,
+    execution_id: String,
+    timeout_ms: Option<u64>,
+    options: MongoshRunOptions,
+) -> AppResult<ScriptResult> {
+    let (uri, connection) = logged(
+        "run_script (mongosh)",
+        crate::mongosh::session_uri(state, &session_id).await,
+    )?;
+    let cancel = track_task(state, &execution_id);
+    let log_execution_id = execution_id.clone();
+    let on_log = move |message: String| {
+        let _ = app.emit(
+            "script-log",
+            serde_json::json!({ "executionId": log_execution_id, "message": message }),
+        );
+    };
+    let op_database = database.clone();
+    let op = Op::new("script (mongosh)", &op_database, None);
+    let result = logging::timed(
+        &op,
+        &connection,
+        mongosh.run_script(uri, database, script, options, timeout_ms, cancel, on_log),
+    )
+    .await;
+    forget_task(state, &execution_id);
+    result
+}
+
+#[tauri::command]
+pub async fn mongosh_detect(
+    mongosh: State<'_, Mongosh>,
+    custom_path: Option<String>,
+) -> AppResult<MongoshInfo> {
+    Ok(mongosh.detect(custom_path).await)
+}
+
+#[tauri::command]
+pub async fn mongosh_download(
+    mongosh: State<'_, Mongosh>,
+    app: AppHandle,
+) -> AppResult<MongoshInfo> {
+    let result = mongosh
+        .download(move |progress| {
+            let _ = app.emit(crate::mongosh::DOWNLOAD_EVENT, progress);
+        })
+        .await;
+    logged("mongosh_download", result)
+}
+
+#[tauri::command]
+pub async fn mcp_set_config(mcp: State<'_, McpServer>, config: McpConfig) -> AppResult<McpStatus> {
+    logged("mcp_set_config", mcp.set_config(config).await)
+}
+
+#[tauri::command]
+pub fn mcp_status(mcp: State<McpServer>) -> McpStatus {
+    mcp.status()
+}
+
+#[tauri::command]
+pub fn mcp_token(mcp: State<McpServer>) -> AppResult<String> {
+    logged("mcp_token", mcp.token())
+}
+
+#[tauri::command]
+pub fn mcp_regenerate_token(mcp: State<McpServer>) -> AppResult<String> {
+    logged("mcp_regenerate_token", mcp.regenerate_token())
+}
+
+#[tauri::command]
+pub fn mcp_answer(
+    mcp: State<McpServer>,
+    request_id: String,
+    choice: RequestChoice,
+) -> AppResult<()> {
+    mcp.answer(&request_id, choice)
+}
+
+#[tauri::command]
+pub fn mcp_disconnect_client(mcp: State<McpServer>, client_id: String) -> AppResult<()> {
+    mcp.disconnect_client(&client_id)
+}
+
+#[tauri::command]
+pub async fn mcp_client_targets(mcp: State<'_, McpServer>) -> AppResult<Vec<ClientTarget>> {
+    Ok(mcp.client_targets().await)
+}
+
+#[tauri::command]
+pub async fn mcp_register_client(mcp: State<'_, McpServer>, id: String) -> AppResult<ClientTarget> {
+    logged("mcp_register_client", mcp.register_client(&id).await)
+}
+
+#[tauri::command]
+pub async fn mcp_unregister_client(
+    mcp: State<'_, McpServer>,
+    id: String,
+) -> AppResult<ClientTarget> {
+    logged("mcp_unregister_client", mcp.unregister_client(&id).await)
 }
 
 #[tauri::command]

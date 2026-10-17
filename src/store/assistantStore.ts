@@ -8,6 +8,7 @@ import { useConnectionsStore } from "./connectionsStore";
 import { selectActiveTab, useSessionsStore } from "./sessionsStore";
 import type { QueryMode, TabConnection } from "./sessionsStore";
 import { defaultScript, useConsoleStore } from "./consoleStore";
+import { engineFor } from "./settingsStore";
 import { useUiStore } from "./uiStore";
 import type {
   AgentKind,
@@ -147,6 +148,8 @@ interface AssistantState extends Settings {
   setPanelWidth: (width: number) => void;
   /** Ends setup: the Assistant is on from here. */
   enable: () => void;
+  /** Turns it off (Settings): stops what runs and closes the panel. */
+  disable: () => void;
   newSession: () => void;
   selectSession: (id: string) => void;
   clearSession: () => void;
@@ -427,6 +430,11 @@ export const useAssistantStore = create<AssistantState>()(
           set((st) => ({ modelChoice: { ...st.modelChoice, [agent]: { ...st.modelChoice[agent], effort } } })),
         setPanelWidth: (width) => set({ panelWidth: width }),
 
+        disable: () => {
+          if (current()?.running) void get().stop();
+          set({ enabled: false, panel: null });
+        },
+
         enable: () => {
           set({ enabled: true, panel: "chat" });
           const s = current();
@@ -630,7 +638,7 @@ export const useAssistantStore = create<AssistantState>()(
               ? tab.kind === "collection"
                 ? tab.filterText
                 : "{}"
-              : (useConsoleStore.getState().consoles[tabId]?.script ?? defaultScript(tab.database, tab.collection));
+              : (useConsoleStore.getState().consoles[tabId]?.script ?? defaultScript(tab.database, tab.collection, engineFor(tabId)));
           patchInline(tabId, { state: "working", original, step: null, error: null, text: "", proposal: null });
           const prompt =
             ask.kind === "filter"

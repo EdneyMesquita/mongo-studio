@@ -82,6 +82,8 @@ export interface ConnectionProfileMeta {
   color?: string | null;
   summary: string;
   database: string | null;
+  /** Whether a password is saved for it. */
+  hasPassword: boolean;
 }
 
 export interface ConnectionTestResult {

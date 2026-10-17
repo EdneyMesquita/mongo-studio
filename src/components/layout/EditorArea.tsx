@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { CollectionTabView } from "../collection/CollectionTabView";
 import { ScriptConsole } from "../console/ScriptConsole";
+import { DormantTab } from "./DormantTab";
 import { CollectionTabs } from "../tabs/CollectionTabs";
 import { TabDragGhost } from "../tabs/TabDragGhost";
 import { useTabDragStore } from "../tabs/useTabDrag";
@@ -59,7 +60,8 @@ export function EditorArea() {
 
   return (
     <>
-      {connected > 0 && <CollectionTabs />}
+      {/* Tabs reopened from the last session show before anything connects. */}
+      {(connected > 0 || tabs.length > 0) && <CollectionTabs />}
       <div
         className={cn("relative grid min-h-0 flex-1", split ? "gap-px bg-line" : "bg-editor")}
         style={{
@@ -103,7 +105,9 @@ export function EditorArea() {
               onFocusCapture={split && visible ? () => focusPane(pane) : undefined}
             >
               <PaneContext.Provider value={{ inPane: split, compact }}>
-                {tab.kind === "collection" ? (
+                {tab.dormant ? (
+                  visible && <DormantTab tab={tab} />
+                ) : tab.kind === "collection" ? (
                   <CollectionTabView tab={tab} active={isFocused} shown={visible} />
                 ) : (
                   <ScriptConsole tab={tab} active={isFocused} />

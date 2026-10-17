@@ -6,6 +6,9 @@ import { cn } from "@/lib/utils";
 import { OpenConnectionsItems } from "./OpenConnectionsMenu";
 import { useActiveConnection, useConnectedCount } from "./useActiveConnection";
 import { AssistantStatusItem } from "../assistant/AssistantStatusItem";
+import { McpStatusItem } from "../mcp/McpStatusItem";
+import { useTabEngine } from "../../store/settingsStore";
+import { useMongoshStore } from "../../store/mongoshStore";
 
 interface StatusItemProps {
   className?: string;
@@ -17,6 +20,17 @@ function StatusItem({ className, children }: StatusItemProps) {
     <span className={cn("inline-flex h-[22px] items-center gap-1.5 rounded-sm px-[7px] whitespace-nowrap", className)}>
       {children}
     </span>
+  );
+}
+
+/** "JavaScript · mongosh 2.13.0" for a console running on mongosh. */
+function ConsoleEngineItem({ tabId }: { tabId: string }) {
+  const engine = useTabEngine(tabId);
+  const version = useMongoshStore((s) => s.info?.version);
+  return (
+    <StatusItem>
+      JavaScript{engine === "mongosh" && ` · mongosh${version ? ` ${version}` : ""}`}
+    </StatusItem>
   );
 }
 
@@ -86,7 +100,8 @@ export function StatusBar() {
           )}
         </>
       )}
-      {tab?.kind === "console" && <StatusItem>JavaScript</StatusItem>}
+      {tab?.kind === "console" && <ConsoleEngineItem tabId={tab.id} />}
+      <McpStatusItem />
       <AssistantStatusItem />
     </footer>
   );

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import type { Tab } from "../../store/sessionsStore";
 import { useScriptsStore } from "../../store/scriptsStore";
+import { ConsoleEnginePicker } from "./ConsoleEnginePicker";
 import { ConsoleLayoutToggle } from "./ConsoleLayoutToggle";
 import { ConsoleTargetPill } from "./ConsoleTargetPill";
 import { ScriptFileChip } from "./ScriptFileChip";
@@ -17,7 +18,7 @@ interface ConsoleToolbarProps {
   onCancel: () => void;
 }
 
-/** Where the script runs, the file it saves to, layout, Save and Run. */
+/** Where the script runs, the file it saves to, the engine, layout, Save and Run. */
 export function ConsoleToolbar({ tab, dirty, running, onRun, onCancel }: ConsoleToolbarProps) {
   const key = tab.id;
   const file = useScriptsStore((s) => s.files[key]);
@@ -42,6 +43,7 @@ export function ConsoleToolbar({ tab, dirty, running, onRun, onCancel }: Console
         </span>
       )}
       <span className="flex-1" />
+      <ConsoleEnginePicker tabId={key} />
       <span className="contents @max-[820px]:hidden">
         <ConsoleLayoutToggle />
       </span>

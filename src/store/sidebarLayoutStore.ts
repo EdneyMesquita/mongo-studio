@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { api } from "../lib/tauri";
 import {
   canMove,
+  connectionIds as connectionIdsOf,
   containsConnections,
   findFolder,
   insertNode,
@@ -30,6 +31,14 @@ interface SidebarLayoutState {
   deleteFolder: (id: string) => void;
   toggleFolder: (id: string) => void;
   move: (id: string, target: DropTarget) => void;
+  /**
+   * Puts connections in a folder (a new one with `name`, or `id`) or at the
+   * top level, after what's already there - e.g. just-imported ones.
+   */
+  placeConnections: (
+    connectionIds: string[],
+    target: { kind: "new"; name: string } | { kind: "folder"; id: string } | { kind: "root" },
+  ) => void;
 }
 
 let loading: Promise<void> | null = null;
@@ -103,6 +112,27 @@ export const useSidebarLayoutStore = create<SidebarLayoutState>((set, get) => {
     toggleFolder: (id) => {
       const folder = findFolder(get().root, id);
       if (folder) commit(updateFolder(get().root, id, { collapsed: !folder.collapsed }));
+    },
+
+    placeConnections: (connectionIds, target) => {
+      let root = reconcile(get().root, [...connectionIds, ...connectionIdsOf(get().root)]);
+      let parentId: string | null = null;
+      if (target.kind === "new") {
+        parentId = crypto.randomUUID();
+        root = insertNode(root, { parentId: null, index: root.length }, {
+          type: "folder",
+          id: parentId,
+          name: target.name,
+          children: [],
+        });
+      } else if (target.kind === "folder" && findFolder(root, target.id)) {
+        parentId = target.id;
+      }
+      for (const id of connectionIds) {
+        const siblings = parentId ? findFolder(root, parentId)?.children.length ?? 0 : root.length;
+        if (canMove(root, id, { parentId, index: siblings })) root = moveNode(root, id, { parentId, index: siblings });
+      }
+      commit(root);
     },
 
     move: (id, target) => {

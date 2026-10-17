@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { CollectionTab } from "../../store/sessionsStore";
-import { useUiStore } from "../../store/uiStore";
+import { resultViewKey, useResultView } from "../../store/uiStore";
 import { JsonText } from "../json/JsonText";
 import { ValueEditContext } from "../json/ValueEditContext";
 import { DocumentGridView } from "./DocumentGridView";
@@ -31,7 +31,7 @@ function sameResults(a: ResultViewsProps, b: ResultViewsProps): boolean {
 }
 
 const ResultViews = memo(function ResultViews({ tab, documents }: ResultViewsProps) {
-  const resultView = useUiStore((s) => s.resultView);
+  const resultView = useResultView(resultViewKey(tab.id, "documents"));
   if (documents.length === 0) {
     return <p className="p-6 text-center text-fg-3">No documents match this query.</p>;
   }

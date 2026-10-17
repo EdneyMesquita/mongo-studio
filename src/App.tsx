@@ -10,11 +10,18 @@ import { StatusBar } from "./components/layout/StatusBar";
 import { ToolStripe } from "./components/layout/ToolStripe";
 import { useGlobalShortcuts } from "./components/layout/useGlobalShortcuts";
 import { LazyQuickOpenPalette } from "./components/palette/LazyQuickOpenPalette";
+import { McpRequestCard } from "./components/mcp/McpRequestCard";
+import { startMcp } from "./store/mcpStore";
+import { startSessionRestore } from "./store/sessionRestore";
 import { useSuppressNativeContextMenu } from "./lib/useSuppressNativeContextMenu";
+import { useEffect } from "react";
 
 function App() {
   useSuppressNativeContextMenu();
   useGlobalShortcuts();
+  // After mount: event listeners can't register at import time.
+  useEffect(startMcp, []);
+  useEffect(startSessionRestore, []);
 
   return (
     <TooltipProvider delayDuration={400}>
@@ -29,6 +36,7 @@ function App() {
       </AppShell>
       <LazyQuickOpenPalette />
       <DialogHost />
+      <McpRequestCard />
       <Toaster />
     </TooltipProvider>
   );
