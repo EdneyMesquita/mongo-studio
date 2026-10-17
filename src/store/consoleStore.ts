@@ -4,9 +4,27 @@ import { api } from "../lib/tauri";
 import { useConnectionsStore } from "./connectionsStore";
 import { selectActiveTab, useSessionsStore } from "./sessionsStore";
 import type { ScriptLogEvent } from "../types/script";
+import { engineFor, useSettingsStore, type ScriptEngine } from "./settingsStore";
 
-/** The script a console starts with, pointed at its collection if it has one. */
-export function defaultScript(database: string, collection: string | null): string {
+/**
+ * The script a console starts with, pointed at its collection if it has
+ * one, in the dialect of the engine it runs on.
+ */
+export function defaultScript(database: string, collection: string | null, engine: ScriptEngine = "builtin"): string {
+  if (engine === "mongosh") {
+    const header = `// mongosh syntax: db.orders.find(), show collections, use other_db, rs.status().
+// No await needed: mongosh waits for every call.`;
+    if (collection) {
+      return `// Console for ${database}.${collection} (mongosh) - runs against the "${database}" database.
+${header}
+db.getCollection(${JSON.stringify(collection)}).find({}).limit(20).toArray();
+`;
+    }
+    return `// Console for the "${database}" database (mongosh) - any of its collections.
+${header}
+// e.g. db.orders.find({}).limit(20).toArray();
+`;
+  }
   const header = `// db.collection("name") gives you find/findOne/insertOne/insertMany/updateOne/updateMany/deleteOne/deleteMany/aggregate/countDocuments.
 // Top-level await is supported; "use other_db" switches databases.`;
   if (collection) {
@@ -32,7 +50,7 @@ export function currentConsoleTarget() {
   const tab = selectActiveTab(useSessionsStore.getState());
   if (!tab) return null;
   const session = useConnectionsStore.getState().sessions[tab.connection.id] ?? null;
-  const untouched = defaultScript(tab.database, tab.collection);
+  const untouched = defaultScript(tab.database, tab.collection, engineFor(tab.id));
   const stored = useConsoleStore.getState().consoles[tab.id]?.script;
   return {
     tab,
@@ -103,7 +121,17 @@ export const useConsoleStore = create<ConsoleState>((set, get) => {
       // A run whose console was closed, or re-run, meanwhile is dropped.
       const stillCurrent = () => get().consoles[key]?.executionId === executionId;
       try {
-        const result = await api.runScript(sessionId, database, script, executionId, null);
+        const engine = engineFor(key);
+        const { mongosh } = useSettingsStore.getState();
+        const result = await api.runScript(
+          sessionId,
+          database,
+          script,
+          executionId,
+          null,
+          engine,
+          engine === "mongosh" ? { path: mongosh.path ?? undefined, extraArgs: mongosh.extraArgs, loadRc: mongosh.loadRc } : null,
+        );
         if (stillCurrent()) {
           patch(key, { running: false, result: result.value, hasResult: true, logs: result.logs });
           // A console tab stays where `use` took it, as in mongosh. A
@@ -138,6 +166,7 @@ useSessionsStore.subscribe((state, prev) => {
   const kept = { ...consoles };
   for (const key of stale) delete kept[key];
   useConsoleStore.setState({ consoles: kept });
+  for (const key of stale) useSettingsStore.getState().forgetTabEngine(key);
 });
 
 listen<ScriptLogEvent>("script-log", (event) => {

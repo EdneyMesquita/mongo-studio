@@ -11,6 +11,7 @@ import { ConsoleToolbar } from "./ConsoleToolbar";
 import { runCurrentConsole, useRunDuration } from "./useTimedRun";
 import { useAssistantStore } from "../../store/assistantStore";
 import { InlineAskStrip } from "../assistant/InlineAskStrip";
+import { useTabEngine } from "../../store/settingsStore";
 
 /**
  * The script console of a tab: a console tab, or a collection tab's own.
@@ -28,6 +29,7 @@ export function ScriptConsole({ tab, active = true }: { tab: Tab; active?: boole
   const split = useUiStore((s) => s.consoleSplit[s.consoleLayout]);
   const setSplit = useUiStore((s) => s.setConsoleSplit);
   const durationMs = useRunDuration(key);
+  const engine = useTabEngine(key);
   const ask = useAssistantStore((s) => (s.inline[key]?.kind === "script" ? s.inline[key] : undefined));
   const reviewOriginal = ask?.state === "review" ? ask.original : null;
   const reviewText = ask?.state === "review" ? ask.proposal : null;
@@ -52,7 +54,7 @@ export function ScriptConsole({ tab, active = true }: { tab: Tab; active?: boole
 
   if (!session) return null;
 
-  const untouched = defaultScript(tab.database, tab.collection);
+  const untouched = defaultScript(tab.database, tab.collection, engine);
   const script = consoleSession?.script ?? untouched;
   const running = consoleSession?.running ?? false;
 

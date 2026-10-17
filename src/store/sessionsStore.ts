@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { api } from "../lib/tauri";
 import { useUiStore } from "./uiStore";
+import { useSettingsStore } from "./settingsStore";
 import { parseOptionalQueryObject, parseQueryArray, parseQueryObject } from "../lib/queryText";
 import type { CollectionInfo } from "../types/connection";
 import type { CollectionStats, QueryResultPage } from "../types/query";
@@ -172,6 +173,8 @@ function newTab(
   collection: string,
   collectionType?: string,
 ): CollectionTab {
+  // Settings' "Documents per page".
+  const pageSize = useSettingsStore.getState().pageSize;
   return {
     kind: "collection",
     id: tabIdFor(connection.id, database, collection),
@@ -185,9 +188,9 @@ function newTab(
     mode: "find",
     filterText: "{}",
     sortText: defaultSort(collectionType),
-    limit: 50,
+    limit: pageSize,
     skip: 0,
-    pipelineText: "[\n  { \"$limit\": 50 }\n]",
+    pipelineText: `[\n  { "$limit": ${pageSize} }\n]`,
     loading: false,
     error: null,
   };

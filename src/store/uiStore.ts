@@ -15,6 +15,12 @@ export type SidePanel = "explorer" | "scripts" | null;
 /** The connection dialog: a new connection, or editing a saved one. */
 export type ConnectionDialog = { mode: "new" } | { mode: "edit"; id: string } | null;
 
+/** The import / export dialog: which side, and the connections an export starts with. */
+export type TransferDialog = { tab: "export" | "import"; ids: string[] | null };
+
+/** Settings' sections. */
+export type SettingsSection = "general" | "results" | "console" | "connections" | "assistant" | "mcp";
+
 /** The console's editor and output: side by side, or editor above output. */
 export type ConsoleLayout = "side" | "stacked";
 
@@ -51,8 +57,13 @@ interface UiState {
   connectionDialog: ConnectionDialog;
   setConnectionDialog: (dialog: ConnectionDialog) => void;
   /** The import / export connections dialog. */
-  importExportOpen: boolean;
-  setImportExportOpen: (open: boolean) => void;
+  transfer: TransferDialog | null;
+  /** Opens it on `tab`; an export starts with `ids` ticked (all when null). */
+  openTransfer: (tab: TransferDialog["tab"], ids?: string[] | null) => void;
+  closeTransfer: () => void;
+  /** The Settings dialog's section, or null when it's closed. */
+  settingsSection: SettingsSection | null;
+  setSettingsSection: (section: SettingsSection | null) => void;
   /** The Ctrl+K quick-open palette. */
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
@@ -93,8 +104,11 @@ export const useUiStore = create<UiState>()(
       setInspectorWidth: (width) => set({ inspectorWidth: width }),
       connectionDialog: null,
       setConnectionDialog: (dialog) => set({ connectionDialog: dialog }),
-      importExportOpen: false,
-      setImportExportOpen: (open) => set({ importExportOpen: open }),
+      transfer: null,
+      openTransfer: (tab, ids = null) => set({ transfer: { tab, ids }, settingsSection: null }),
+      closeTransfer: () => set({ transfer: null }),
+      settingsSection: null,
+      setSettingsSection: (section) => set({ settingsSection: section }),
       paletteOpen: false,
       setPaletteOpen: (open) => set({ paletteOpen: open }),
     }),

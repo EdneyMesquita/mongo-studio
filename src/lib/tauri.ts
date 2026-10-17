@@ -17,7 +17,8 @@ import type {
   FindQueryInput,
   QueryResultPage,
 } from "../types/query";
-import type { SavedScript, ScriptResult } from "../types/script";
+import type { MongoshInfo, MongoshRunOptions, SavedScript, ScriptResult } from "../types/script";
+import type { McpClientTarget, McpConfig, McpRequestChoice, McpStatus } from "../types/mcp";
 import type { ExportOptions, ExportQueryInput, ExportSummary } from "../types/export";
 import type { ExplainQueryInput, ExplainVerbosity } from "../types/explain";
 import type {
@@ -54,10 +55,12 @@ export const api = {
   /** Opens the app's log folder in the file manager; resolves to its path. */
   openLogDir: () => invoke<string>("open_log_dir"),
 
-  exportConnections: (destPath: string, includeSecrets: boolean) =>
+  /** Exports the connections in `ids`, or every saved one when null. */
+  exportConnections: (destPath: string, includeSecrets: boolean, ids: string[] | null = null) =>
     invoke<ConnectionsExportSummary>("export_connections", {
       destPath,
       includeSecrets,
+      ids,
     }),
 
   previewConnectionsImport: (srcPath: string) =>
@@ -130,6 +133,8 @@ export const api = {
     script: string,
     executionId: string,
     timeoutMs: number | null,
+    engine: "builtin" | "mongosh" = "builtin",
+    mongoshOptions: MongoshRunOptions | null = null,
   ) =>
     invoke<ScriptResult>("run_script", {
       sessionId,
@@ -137,6 +142,8 @@ export const api = {
       script,
       executionId,
       timeoutMs,
+      engine,
+      mongoshOptions,
     }),
 
   cancelScript: (executionId: string) =>
@@ -227,4 +234,22 @@ export const api = {
 
   /** Where the agents run, for resuming a session in a terminal. */
   assistantWorkdir: () => invoke<string>("assistant_workdir"),
+
+  /** Finds mongosh: the picked executable, a downloaded copy, then the PATH. */
+  mongoshDetect: (customPath: string | null) => invoke<MongoshInfo>("mongosh_detect", { customPath }),
+
+  /** Downloads MongoDB's mongosh build; progress arrives as `mongosh-download` events. */
+  mongoshDownload: () => invoke<MongoshInfo>("mongosh_download"),
+
+  /** Applies the MCP server's settings: starts, stops or restarts it. */
+  mcpSetConfig: (config: McpConfig) => invoke<McpStatus>("mcp_set_config", { config }),
+  mcpStatus: () => invoke<McpStatus>("mcp_status"),
+  mcpToken: () => invoke<string>("mcp_token"),
+  mcpRegenerateToken: () => invoke<string>("mcp_regenerate_token"),
+  mcpAnswer: (requestId: string, choice: McpRequestChoice) =>
+    invoke<void>("mcp_answer", { requestId, choice }),
+  mcpDisconnectClient: (clientId: string) => invoke<void>("mcp_disconnect_client", { clientId }),
+  mcpClientTargets: () => invoke<McpClientTarget[]>("mcp_client_targets"),
+  mcpRegisterClient: (id: string) => invoke<McpClientTarget>("mcp_register_client", { id }),
+  mcpUnregisterClient: (id: string) => invoke<McpClientTarget>("mcp_unregister_client", { id }),
 };

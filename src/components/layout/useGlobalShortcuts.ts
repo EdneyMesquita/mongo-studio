@@ -9,7 +9,8 @@ import { toast } from "sonner";
 /**
  * App-wide keys: Ctrl/Cmd+K quick open, Ctrl/Cmd+B the Explorer, Ctrl/Cmd+N
  * a new connection, Ctrl/Cmd+L the Assistant, Ctrl/Cmd+I ask it in place,
- * Ctrl/Cmd+\ the active tab to the side, Ctrl/Cmd+Alt+1-4 a split layout.
+ * Ctrl/Cmd+, Settings, Ctrl/Cmd+\ the active tab to the side,
+ * Ctrl/Cmd+Alt+1-4 a split layout.
  * Caught in the capture phase, before Monaco sees them: it would otherwise
  * swallow Ctrl+K as the start of one of its chords.
  */
@@ -62,6 +63,9 @@ export function useGlobalShortcuts() {
         if (useAssistantStore.getState().panel === "chat") focusSoon("assistant-input");
       } else if (key === "i") {
         useAssistantStore.getState().askInline();
+      } else if (key === ",") {
+        ui.setPaletteOpen(false);
+        ui.setSettingsSection(ui.settingsSection ? null : "general");
       } else return;
       e.preventDefault();
       e.stopPropagation();
