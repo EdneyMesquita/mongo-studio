@@ -40,6 +40,9 @@ export const DEFAULT_MCP_CAPS: McpSettings["caps"] = {
 export const PAGE_SIZES = [20, 50, 100, 200] as const;
 
 interface SettingsState {
+  /** Put the last session's tabs back on launch, dormant until opened. */
+  reopenTabs: boolean;
+  setReopenTabs: (on: boolean) => void;
   /** How many documents a new tab's Find bar asks for. */
   pageSize: number;
   setPageSize: (size: number) => void;
@@ -65,6 +68,8 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
+      reopenTabs: true,
+      setReopenTabs: (reopenTabs) => set({ reopenTabs }),
       pageSize: 50,
       setPageSize: (pageSize) => set({ pageSize }),
 
@@ -116,6 +121,7 @@ export const useSettingsStore = create<SettingsState>()(
       name: "mongo-studio-settings",
       version: 1,
       partialize: (s) => ({
+        reopenTabs: s.reopenTabs,
         pageSize: s.pageSize,
         consoleEngine: s.consoleEngine,
         mongosh: s.mongosh,

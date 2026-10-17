@@ -45,6 +45,11 @@ export interface CollectionTab {
   error: string | null;
   /** The query field the Assistant last wrote, until the user edits it. */
   assistantSource?: "filter" | "pipeline" | null;
+  /**
+   * Reopened from the last session and not connected yet: it connects, and
+   * runs its query, when it's opened.
+   */
+  dormant?: boolean;
 }
 
 /**
@@ -62,6 +67,8 @@ export interface ConsoleTab {
   number: number;
   /** Opened with a script the Assistant wrote. */
   fromAssistant?: boolean;
+  /** Reopened from the last session and not connected yet. */
+  dormant?: boolean;
 }
 
 export type Tab = CollectionTab | ConsoleTab;
@@ -130,6 +137,10 @@ interface SessionsState {
   replaceDocument: (id: string, updated: unknown) => void;
   /** Forgets a connection going away: its tabs and its sidebar state. */
   closeConnection: (connectionId: string) => void;
+  /** Puts back the last session's tabs, dormant, before any tab is open. */
+  restoreTabs: (tabs: Tab[], activeTabId: string | null) => void;
+  /** A dormant tab's connection is live: it runs (collection) or just shows (console). */
+  wakeTab: (sessionId: string, id: string) => Promise<void>;
 }
 
 /**
@@ -416,6 +427,25 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
           ),
         },
       });
+    },
+
+    restoreTabs: (tabs, activeTabId) =>
+      set((s) =>
+        s.tabs.length > 0
+          ? s
+          : { tabs, activeTabId: tabs.some((t) => t.id === activeTabId) ? activeTabId : (tabs[0]?.id ?? null) },
+      ),
+
+    wakeTab: async (sessionId, id) => {
+      const tab = get().tabs.find((t) => t.id === id);
+      if (!tab?.dormant) return;
+      set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, dormant: false } : t)) }));
+      if (tab.kind !== "collection") return;
+      api
+        .getCollectionStats(sessionId, tab.database, tab.collection)
+        .then((stats) => patchTab(id, { stats }))
+        .catch(() => {});
+      await get().runQuery(sessionId, id);
     },
 
     closeConnection: (connectionId) =>

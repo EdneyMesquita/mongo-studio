@@ -17,20 +17,30 @@ import { Lead, SettingRow } from "./parts";
 export function GeneralSettings() {
   const preference = useThemeStore((s) => s.preference);
   const setPreference = useThemeStore((s) => s.setPreference);
+  const reopenTabs = useSettingsStore((s) => s.reopenTabs);
+  const setReopenTabs = useSettingsStore((s) => s.setReopenTabs);
   return (
-    <Field label="Theme">
-      <SegmentedControl<ThemePreference>
-        aria-label="Theme"
-        className="self-start"
-        value={preference}
-        onChange={setPreference}
-        options={[
-          { value: "dark", label: "Dark", icon: <Moon /> },
-          { value: "light", label: "Light", icon: <Sun /> },
-          { value: "system", label: "Match system", icon: <Monitor /> },
-        ]}
+    <>
+      <Field label="Theme">
+        <SegmentedControl<ThemePreference>
+          aria-label="Theme"
+          className="self-start"
+          value={preference}
+          onChange={setPreference}
+          options={[
+            { value: "dark", label: "Dark", icon: <Moon /> },
+            { value: "light", label: "Light", icon: <Sun /> },
+            { value: "system", label: "Match system", icon: <Monitor /> },
+          ]}
+        />
+      </Field>
+      <SwitchField
+        label="Reopen last session's tabs on launch"
+        description="Connections reconnect when you open one of their tabs, not before."
+        checked={reopenTabs}
+        onCheckedChange={setReopenTabs}
       />
-    </Field>
+    </>
   );
 }
 
