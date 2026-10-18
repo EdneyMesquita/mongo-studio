@@ -2,7 +2,9 @@ import { useContext, useState } from "react";
 import { cn } from "@/lib/utils";
 import { childEntries } from "../../lib/bsonValue";
 import { shortTypeName } from "../../lib/bsonFormat";
+import { RowContextMenu } from "../common/ActionMenu";
 import { EditableValue } from "./EditableValue";
+import { FieldMenuContext } from "./FieldMenuContext";
 import { InlineValue } from "./InlineValue";
 import { KvRow } from "./KvRow";
 import { ValueEditContext } from "./ValueEditContext";
@@ -28,6 +30,7 @@ export function JsonTreeNode(props: JsonTreeNodeProps) {
   const { name, isIndex, value, doc, docKey, path, depth, defaultOpenDepth, truncate } = props;
   const [open, setOpen] = useState(depth < defaultOpenDepth);
   const saved = useContext(ValueEditContext)?.saved ?? null;
+  const fieldMenu = useContext(FieldMenuContext);
 
   const children = childEntries(value);
   const hasChildren = children !== null && children.length > 0;
@@ -36,8 +39,7 @@ export function JsonTreeNode(props: JsonTreeNodeProps) {
       ? saved.at
       : null;
 
-  return (
-    <>
+  const row = (
       <KvRow
         depth={depth}
         expanded={hasChildren ? open : undefined}
@@ -67,6 +69,18 @@ export function JsonTreeNode(props: JsonTreeNodeProps) {
           </span>
         </EditableValue>
       </KvRow>
+  );
+
+  return (
+    <>
+      {fieldMenu ? (
+        <RowContextMenu entries={() => fieldMenu(doc, path)}>
+          {/* takes the right-click for the row without boxing it */}
+          <div className="contents">{row}</div>
+        </RowContextMenu>
+      ) : (
+        row
+      )}
       {open && hasChildren && (
         <div role="group">
           {children.map(([key, child]) => (

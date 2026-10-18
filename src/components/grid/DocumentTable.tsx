@@ -1,10 +1,12 @@
 import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
+import { Link } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { documentKey } from "../../lib/bsonFormat";
 import { columnsOf } from "../../lib/documentColumns";
 import { ValueEditContext } from "../json/ValueEditContext";
 import { DocumentTableRow } from "./DocumentTableRow";
+import { relatedTypeTag, type RelatedGrid } from "./RelatedTableCell";
 import { useScrollbarWidth } from "./useScrollbarWidth";
 import { useVirtualRows } from "./useVirtualRows";
 
@@ -25,6 +27,12 @@ interface DocumentTableProps {
   expandedIndex?: number | null;
   onToggleExpand?: (index: number) => void;
   renderExpanded?: (index: number, width: number) => ReactNode;
+  /** The documents the columns come from, when `documents` is a filtered part of them. */
+  columnsFrom?: unknown[];
+  /** Per row, the number shown (its place in the whole page), when `documents` is filtered. */
+  rowNumbers?: number[];
+  /** Related columns before the document's, with a totals footer. */
+  related?: RelatedGrid;
   "aria-label": string;
   className?: string;
 }
@@ -44,13 +52,19 @@ export function DocumentTable({
   expandedIndex = null,
   onToggleExpand,
   renderExpanded,
+  columnsFrom,
+  rowNumbers,
+  related,
   className,
   ...aria
 }: DocumentTableProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const detail = useRef<HTMLTableRowElement>(null);
   const scrollbar = useScrollbarWidth(scroller);
-  const columns = useMemo(() => columnsOf(documents), [documents]);
+  const columnSource = columnsFrom ?? documents;
+  const columns = useMemo(() => columnsOf(columnSource), [columnSource]);
+  const relatedCount = related?.columns.length ?? 0;
+  const span = columns.length + 1 + relatedCount;
   const saved = useContext(ValueEditContext)?.saved ?? null;
   const expandable = Boolean(onToggleExpand && renderExpanded);
   const open = expandable && expandedIndex !== null && expandedIndex < documents.length ? expandedIndex : null;
@@ -138,6 +152,18 @@ export function DocumentTable({
             >
               #
             </th>
+            {related?.columns.map((col, i) => (
+              <th
+                key={col.id}
+                scope="col"
+                title={related.titles[i]}
+                className="sticky top-0 z-[2] h-[30px] max-w-[280px] overflow-hidden border-r border-b border-r-line-soft border-b-line bg-[color-mix(in_srgb,var(--color-accent)_7%,var(--color-panel))] px-2.5 text-left font-sans text-sm font-medium text-ellipsis whitespace-nowrap text-accent-text"
+              >
+                <Link aria-hidden className="mr-1 inline size-3 align-[-1px]" />
+                {related.titles[i]}
+                <span className="ml-1.5 font-mono text-2xs font-normal text-fg-3">{relatedTypeTag(col)}</span>
+              </th>
+            ))}
             {columns.map(({ key, type }) => (
               <th
                 key={key}
@@ -154,7 +180,7 @@ export function DocumentTable({
         <tbody>
           {rows.padTop > 0 && (
             <tr aria-hidden style={{ height: rows.padTop }}>
-              <td colSpan={columns.length + 1} className="p-0" />
+              <td colSpan={span} className="p-0" />
             </tr>
           )}
           {documents.slice(rows.start, rows.end).map((doc, offset) => {
@@ -172,13 +198,16 @@ export function DocumentTable({
                 onSelect={onSelect ? select : undefined}
                 onToggle={expandable ? onToggleExpand : undefined}
                 expanded={i === open}
+                number={rowNumbers?.[i]}
+                relatedColumns={related?.columns}
+                relatedCells={related?.cells[i]}
               />
             );
             if (i !== open) return row;
             return [
               row,
               <tr key="open-document" ref={detail}>
-                <td colSpan={columns.length + 1} className="border-b border-line bg-panel p-0">
+                <td colSpan={span} className="border-b border-line bg-panel p-0">
                   {renderExpanded?.(i, viewport)}
                 </td>
               </tr>,
@@ -186,10 +215,29 @@ export function DocumentTable({
           })}
           {rows.padBottom > 0 && (
             <tr aria-hidden style={{ height: rows.padBottom }}>
-              <td colSpan={columns.length + 1} className="p-0" />
+              <td colSpan={span} className="p-0" />
             </tr>
           )}
         </tbody>
+        {related && relatedCount > 0 && (
+          <tfoot>
+            <tr className="[&>td]:sticky [&>td]:bottom-0 [&>td]:h-[26px] [&>td]:border-t [&>td]:border-r [&>td]:border-line [&>td]:border-r-line-soft [&>td]:bg-panel">
+              <td className="left-0 z-[3]" />
+              {related.columns.map((col, i) => (
+                <td
+                  key={col.id}
+                  className="z-[2] bg-[color-mix(in_srgb,var(--color-accent)_9%,var(--color-panel))]! px-2.5 text-right font-mono font-semibold whitespace-nowrap text-fg"
+                >
+                  {related.totals[i]}
+                </td>
+              ))}
+              <td colSpan={columns.length} className="z-[2] px-2.5 font-sans text-sm font-medium whitespace-nowrap text-fg-2">
+                {related.footer}
+                {related.footerNote && <span className="ml-1 text-fg-3">{related.footerNote}</span>}
+              </td>
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
       {/* Where the grid meets a panel beside it, its right edge fades out

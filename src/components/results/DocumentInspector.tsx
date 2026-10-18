@@ -1,4 +1,5 @@
 import { useContext } from "react";
+import type { ReactNode } from "react";
 import { Kbd } from "@/components/ui/kbd";
 import { documentIdText, documentKey } from "../../lib/bsonFormat";
 import { DocumentActions } from "../grid/DocumentActions";
@@ -10,6 +11,8 @@ interface DocumentInspectorProps {
   doc: unknown;
   collectionName: string;
   tabId: string;
+  /** Under the fields: the document's related documents. */
+  related?: ReactNode;
 }
 
 function InspectorFooter() {
@@ -35,9 +38,9 @@ function InspectorFooter() {
 
 /**
  * The selected document as a typed key/value tree beside the grid, with its
- * copy and edit-in-console actions.
+ * copy and edit-in-console actions, and its related documents under it.
  */
-export function DocumentInspector({ doc, collectionName, tabId }: DocumentInspectorProps) {
+export function DocumentInspector({ doc, collectionName, tabId, related }: DocumentInspectorProps) {
   if (doc === undefined) {
     return (
       <section aria-label="Document" className="flex h-full flex-col bg-editor">
@@ -66,6 +69,7 @@ export function DocumentInspector({ doc, collectionName, tabId }: DocumentInspec
           defaultOpenDepth={1}
           aria-label="Document fields"
         />
+        {related}
       </div>
       <InspectorFooter />
     </section>
