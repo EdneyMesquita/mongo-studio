@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { api } from "../lib/tauri";
 import { useUiStore } from "./uiStore";
+import { forgetRelatedPages } from "./relatedStore";
 import { useSettingsStore } from "./settingsStore";
 import { parseOptionalQueryObject, parseQueryArray, parseQueryObject } from "../lib/queryText";
 import type { CollectionInfo } from "../types/connection";
@@ -71,7 +72,23 @@ export interface ConsoleTab {
   dormant?: boolean;
 }
 
-export type Tab = CollectionTab | ConsoleTab;
+/**
+ * A relation's editor. `connection` is the connection its sample documents
+ * come from, so it closes with that connection like any other tab.
+ */
+export interface RelationTab {
+  kind: "relation";
+  id: string;
+  connection: TabConnection;
+  /** The relation's From database, where its samples are read. */
+  database: string;
+  /** No collection of its own: code that targets "the tab's collection" sees none. */
+  collection: null;
+  relationId: string;
+  dormant?: boolean;
+}
+
+export type Tab = CollectionTab | ConsoleTab | RelationTab;
 
 /** The part of a tab the query bar edits. */
 export type TabQueryFields = Pick<
@@ -114,6 +131,8 @@ interface SessionsState {
     database: string,
     collection: string,
   ) => Promise<void>;
+  /** Focuses the relation's editor tab, opening it on the connection its samples come from. */
+  openRelation: (relationId: string, connection: TabConnection, database: string) => void;
   /** Points a console tab at another database of its connection, as `use <db>` does. */
   switchConsoleDatabase: (id: string, database: string) => void;
   /** Opens a new console on the database, however many it already has; returns its tab id. */
@@ -307,6 +326,19 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       return tab.id;
     },
 
+    openRelation: (relationId, connection, database) => {
+      const id = `relation:${relationId}`;
+      set((s) => {
+        const existing = s.tabs.find((t) => t.id === id);
+        // reopened on another connection: the samples follow it
+        const tab: RelationTab = { kind: "relation", id, connection, database, collection: null, relationId };
+        return {
+          tabs: existing ? s.tabs.map((t) => (t.id === id ? tab : t)) : [...s.tabs, tab],
+          activeTabId: id,
+        };
+      });
+    },
+
     switchConsoleDatabase: (id, database) =>
       set((s) => ({
         tabs: s.tabs.map((t) =>
@@ -466,11 +498,14 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
   };
 });
 
-// A closed tab's result views go with it, so the record doesn't grow.
+// A closed tab's result views and related documents go with it, so the
+// records don't grow.
 useSessionsStore.subscribe((state, prev) => {
   if (state.tabs === prev.tabs) return;
   const open = new Set(state.tabs.map((t) => t.id));
   for (const tab of prev.tabs) {
-    if (!open.has(tab.id)) useUiStore.getState().forgetResultViews(tab.id);
+    if (open.has(tab.id)) continue;
+    useUiStore.getState().forgetResultViews(tab.id);
+    forgetRelatedPages(tab.id);
   }
 });

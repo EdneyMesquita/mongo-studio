@@ -10,7 +10,7 @@ export type MainTab = "browse" | "indexes" | "console";
 export type ResultView = "grid" | "tree" | "json";
 
 /** Which tool window the side panel shows, or null when it's hidden. */
-export type SidePanel = "explorer" | "scripts" | null;
+export type SidePanel = "explorer" | "scripts" | "relations" | null;
 
 /** The connection dialog: a new connection, or editing a saved one. */
 export type ConnectionDialog = { mode: "new" } | { mode: "edit"; id: string } | null;

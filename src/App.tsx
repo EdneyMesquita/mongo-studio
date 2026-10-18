@@ -13,6 +13,7 @@ import { LazyQuickOpenPalette } from "./components/palette/LazyQuickOpenPalette"
 import { McpRequestCard } from "./components/mcp/McpRequestCard";
 import { startMcp } from "./store/mcpStore";
 import { startSessionRestore } from "./store/sessionRestore";
+import { startRelations } from "./store/relationsStore";
 import { useSuppressNativeContextMenu } from "./lib/useSuppressNativeContextMenu";
 import { useEffect } from "react";
 
@@ -22,6 +23,7 @@ function App() {
   // After mount: event listeners can't register at import time.
   useEffect(startMcp, []);
   useEffect(startSessionRestore, []);
+  useEffect(startRelations, []);
 
   return (
     <TooltipProvider delayDuration={400}>

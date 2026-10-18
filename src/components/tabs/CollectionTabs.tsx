@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { Check, ChevronDown, Layers, Maximize2, Minimize2, PanelRight, Pencil, Plus, SquareTerminal, Table2, X } from "lucide-react";
+import { Check, ChevronDown, Layers, Maximize2, Minimize2, PanelRight, Pencil, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { ActionMenuButton } from "@/components/common/ActionMenu";
 import type { MenuEntry } from "@/components/common/ActionMenu";
@@ -15,7 +15,7 @@ import { useTabGroupsStore } from "../../store/tabGroupsStore";
 import { EditorTab } from "./EditorTab";
 import { LayoutPicker } from "./LayoutPicker";
 import { TabGroupHeader } from "./TabGroupHeader";
-import { tabName } from "./tabName";
+import { tabIcon, tabName } from "./tabName";
 
 /**
  * Open collections and consoles, across every database of every connection,
@@ -209,7 +209,7 @@ export function CollectionTabs() {
               { heading: g.kind === "ungrouped" ? "Open tabs" : `${g.name}${collapsed[g.id] ? " · collapsed" : ""}` },
               ...g.tabs.map((t) => ({
                 label: g.kind === "connection" ? tabName(t) : `${tabName(t)} · ${t.connection.name}`,
-                icon: t.id === selected ? Check : t.kind === "console" ? SquareTerminal : Table2,
+                icon: t.id === selected ? Check : tabIcon(t),
                 onSelect: () => useEditorLayoutStore.getState().showTab(t.id),
               })),
             ])

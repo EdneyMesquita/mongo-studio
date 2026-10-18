@@ -48,7 +48,7 @@ ${header}
  */
 export function currentConsoleTarget() {
   const tab = selectActiveTab(useSessionsStore.getState());
-  if (!tab) return null;
+  if (!tab || tab.kind === "relation") return null;
   const session = useConnectionsStore.getState().sessions[tab.connection.id] ?? null;
   const untouched = defaultScript(tab.database, tab.collection, engineFor(tab.id));
   const stored = useConsoleStore.getState().consoles[tab.id]?.script;

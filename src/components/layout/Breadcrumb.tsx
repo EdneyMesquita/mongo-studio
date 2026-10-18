@@ -1,4 +1,4 @@
-import { Layers, SquareTerminal, Table } from "lucide-react";
+import { Layers, Link2, SquareTerminal, Table } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Tab } from "../../store/sessionsStore";
 
@@ -43,6 +43,10 @@ export function Breadcrumb({ tab }: BreadcrumbProps) {
       {tab.kind === "collection" ? (
         <Crumb icon={<Table />} last>
           {tab.collection}
+        </Crumb>
+      ) : tab.kind === "relation" ? (
+        <Crumb icon={<Link2 />} last>
+          Relation
         </Crumb>
       ) : (
         <Crumb icon={<SquareTerminal />} last>

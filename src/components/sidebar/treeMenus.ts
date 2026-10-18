@@ -1,4 +1,4 @@
-import { Copy, Download, FolderPlus, Pencil, Plug, SquareTerminal, Table, Trash2, Unplug } from "lucide-react";
+import { Copy, Download, FolderPlus, Link2, Pencil, Plug, SquareTerminal, Table, Trash2, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import type { MenuEntry } from "@/components/common/ActionMenu";
 
@@ -87,6 +87,7 @@ interface CollectionMenu {
   collection: string;
   onOpen: () => void;
   onOpenConsole: () => void;
+  onRelate: () => void;
 }
 
 export function collectionMenuEntries(m: CollectionMenu): MenuEntry[] {
@@ -94,6 +95,7 @@ export function collectionMenuEntries(m: CollectionMenu): MenuEntry[] {
     { heading: `${m.database}.${m.collection}` },
     { label: "Open collection", icon: Table, shortcut: "Enter", onSelect: m.onOpen },
     { label: `Open console on ${m.database}`, icon: SquareTerminal, onSelect: m.onOpenConsole },
+    { label: "Relate to another collection…", icon: Link2, onSelect: m.onRelate },
     { label: "Copy name", icon: Copy, onSelect: () => copyName(m.collection) },
   ];
 }

@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "react";
-import { Loader2, SquareTerminal, Table, X } from "lucide-react";
+import { Link2, Loader2, SquareTerminal, Table, X } from "lucide-react";
 import { useEditorLayoutStore } from "../../store/editorLayoutStore";
 import { useSessionsStore } from "../../store/sessionsStore";
 import type { Tab } from "../../store/sessionsStore";
 import { useScriptsStore } from "../../store/scriptsStore";
+import { useRelationsStore } from "../../store/relationsStore";
 import { RowContextMenu } from "@/components/common/ActionMenu";
 import type { MenuEntry } from "@/components/common/ActionMenu";
 import { Button } from "@/components/ui/button";
@@ -46,8 +47,10 @@ export function EditorTab({ tab, active, entries, bare = false, pane = null, pan
 
   // a console shows the script it's editing, once it has a file
   const name = tab.kind === "console" ? (fileName ?? tabName(tab)) : tabName(tab);
+  // a relation's name can change while its tab is open
+  useRelationsStore((s) => (tab.kind === "relation" ? s.relations.find((r) => r.id === tab.relationId)?.name : null));
   const Icon =
-    tab.kind === "console" ? SquareTerminal : tab.loading ? Loader2 : Table;
+    tab.kind === "console" ? SquareTerminal : tab.kind === "relation" ? Link2 : tab.loading ? Loader2 : Table;
 
   return (
     <RowContextMenu entries={entries}>

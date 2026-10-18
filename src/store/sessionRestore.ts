@@ -25,7 +25,8 @@ type SavedTab =
       number: number;
       script: string | null;
       file: ConsoleFile | null;
-    };
+    }
+  | { kind: "relation"; id: string; connectionId: string; database: string; relationId: string };
 
 interface SavedSession {
   version: 1;
@@ -57,6 +58,8 @@ function snapshot(): SavedSession {
             skip: t.skip,
             pipelineText: t.pipelineText,
           }
+        : t.kind === "relation"
+        ? { kind: "relation", id: t.id, connectionId: t.connection.id, database: t.database, relationId: t.relationId }
         : {
             kind: "console",
             id: t.id,
@@ -124,6 +127,8 @@ function restore() {
         dormant: true,
       });
       if (s.view) views[s.id] = s.view;
+    } else if (s.kind === "relation") {
+      tabs.push({ kind: "relation", id: s.id, connection, database: s.database, collection: null, relationId: s.relationId, dormant: true });
     } else {
       tabs.push({
         kind: "console",

@@ -2,6 +2,7 @@ import {
   ArrowLeftRight,
   Database,
   FolderOpen,
+  Link2,
   Moon,
   PanelRight,
   Plus,
@@ -24,6 +25,7 @@ import { LayoutIcon } from "../tabs/LayoutPicker";
 import { useThemeStore } from "../../store/themeStore";
 import { useUiStore } from "../../store/uiStore";
 import { HighlightMatch } from "./HighlightMatch";
+import { newRelationFromContext } from "../relations/RelationsPanel";
 
 interface PaletteActionsProps {
   search: string;
@@ -115,6 +117,18 @@ export function PaletteActions({ search, run }: PaletteActionsProps) {
       icon: <ArrowLeftRight />,
       label: "Import / export connections",
       perform: () => useUiStore.getState().openTransfer("export"),
+    },
+    {
+      id: "new-relation",
+      icon: <Link2 />,
+      label: activeTab?.kind === "collection" ? `Relate ${activeTab.collection} to another collection` : "New relation",
+      perform: newRelationFromContext,
+    },
+    {
+      id: "relations",
+      icon: <Link2 />,
+      label: "Show relations",
+      perform: () => useUiStore.getState().setSidePanel("relations"),
     },
     {
       id: "toggle-explorer",

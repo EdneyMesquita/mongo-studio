@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { CollectionTabView } from "../collection/CollectionTabView";
 import { ScriptConsole } from "../console/ScriptConsole";
+import { RelationEditor } from "../relations/RelationEditor";
 import { DormantTab } from "./DormantTab";
 import { CollectionTabs } from "../tabs/CollectionTabs";
 import { TabDragGhost } from "../tabs/TabDragGhost";
@@ -109,6 +110,8 @@ export function EditorArea() {
                   visible && <DormantTab tab={tab} />
                 ) : tab.kind === "collection" ? (
                   <CollectionTabView tab={tab} active={isFocused} shown={visible} />
+                ) : tab.kind === "relation" ? (
+                  <RelationEditor tab={tab} active={isFocused} />
                 ) : (
                   <ScriptConsole tab={tab} active={isFocused} />
                 )}

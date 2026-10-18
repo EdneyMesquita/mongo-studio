@@ -9,6 +9,7 @@ import { TreeNote } from "./TreeNote";
 import { TreeRow } from "./TreeRow";
 import { databaseMenuEntries } from "./treeMenus";
 import { useWindowedRows } from "./useWindowedRows";
+import { startRelation } from "../../store/relationsStore";
 
 interface DatabaseRowProps {
   db: DatabaseInfo;
@@ -101,6 +102,7 @@ export function DatabaseRow({ db, sessionId, connection, depth, query, matches }
               query={query}
               onOpen={() => openCollection(sessionId, connection, db.name, coll.name)}
               onOpenConsole={() => openConsole(connection, db.name, coll.name)}
+              onRelate={() => startRelation(connection, db.name, coll.name)}
             />
           ))}
           {rows.padBottom > 0 && <div aria-hidden style={{ height: rows.padBottom }} />}
