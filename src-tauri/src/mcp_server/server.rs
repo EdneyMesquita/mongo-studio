@@ -43,7 +43,12 @@ settings what you may do: some tools may be turned off, each connection is read-
 read & write, and some calls wait until the user approves them in the app (up to two minutes) \
 - when that happens, tell the user to look at Mongo Studio. A refusal means the user hasn't \
 allowed it; don't retry, ask them. Passwords are never available through this server: \
-connections you create are saved without one, and the user adds it in the app.";
+connections you create are saved without one, and the user adds it in the app. Relations are \
+the user's saved links between collections in different databases or connections (MongoDB's \
+$lookup can't cross databases): list_relations shows them and find_related joins through one, \
+with counts and sums per document. suggest_relation_links finds how two collections link from \
+samples; relations you create or update are drafts the user reviews in the app before anything \
+uses them.";
 
 /// A running listener.
 pub(crate) struct Listener {
