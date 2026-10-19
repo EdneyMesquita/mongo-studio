@@ -10,40 +10,31 @@ use bson::{oid::ObjectId, Binary, Bson, Document};
 use super::model::Bridge;
 
 /// Every value at a dotted path, arrays flattened at each step:
-/// `items.sourceId` on `{items: [{sourceId: "a"}, {sourceId: "b"}]}`
-/// gives `["a", "b"]`.
+/// `items.productId` on `{items: [{productId: "a"}, {productId: "b"}]}`
+/// gives `["a", "b"]`. Like MongoDB's own paths, an array is opened one
+/// level deep: arrays inside arrays aren't searched.
 pub fn values_at(doc: &Document, path: &str) -> Vec<Bson> {
-    let mut current: Vec<Bson> = vec![Bson::Document(doc.clone())];
-    for part in path.split('.') {
-        let mut next = Vec::new();
-        for value in current {
-            match value {
-                Bson::Document(d) => {
-                    if let Some(v) = d.get(part) {
-                        push_flat(&mut next, v.clone());
-                    }
-                }
-                Bson::Array(items) => {
-                    for item in items {
-                        if let Bson::Document(d) = item {
-                            if let Some(v) = d.get(part) {
-                                push_flat(&mut next, v.clone());
-                            }
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-        current = next;
-    }
-    current
+    let mut parts = path.split('.');
+    let first = parts.next().unwrap_or_default();
+    let start: Vec<&Bson> = doc.get(first).into_iter().flat_map(opened).collect();
+    parts
+        .fold(start, |values, part| {
+            values
+                .into_iter()
+                .filter_map(|v| v.as_document()?.get(part))
+                .flat_map(opened)
+                .collect()
+        })
+        .into_iter()
+        .cloned()
+        .collect()
 }
 
-fn push_flat(out: &mut Vec<Bson>, value: Bson) {
+/// An array's items, or the value itself.
+fn opened(value: &Bson) -> &[Bson] {
     match value {
-        Bson::Array(items) => out.extend(items),
-        other => out.push(other),
+        Bson::Array(items) => items,
+        other => std::slice::from_ref(other),
     }
 }
 
@@ -280,6 +271,16 @@ mod tests {
         );
         assert_eq!(values_at(&d, "tags").len(), 2);
         assert!(values_at(&d, "missing.path").is_empty());
+
+        // arrays at two levels of the path, and a plain document beside them
+        let d = doc! { "a": [{ "b": [{ "c": 1 }, { "c": 2 }] }, { "b": { "c": 3 } }, 7] };
+        assert_eq!(
+            values_at(&d, "a.b.c"),
+            vec![Bson::Int32(1), Bson::Int32(2), Bson::Int32(3)]
+        );
+        // an array inside an array isn't opened, as in MongoDB
+        let d = doc! { "a": [[{ "b": 1 }]] };
+        assert!(values_at(&d, "a.b").is_empty());
     }
 
     #[test]
