@@ -18,8 +18,15 @@ export interface TabConnection {
 }
 
 /** One open collection, with its own query, results and stats. */
+/** What a tab holds. The values are what saved sessions store, so they stay as they are. */
+export enum TabKind {
+  Collection = "collection",
+  Console = "console",
+  Relation = "relation",
+}
+
 export interface CollectionTab {
-  kind: "collection";
+  kind: TabKind.Collection;
   id: string;
   connection: TabConnection;
   database: string;
@@ -58,7 +65,7 @@ export interface CollectionTab {
  * Scripts can reach any collection of that database.
  */
 export interface ConsoleTab {
-  kind: "console";
+  kind: TabKind.Console;
   id: string;
   connection: TabConnection;
   database: string;
@@ -77,7 +84,7 @@ export interface ConsoleTab {
  * come from, so it closes with that connection like any other tab.
  */
 export interface RelationTab {
-  kind: "relation";
+  kind: TabKind.Relation;
   id: string;
   connection: TabConnection;
   /** The relation's From database, where its samples are read. */
@@ -178,7 +185,7 @@ export function selectActiveTab(state: SessionsState): Tab | null {
 /** Numbers consoles on one database apart: one past the highest open. */
 function nextConsoleNumber(tabs: Tab[], connectionId: string, database: string): number {
   const numbers = tabs
-    .filter((t) => t.kind === "console" && t.connection.id === connectionId && t.database === database)
+    .filter((t) => t.kind === TabKind.Console && t.connection.id === connectionId && t.database === database)
     .map((t) => (t as ConsoleTab).number);
   return Math.max(0, ...numbers) + 1;
 }
@@ -206,7 +213,7 @@ function newTab(
   // Settings' "Documents per page".
   const pageSize = useSettingsStore.getState().pageSize;
   return {
-    kind: "collection",
+    kind: TabKind.Collection,
     id: tabIdFor(connection.id, database, collection),
     connection,
     database,
@@ -246,13 +253,13 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
   // patching a tab that's gone is simply a no-op.
   function patchTab(id: string, patch: Partial<Omit<CollectionTab, "kind">>) {
     set((s) => ({
-      tabs: s.tabs.map((t) => (t.id === id && t.kind === "collection" ? { ...t, ...patch } : t)),
+      tabs: s.tabs.map((t) => (t.id === id && t.kind === TabKind.Collection ? { ...t, ...patch } : t)),
     }));
   }
 
   function collectionTab(id: string): CollectionTab | null {
     const tab = get().tabs.find((t) => t.id === id);
-    return tab?.kind === "collection" ? tab : null;
+    return tab?.kind === TabKind.Collection ? tab : null;
   }
 
   return {
@@ -314,7 +321,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
 
     openConsole: (connection, database, collection, options) => {
       const tab: ConsoleTab = {
-        kind: "console",
+        kind: TabKind.Console,
         id: `console:${crypto.randomUUID()}`,
         connection,
         database,
@@ -331,7 +338,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       set((s) => {
         const existing = s.tabs.find((t) => t.id === id);
         // reopened on another connection: the samples follow it
-        const tab: RelationTab = { kind: "relation", id, connection, database, collection: null, relationId };
+        const tab: RelationTab = { kind: TabKind.Relation, id, connection, database, collection: null, relationId };
         return {
           tabs: existing ? s.tabs.map((t) => (t.id === id ? tab : t)) : [...s.tabs, tab],
           activeTabId: id,
@@ -342,7 +349,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
     switchConsoleDatabase: (id, database) =>
       set((s) => ({
         tabs: s.tabs.map((t) =>
-          t.id === id && t.kind === "console" && t.database !== database
+          t.id === id && t.kind === TabKind.Console && t.database !== database
             ? {
                 ...t,
                 database,
@@ -472,7 +479,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => {
       const tab = get().tabs.find((t) => t.id === id);
       if (!tab?.dormant) return;
       set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, dormant: false } : t)) }));
-      if (tab.kind !== "collection") return;
+      if (tab.kind !== TabKind.Collection) return;
       api
         .getCollectionStats(sessionId, tab.database, tab.collection)
         .then((stats) => patchTab(id, { stats }))

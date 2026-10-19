@@ -5,7 +5,7 @@ import { api } from "../lib/tauri";
 import { firstProposal } from "../lib/assistant/answer";
 import { compactJson } from "../lib/assistant/format";
 import { useConnectionsStore } from "./connectionsStore";
-import { selectActiveTab, useSessionsStore } from "./sessionsStore";
+import { selectActiveTab, TabKind, useSessionsStore } from "./sessionsStore";
 import type { QueryMode, TabConnection } from "./sessionsStore";
 import { defaultScript, useConsoleStore } from "./consoleStore";
 import { engineFor } from "./settingsStore";
@@ -60,7 +60,7 @@ export type AppliedProposal =
       tabId: string;
       previous: { mode: QueryMode; filterText: string; pipelineText: string };
     }
-  | { kind: "console"; tabId: string };
+  | { kind: TabKind.Console; tabId: string };
 
 /** One conversation, bound to a database of a connection. */
 export interface AssistantSession {
@@ -594,8 +594,8 @@ export const useAssistantStore = create<AssistantState>()(
           const tab = selectActiveTab(useSessionsStore.getState());
           if (!tab) return;
           const consoleView =
-            tab.kind === "console" || useUiStore.getState().mainTabs[tab.id] === "console";
-          if (!consoleView && (tab.kind !== "collection" || tab.mode !== "find")) return;
+            tab.kind === TabKind.Console || useUiStore.getState().mainTabs[tab.id] === "console";
+          if (!consoleView && (tab.kind !== TabKind.Collection || tab.mode !== "find")) return;
           if (get().inline[tab.id]) return;
           set((st) => ({
             inline: {
@@ -635,7 +635,7 @@ export const useAssistantStore = create<AssistantState>()(
           }
           const original =
             ask.kind === "filter"
-              ? tab.kind === "collection"
+              ? tab.kind === TabKind.Collection
                 ? tab.filterText
                 : "{}"
               : (useConsoleStore.getState().consoles[tabId]?.script ?? defaultScript(tab.database, tab.collection, engineFor(tabId)));
@@ -676,7 +676,7 @@ export const useAssistantStore = create<AssistantState>()(
             useConsoleStore.getState().setScript(tabId, ask.proposal);
             return;
           }
-          if (tab.kind !== "collection") return;
+          if (tab.kind !== TabKind.Collection) return;
           const sessions = useSessionsStore.getState();
           sessions.applyQuery(tabId, { mode: "find", filterText: ask.proposal }, "filter");
           set({ flash: { tabId, field: "filter", at: Date.now() } });

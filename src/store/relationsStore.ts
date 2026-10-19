@@ -5,7 +5,7 @@ import { useConnectionsStore } from "./connectionsStore";
 import type { Relation } from "../types/relations";
 import { guessPattern, relationLabel } from "../lib/relations";
 import { toast } from "sonner";
-import { databaseKey, useSessionsStore, type TabConnection } from "./sessionsStore";
+import { databaseKey, type TabConnection, TabKind, useSessionsStore } from "./sessionsStore";
 
 interface RelationsState {
   relations: Relation[];
@@ -88,7 +88,7 @@ export const isUnsaved = (id: string) => id.startsWith("new-");
 function sampleConnection(relation: Relation): { connection: TabConnection; database: string } | null {
   const { tabs } = useSessionsStore.getState();
   const fromTab = tabs.find(
-    (t) => t.kind === "collection" && t.database === relation.from.db && (relation.from.conn === "any" || relation.from.conn === t.connection.id),
+    (t) => t.kind === TabKind.Collection && t.database === relation.from.db && (relation.from.conn === "any" || relation.from.conn === t.connection.id),
   );
   if (fromTab) return { connection: fromTab.connection, database: relation.from.db };
   const { profiles, sessions } = useConnectionsStore.getState();

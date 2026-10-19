@@ -12,6 +12,7 @@ import { runCurrentConsole, useRunDuration } from "./useTimedRun";
 import { useAssistantStore } from "../../store/assistantStore";
 import { InlineAskStrip } from "../assistant/InlineAskStrip";
 import { useTabEngine } from "../../store/settingsStore";
+import { TabKind } from "../../store/sessionsStore";
 
 /**
  * The script console of a tab: a console tab, or a collection tab's own.
@@ -93,7 +94,7 @@ export function ScriptConsole({ tab, active = true }: { tab: Tab; active?: boole
             session={consoleSession}
             viewKey={resultViewKey(tab.id, "console")}
             durationMs={durationMs}
-            exportLabel={tab.kind === "collection" ? `${tab.database}.${tab.collection} console` : `${tab.database} console`}
+            exportLabel={tab.kind === TabKind.Collection ? `${tab.database}.${tab.collection} console` : `${tab.database} console`}
             exportName={`${tab.database}-result`}
           />
         }

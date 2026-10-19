@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useConnectionColor } from "@/lib/connectionColor";
 import { useConnectionsStore } from "../../store/connectionsStore";
-import { useSessionsStore } from "../../store/sessionsStore";
+import { TabKind, useSessionsStore } from "../../store/sessionsStore";
 import type { Tab } from "../../store/sessionsStore";
 
 const PILL =
@@ -24,19 +24,19 @@ export function ConsoleTargetPill({ tab }: { tab: Tab }) {
   const color = useConnectionColor(tab.connection.id);
   const databases = useConnectionsStore((s) => s.sessions[tab.connection.id]?.databases);
   const switchDatabase = useSessionsStore((s) => s.switchConsoleDatabase);
-  const target = tab.kind === "collection" ? `${tab.database}.${tab.collection}` : tab.database;
+  const target = tab.kind === TabKind.Collection ? `${tab.database}.${tab.collection}` : tab.database;
   const title = `Runs against ${target} on ${tab.connection.name} (${tab.connection.summary})`;
 
   const content = (
     <>
       <ConnectionChip name={tab.connection.name} color={color} size="sm" />
       <span className="truncate font-data font-medium text-fg">{target}</span>
-      {tab.kind === "console" && <span className="shrink-0 text-fg-3 @max-[820px]:hidden">any collection</span>}
+      {tab.kind === TabKind.Console && <span className="shrink-0 text-fg-3 @max-[820px]:hidden">any collection</span>}
       <span className="truncate @max-[600px]:hidden">on {tab.connection.name}</span>
     </>
   );
 
-  if (tab.kind !== "console" || !databases?.length) {
+  if (tab.kind !== TabKind.Console || !databases?.length) {
     return (
       <span className={PILL} title={title}>
         {content}

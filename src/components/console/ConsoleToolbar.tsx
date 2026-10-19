@@ -9,6 +9,7 @@ import { ConsoleTargetPill } from "./ConsoleTargetPill";
 import { ScriptFileChip } from "./ScriptFileChip";
 import { FromAssistantTag } from "../query/QueryBar";
 import { useAssistantStore } from "../../store/assistantStore";
+import { TabKind } from "../../store/sessionsStore";
 
 interface ConsoleToolbarProps {
   tab: Tab;
@@ -36,7 +37,7 @@ export function ConsoleToolbar({ tab, dirty, running, onRun, onCancel }: Console
     <div className="@container flex h-9 shrink-0 items-center gap-2 border-b border-line px-2.5">
       <ConsoleTargetPill tab={tab} />
       <ScriptFileChip file={file} dirty={dirty} onDetach={() => detach(key)} />
-      {tab.kind === "console" && tab.fromAssistant && <FromAssistantTag />}
+      {tab.kind === TabKind.Console && tab.fromAssistant && <FromAssistantTag />}
       {saveError && (
         <span className="shrink-0 text-sm text-danger" title={saveError} role="alert">
           Save failed

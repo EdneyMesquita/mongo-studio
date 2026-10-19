@@ -1,6 +1,6 @@
 import { isConnectionAllowed, useAssistantStore } from "../../store/assistantStore";
 import type { AssistantSession } from "../../store/assistantStore";
-import { selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
+import { selectActiveTab, TabKind, useSessionsStore } from "../../store/sessionsStore";
 
 /**
  * Said when the tab in view isn't what the session reads: another server
@@ -29,7 +29,7 @@ export function SessionNotice({ session }: { session: AssistantSession }) {
     );
   }
   if (tab.connection.id === session.connectionId && tab.database === session.database) return null;
-  const viewing = tab.kind === "collection" ? `${tab.database}.${tab.collection}` : tab.database;
+  const viewing = tab.kind === TabKind.Collection ? `${tab.database}.${tab.collection}` : tab.database;
   return (
     <div className={box}>
       You're viewing{" "}

@@ -3,7 +3,7 @@ import { useAssistantStore } from "../../store/assistantStore";
 import type { AssistantSession } from "../../store/assistantStore";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import { useConsoleStore } from "../../store/consoleStore";
-import { tabIdFor, useSessionsStore } from "../../store/sessionsStore";
+import { tabIdFor, TabKind, useSessionsStore } from "../../store/sessionsStore";
 import type { CollectionTab, TabConnection } from "../../store/sessionsStore";
 import { useUiStore } from "../../store/uiStore";
 import { compactJson } from "../../lib/assistant/format";
@@ -67,7 +67,7 @@ export async function undoApplied(session: AssistantSession, cardId: string) {
   if (!sessions.tabs.some((t) => t.id === applied.tabId)) return;
   useSessionsStore.setState((s) => ({
     tabs: s.tabs.map((t) =>
-      t.id === applied.tabId && t.kind === "collection" ? { ...t, ...applied.previous, assistantSource: null } : t,
+      t.id === applied.tabId && t.kind === TabKind.Collection ? { ...t, ...applied.previous, assistantSource: null } : t,
     ),
   }));
   sessions.activateTab(applied.tabId);
@@ -93,7 +93,7 @@ export function openInConsole(session: AssistantSession, cardId: string, proposa
       fromAssistant: true,
     });
   useConsoleStore.getState().setScript(id, consoleScriptFor(session, proposal));
-  if (proposal.kind === "script") useAssistantStore.getState().markApplied(cardId, { kind: "console", tabId: id });
+  if (proposal.kind === "script") useAssistantStore.getState().markApplied(cardId, { kind: TabKind.Console, tabId: id });
 }
 
 export function copyProposal(proposal: Proposal) {

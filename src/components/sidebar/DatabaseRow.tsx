@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { Layers } from "lucide-react";
-import { databaseKey, selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
+import { databaseKey, selectActiveTab, TabKind, useSessionsStore } from "../../store/sessionsStore";
 import type { TabConnection } from "../../store/sessionsStore";
 import type { CollectionInfo, DatabaseInfo } from "../../types/connection";
 import { RowContextMenu } from "@/components/common/ActionMenu";
@@ -32,7 +32,7 @@ export function DatabaseRow({ db, sessionId, connection, depth, query, matches }
   // a console tab's collection is only where it started, not what it shows
   const activeTabCollection = useSessionsStore((s) => {
     const tab = selectActiveTab(s);
-    return tab?.kind === "collection" ? tab.collection : null;
+    return tab?.kind === TabKind.Collection ? tab.collection : null;
   });
   const toggleDatabase = useSessionsStore((s) => s.toggleDatabase);
   const openCollection = useSessionsStore((s) => s.openCollection);

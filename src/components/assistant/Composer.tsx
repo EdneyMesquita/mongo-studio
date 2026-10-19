@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { useAssistantStore } from "../../store/assistantStore";
 import type { AssistantSession, ContextItem } from "../../store/assistantStore";
 import { useConsoleStore } from "../../store/consoleStore";
-import { databaseKey, selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
+import { databaseKey, selectActiveTab, TabKind, useSessionsStore } from "../../store/sessionsStore";
 import { selectedDocumentOf } from "../results/useDocumentSelection";
 import { AgentPicker } from "./AgentPicker";
 import { AttachedChip } from "./ContextChips";
@@ -30,7 +30,7 @@ const json = (value: unknown) => {
 function contextSources(session: AssistantSession) {
   const tab = selectActiveTab(useSessionsStore.getState());
   const sources: Omit<ContextItem, "id">[] = [];
-  if (tab?.kind === "collection") {
+  if (tab?.kind === TabKind.Collection) {
     const aggregate = tab.mode === "aggregate";
     sources.push({
       kind: "filter",
@@ -162,7 +162,7 @@ function ContextSourceItems({ session, onAdd }: { session: AssistantSession; onA
                     <DropdownMenuItem
                       key={name}
                       onSelect={() =>
-                        addContext({ kind: "collection", label: name, content: `Also consider the collection "${name}" in ${session.database}.` })
+                        addContext({ kind: TabKind.Collection, label: name, content: `Also consider the collection "${name}" in ${session.database}.` })
                       }
                     >
                       <span className="font-data">{name}</span>

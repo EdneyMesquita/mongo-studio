@@ -20,7 +20,7 @@ import { CommandGroup, CommandItem, CommandShortcut } from "@/components/ui/comm
 import { api } from "../../lib/tauri";
 import { SPLIT_LAYOUT_ORDER, SPLIT_LAYOUTS } from "../../lib/editorLayout";
 import { useEditorLayoutStore } from "../../store/editorLayoutStore";
-import { selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
+import { selectActiveTab, TabKind, useSessionsStore } from "../../store/sessionsStore";
 import { LayoutIcon } from "../tabs/LayoutPicker";
 import { useThemeStore } from "../../store/themeStore";
 import { useUiStore } from "../../store/uiStore";
@@ -67,7 +67,7 @@ export function PaletteActions({ search, run }: PaletteActionsProps) {
       perform: () =>
         useSessionsStore
           .getState()
-          .openConsole(tab.connection, tab.database, tab.kind === "collection" ? tab.collection : null),
+          .openConsole(tab.connection, tab.database, tab.kind === TabKind.Collection ? tab.collection : null),
     });
     actions.push({
       id: "open-to-side",
@@ -121,7 +121,7 @@ export function PaletteActions({ search, run }: PaletteActionsProps) {
     {
       id: "new-relation",
       icon: <Link2 />,
-      label: activeTab?.kind === "collection" ? `Relate ${activeTab.collection} to another collection` : "New relation",
+      label: activeTab?.kind === TabKind.Collection ? `Relate ${activeTab.collection} to another collection` : "New relation",
       perform: newRelationFromContext,
     },
     {

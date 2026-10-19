@@ -1,6 +1,6 @@
 import { Bot, Layers, Link2, Plus } from "lucide-react";
 import { useRelationsStore, openRelationTab, startRelation } from "../../store/relationsStore";
-import { selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
+import { selectActiveTab, TabKind, useSessionsStore } from "../../store/sessionsStore";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -10,7 +10,7 @@ import type { Relation } from "../../types/relations";
 /** Starts a relation from the collection in view, or from the first live connection. */
 export function newRelationFromContext() {
   const tab = selectActiveTab(useSessionsStore.getState());
-  if (tab?.kind === "collection") {
+  if (tab?.kind === TabKind.Collection) {
     startRelation(tab.connection, tab.database, tab.collection);
     return;
   }
@@ -26,7 +26,7 @@ export function RelationsPanel() {
   const loaded = useRelationsStore((s) => s.loaded);
   const current = useSessionsStore((s) => {
     const tab = selectActiveTab(s);
-    return tab?.kind === "relation" ? tab.relationId : null;
+    return tab?.kind === TabKind.Relation ? tab.relationId : null;
   });
   const groups = new Map<string, Relation[]>();
   for (const r of relations) groups.set(r.from.db, [...(groups.get(r.from.db) ?? []), r]);

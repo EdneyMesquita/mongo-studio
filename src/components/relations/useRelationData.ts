@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../../lib/tauri";
 import { collectionFor, isPattern, tenantOf } from "../../lib/relations";
 import { useConnectionsStore } from "../../store/connectionsStore";
-import { databaseKey, useSessionsStore, type RelationTab } from "../../store/sessionsStore";
+import { databaseKey, type RelationTab, TabKind, useSessionsStore } from "../../store/sessionsStore";
 import type { FindRelatedOutput, Relation } from "../../types/relations";
 
 /** Sample documents read from the From side when no open tab has them. */
@@ -80,7 +80,7 @@ export function useRelationData(tab: RelationTab, relation: Relation, sampleOver
     if (!isPattern(from.coll)) return [from.coll];
     const names = tree?.loaded ? tree.collections.map((c) => c.name) : listed?.key === listKey ? listed.names : [];
     const open = openTabs.flatMap((t) =>
-      t.kind === "collection" && t.connection.id === tab.connection.id && t.database === from.db ? [t.collection] : [],
+      t.kind === TabKind.Collection && t.connection.id === tab.connection.id && t.database === from.db ? [t.collection] : [],
     );
     return [...new Set([...open, ...names])].filter((c) => tenantOf(from.coll, c) !== null);
   }, [from.coll, from.db, tree, listed, listKey, openTabs, tab.connection.id]);
@@ -92,9 +92,9 @@ export function useRelationData(tab: RelationTab, relation: Relation, sampleOver
   // the sample: an open tab's page of that collection, else the newest documents
   const openPage = useSessionsStore((s) => {
     const t = s.tabs.find(
-      (x) => x.kind === "collection" && x.connection.id === tab.connection.id && x.database === from.db && x.collection === sampleCollection,
+      (x) => x.kind === TabKind.Collection && x.connection.id === tab.connection.id && x.database === from.db && x.collection === sampleCollection,
     );
-    return t?.kind === "collection" && t.results?.documents.length ? t.results.documents : null;
+    return t?.kind === TabKind.Collection && t.results?.documents.length ? t.results.documents : null;
   });
   const [read, setRead] = useState<{ key: string; docs: unknown[]; state: LoadState; error: string | null }>({
     key: "",
