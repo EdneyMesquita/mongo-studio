@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Database, FileCode } from "lucide-react";
+import { ArrowLeftRight, Database, FileCode, Link2 } from "lucide-react";
 import { useUiStore } from "../../store/uiStore";
 import { ToolStripeButton } from "./ToolStripeButton";
 
@@ -25,6 +25,13 @@ export function ToolStripe() {
         onClick={() => toggleSidePanel("scripts")}
       >
         <FileCode />
+      </ToolStripeButton>
+      <ToolStripeButton
+        label="Relations"
+        pressed={sidePanel === "relations"}
+        onClick={() => toggleSidePanel("relations")}
+      >
+        <Link2 />
       </ToolStripeButton>
       <span className="flex-1" />
       <ToolStripeButton

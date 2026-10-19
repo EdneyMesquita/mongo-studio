@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Tab } from "../store/sessionsStore";
 import { connectionGroupId, pruneGroups, stripGroups } from "./tabGroups";
+import { TabKind } from "../store/sessionsStore";
 
 function tab(id: string, connectionId: string): Tab {
   return {
-    kind: "console",
+    kind: TabKind.Console,
     id,
     connection: { id: connectionId, name: connectionId.toUpperCase(), summary: "" },
     database: "db",

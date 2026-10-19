@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
 import { api } from "../lib/tauri";
 import { useConnectionsStore } from "./connectionsStore";
-import { selectActiveTab, useSessionsStore } from "./sessionsStore";
+import { selectActiveTab, TabKind, useSessionsStore } from "./sessionsStore";
 import type { ScriptLogEvent } from "../types/script";
 import { engineFor, useSettingsStore, type ScriptEngine } from "./settingsStore";
 
@@ -48,7 +48,7 @@ ${header}
  */
 export function currentConsoleTarget() {
   const tab = selectActiveTab(useSessionsStore.getState());
-  if (!tab) return null;
+  if (!tab || tab.kind === TabKind.Relation) return null;
   const session = useConnectionsStore.getState().sessions[tab.connection.id] ?? null;
   const untouched = defaultScript(tab.database, tab.collection, engineFor(tab.id));
   const stored = useConsoleStore.getState().consoles[tab.id]?.script;
@@ -138,7 +138,7 @@ export const useConsoleStore = create<ConsoleState>((set, get) => {
           // collection tab's console belongs to its collection: there `use`
           // lasts one run.
           const tab = useSessionsStore.getState().tabs.find((t) => t.id === key);
-          if (tab?.kind === "console" && result.database !== tab.database) {
+          if (tab?.kind === TabKind.Console && result.database !== tab.database) {
             useSessionsStore.getState().switchConsoleDatabase(key, result.database);
           }
         }

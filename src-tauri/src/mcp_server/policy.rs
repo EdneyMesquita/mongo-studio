@@ -35,6 +35,11 @@ pub(crate) enum Cap {
     ConnEdit,
     ConnDelete,
     SaveScript,
+    /// List, read and join through the saved relations.
+    RelRead,
+    /// Propose, change and delete draft relations, and sample collections
+    /// for link suggestions.
+    RelEdit,
 }
 
 impl Cap {
@@ -50,6 +55,8 @@ impl Cap {
             Cap::ConnEdit => "connEdit",
             Cap::ConnDelete => "connDelete",
             Cap::SaveScript => "saveScript",
+            Cap::RelRead => "relRead",
+            Cap::RelEdit => "relEdit",
         }
     }
 }

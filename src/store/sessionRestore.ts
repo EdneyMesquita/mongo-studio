@@ -2,7 +2,7 @@ import { useConnectionsStore } from "./connectionsStore";
 import { useConsoleStore } from "./consoleStore";
 import { useEditorLayoutStore } from "./editorLayoutStore";
 import { useScriptsStore, type ConsoleFile } from "./scriptsStore";
-import { useSessionsStore, type Tab, type TabQueryFields } from "./sessionsStore";
+import { type Tab, TabKind, type TabQueryFields, useSessionsStore } from "./sessionsStore";
 import { useSettingsStore } from "./settingsStore";
 import { useUiStore, type MainTab } from "./uiStore";
 
@@ -15,9 +15,9 @@ import { useUiStore, type MainTab } from "./uiStore";
 const STORAGE_KEY = "mongo-studio-last-session";
 
 type SavedTab =
-  | ({ kind: "collection"; id: string; connectionId: string; database: string; collection: string; view?: MainTab } & TabQueryFields)
+  | ({ kind: TabKind.Collection; id: string; connectionId: string; database: string; collection: string; view?: MainTab } & TabQueryFields)
   | {
-      kind: "console";
+      kind: TabKind.Console;
       id: string;
       connectionId: string;
       database: string;
@@ -25,7 +25,8 @@ type SavedTab =
       number: number;
       script: string | null;
       file: ConsoleFile | null;
-    };
+    }
+  | { kind: TabKind.Relation; id: string; connectionId: string; database: string; relationId: string };
 
 interface SavedSession {
   version: 1;
@@ -42,9 +43,9 @@ function snapshot(): SavedSession {
     version: 1,
     activeTabId,
     tabs: tabs.map((t): SavedTab =>
-      t.kind === "collection"
+      t.kind === TabKind.Collection
         ? {
-            kind: "collection",
+            kind: TabKind.Collection,
             id: t.id,
             connectionId: t.connection.id,
             database: t.database,
@@ -57,8 +58,10 @@ function snapshot(): SavedSession {
             skip: t.skip,
             pipelineText: t.pipelineText,
           }
+        : t.kind === TabKind.Relation
+        ? { kind: TabKind.Relation, id: t.id, connectionId: t.connection.id, database: t.database, relationId: t.relationId }
         : {
-            kind: "console",
+            kind: TabKind.Console,
             id: t.id,
             connectionId: t.connection.id,
             database: t.database,
@@ -102,9 +105,9 @@ function restore() {
     const p = profiles.get(s.connectionId);
     if (!p) continue;
     const connection = { id: p.id, name: p.name, summary: p.summary };
-    if (s.kind === "collection") {
+    if (s.kind === TabKind.Collection) {
       tabs.push({
-        kind: "collection",
+        kind: TabKind.Collection,
         id: s.id,
         connection,
         database: s.database,
@@ -124,9 +127,11 @@ function restore() {
         dormant: true,
       });
       if (s.view) views[s.id] = s.view;
+    } else if (s.kind === TabKind.Relation) {
+      tabs.push({ kind: TabKind.Relation, id: s.id, connection, database: s.database, collection: null, relationId: s.relationId, dormant: true });
     } else {
       tabs.push({
-        kind: "console",
+        kind: TabKind.Console,
         id: s.id,
         connection,
         database: s.database,

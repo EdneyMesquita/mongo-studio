@@ -1,6 +1,11 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
+import { Link } from "lucide-react";
+import { fieldPathOf } from "../../lib/relatedView";
+import { startRelation } from "../../store/relationsStore";
 import type { CollectionTab } from "../../store/sessionsStore";
-import { resultViewKey, useResultView } from "../../store/uiStore";
+import { resultViewKey, useResultView, type ResultView } from "../../store/uiStore";
+import type { MenuEntry } from "../common/ActionMenu";
+import { FieldMenuContext } from "../json/FieldMenuContext";
 import { JsonText } from "../json/JsonText";
 import { ValueEditContext } from "../json/ValueEditContext";
 import { DocumentGridView } from "./DocumentGridView";
@@ -32,10 +37,36 @@ function sameResults(a: ResultViewsProps, b: ResultViewsProps): boolean {
 
 const ResultViews = memo(function ResultViews({ tab, documents }: ResultViewsProps) {
   const resultView = useResultView(resultViewKey(tab.id, "documents"));
+  const { connection, database, collection } = tab;
+  // right-click a field in the inspector or the tree: relate it
+  const fieldMenu = useMemo(
+    () =>
+      (doc: unknown, path: string[]): MenuEntry[] => {
+        const field = fieldPathOf(doc, path);
+        return [
+          { heading: `${database}.${collection} · ${field}` },
+          {
+            label: `Relate “${field}” to another collection…`,
+            icon: Link,
+            onSelect: () => startRelation(connection, database, collection, field),
+          },
+        ];
+      },
+    [connection, database, collection],
+  );
+  return (
+    <FieldMenuContext.Provider value={fieldMenu}>
+      <ResultBody tab={tab} documents={documents} view={resultView} />
+    </FieldMenuContext.Provider>
+  );
+}, sameResults);
+
+/** The page in the view picked: grid + inspector, tree or JSON. */
+function ResultBody({ tab, documents, view }: ResultViewsProps & { view: ResultView }) {
   if (documents.length === 0) {
     return <p className="p-6 text-center text-fg-3">No documents match this query.</p>;
   }
-  switch (resultView) {
+  switch (view) {
     case "tree":
       return <DocumentTreeView tab={tab} documents={documents} />;
     case "json":
@@ -47,7 +78,7 @@ const ResultViews = memo(function ResultViews({ tab, documents }: ResultViewsPro
     default:
       return <DocumentGridView tab={tab} documents={documents} />;
   }
-}, sameResults);
+}
 
 /**
  * A collection tab's query results under its query bar: the results header,

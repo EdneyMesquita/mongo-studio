@@ -1,11 +1,11 @@
-import { CircleAlert, Loader2, RotateCw, SquareTerminal, Table2 } from "lucide-react";
+import { CircleAlert, Loader2, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConnectionChip } from "@/components/ui/ConnectionChip";
 import { useConnectionColor } from "@/lib/connectionColor";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import { retryDormantTab } from "../../store/sessionRestore";
 import type { Tab } from "../../store/sessionsStore";
-import { tabName } from "../tabs/tabName";
+import { tabIcon, tabName } from "../tabs/tabName";
 
 /**
  * A tab reopened from the last session whose connection isn't up yet:
@@ -16,7 +16,7 @@ export function DormantTab({ tab }: { tab: Tab }) {
   const color = useConnectionColor(tab.connection.id);
   const connecting = useConnectionsStore((s) => Boolean(s.connecting[tab.connection.id]));
   const error = useConnectionsStore((s) => s.connectErrors[tab.connection.id]);
-  const Icon = tab.kind === "console" ? SquareTerminal : Table2;
+  const Icon = tabIcon(tab);
 
   return (
     <div className="grid h-full min-h-0 place-content-center justify-items-center gap-2 overflow-auto bg-editor px-4 py-6 text-center text-fg-2">

@@ -11,6 +11,7 @@ mod mcp_server;
 mod models;
 mod mongosh;
 mod paths;
+mod relations;
 mod saved_scripts;
 mod scripting;
 mod secrets;
@@ -95,6 +96,13 @@ pub fn run() {
             commands::mcp_client_targets,
             commands::mcp_register_client,
             commands::mcp_unregister_client,
+            commands::relations_list,
+            commands::relation_save,
+            commands::relation_delete,
+            commands::relation_target_connection,
+            commands::relation_find_related,
+            commands::relation_suggest_links,
+            commands::relation_check,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
@@ -118,6 +126,9 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let layout = SidebarLayoutStore::load(&config_dir)
         .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
     app.manage(layout);
+    let relations = relations::RelationsStore::load(&config_dir)
+        .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
+    app.manage(relations);
     // The agents run in an empty folder of the app's own, so they see none
     // of the user's files - one they can see at all, see `paths`.
     let workdir = paths::shared_dir(app.path().app_data_dir()?.join("assistant"), "assistant");

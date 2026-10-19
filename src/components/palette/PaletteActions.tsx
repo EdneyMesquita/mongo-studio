@@ -2,6 +2,7 @@ import {
   ArrowLeftRight,
   Database,
   FolderOpen,
+  Link2,
   Moon,
   PanelRight,
   Plus,
@@ -19,11 +20,12 @@ import { CommandGroup, CommandItem, CommandShortcut } from "@/components/ui/comm
 import { api } from "../../lib/tauri";
 import { SPLIT_LAYOUT_ORDER, SPLIT_LAYOUTS } from "../../lib/editorLayout";
 import { useEditorLayoutStore } from "../../store/editorLayoutStore";
-import { selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
+import { selectActiveTab, TabKind, useSessionsStore } from "../../store/sessionsStore";
 import { LayoutIcon } from "../tabs/LayoutPicker";
 import { useThemeStore } from "../../store/themeStore";
 import { useUiStore } from "../../store/uiStore";
 import { HighlightMatch } from "./HighlightMatch";
+import { newRelationFromContext } from "../relations/RelationsPanel";
 
 interface PaletteActionsProps {
   search: string;
@@ -65,7 +67,7 @@ export function PaletteActions({ search, run }: PaletteActionsProps) {
       perform: () =>
         useSessionsStore
           .getState()
-          .openConsole(tab.connection, tab.database, tab.kind === "collection" ? tab.collection : null),
+          .openConsole(tab.connection, tab.database, tab.kind === TabKind.Collection ? tab.collection : null),
     });
     actions.push({
       id: "open-to-side",
@@ -115,6 +117,18 @@ export function PaletteActions({ search, run }: PaletteActionsProps) {
       icon: <ArrowLeftRight />,
       label: "Import / export connections",
       perform: () => useUiStore.getState().openTransfer("export"),
+    },
+    {
+      id: "new-relation",
+      icon: <Link2 />,
+      label: activeTab?.kind === TabKind.Collection ? `Relate ${activeTab.collection} to another collection` : "New relation",
+      perform: newRelationFromContext,
+    },
+    {
+      id: "relations",
+      icon: <Link2 />,
+      label: "Show relations",
+      perform: () => useUiStore.getState().setSidePanel("relations"),
     },
     {
       id: "toggle-explorer",

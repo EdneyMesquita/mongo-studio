@@ -9,6 +9,7 @@ import { AssistantStatusItem } from "../assistant/AssistantStatusItem";
 import { McpStatusItem } from "../mcp/McpStatusItem";
 import { useTabEngine } from "../../store/settingsStore";
 import { useMongoshStore } from "../../store/mongoshStore";
+import { TabKind } from "../../store/sessionsStore";
 
 interface StatusItemProps {
   className?: string;
@@ -73,7 +74,7 @@ export function StatusBar() {
         </DropdownMenu>
       )}
       <span className="flex-1" />
-      {tab?.kind === "collection" && (
+      {tab?.kind === TabKind.Collection && (
         <>
           <StatusItem className="min-w-0">
             <span className="truncate font-data">
@@ -100,7 +101,7 @@ export function StatusBar() {
           )}
         </>
       )}
-      {tab?.kind === "console" && <ConsoleEngineItem tabId={tab.id} />}
+      {tab?.kind === TabKind.Console && <ConsoleEngineItem tabId={tab.id} />}
       <McpStatusItem />
       <AssistantStatusItem />
     </footer>

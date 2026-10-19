@@ -3,7 +3,9 @@ import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isPlainObject } from "../../lib/bsonValue";
 import type { DocumentColumn } from "../../lib/documentColumns";
+import type { RelatedColumn } from "../../lib/relations";
 import { DocumentTableCell } from "./DocumentTableCell";
+import { RelatedTableCell, type RelatedCellData } from "./RelatedTableCell";
 
 interface DocumentTableRowProps {
   doc: unknown;
@@ -18,6 +20,11 @@ interface DocumentTableRowProps {
   onToggle?: (index: number) => void;
   /** Whether its document is open under it. */
   expanded?: boolean;
+  /** The number shown, when rows are filtered: the document's place in the page. Defaults to index + 1. */
+  number?: number;
+  /** Related columns after the document's, and this row's aggregates for them. */
+  relatedColumns?: RelatedColumn[];
+  relatedCells?: RelatedCellData[];
 }
 
 /** One document as a grid row, with its sticky row number. */
@@ -30,6 +37,9 @@ export const DocumentTableRow = memo(function DocumentTableRow({
   onSelect,
   onToggle,
   expanded = false,
+  number = index + 1,
+  relatedColumns,
+  relatedCells,
 }: DocumentTableRowProps) {
   const fields = isPlainObject(doc) ? doc : {};
   const cellBg = selected ? "bg-sel-soft" : "group-hover/row:bg-row-hover";
@@ -69,8 +79,11 @@ export const DocumentTableRow = memo(function DocumentTableRow({
             )}
           />
         )}
-        {index + 1}
+        {number}
       </td>
+      {relatedColumns?.map((col, i) => (
+        <RelatedTableCell key={col.id} col={col} data={relatedCells?.[i]} className={cellBg} />
+      ))}
       {columns.map(({ key }) => (
         <DocumentTableCell key={key} doc={doc} field={key} value={fields[key]} className={cellBg} />
       ))}

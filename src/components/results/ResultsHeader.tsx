@@ -2,6 +2,7 @@ import type { CollectionTab } from "../../store/sessionsStore";
 import { ResultViewToggle } from "../json/ResultViewToggle";
 import { resultViewKey } from "../../store/uiStore";
 import { ResultsPager } from "./ResultsPager";
+import { RelatedMenu } from "./related/RelatedMenu";
 
 /** A find with no filter matches the whole collection, whose count the stats have. */
 function knownTotal(tab: CollectionTab): number | null {
@@ -12,7 +13,7 @@ function knownTotal(tab: CollectionTab): number | null {
 
 /**
  * The 34px line over a tab's results: "<n> documents · showing a–b · <ms> ms",
- * then the result view switch and the pager.
+ * then the Related menu, the result view switch and the pager.
  */
 export function ResultsHeader({ tab }: { tab: CollectionTab }) {
   const { results, loading, queryMs, skip } = tab;
@@ -41,6 +42,7 @@ export function ResultsHeader({ tab }: { tab: CollectionTab }) {
         <span className="tabular-nums max-sm:hidden">{queryMs.toLocaleString("en")} ms</span>
       )}
       <span className="flex-1" />
+      <RelatedMenu tab={tab} />
       <ResultViewToggle viewKey={resultViewKey(tab.id, "documents")} />
       <ResultsPager tab={tab} total={total} />
     </div>
