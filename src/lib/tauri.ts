@@ -19,6 +19,14 @@ import type {
 } from "../types/query";
 import type { MongoshInfo, MongoshRunOptions, SavedScript, ScriptResult } from "../types/script";
 import type { McpClientTarget, McpConfig, McpRequestChoice, McpStatus } from "../types/mcp";
+import type {
+  FindRelatedInput,
+  FindRelatedOutput,
+  Relation,
+  RelationCheckReport,
+  RelationDir,
+  RelationSuggestion,
+} from "../types/relations";
 import type { ExportOptions, ExportQueryInput, ExportSummary } from "../types/export";
 import type { ExplainQueryInput, ExplainVerbosity } from "../types/explain";
 import type {
@@ -252,4 +260,21 @@ export const api = {
   mcpClientTargets: () => invoke<McpClientTarget[]>("mcp_client_targets"),
   mcpRegisterClient: (id: string) => invoke<McpClientTarget>("mcp_register_client", { id }),
   mcpUnregisterClient: (id: string) => invoke<McpClientTarget>("mcp_unregister_client", { id }),
+
+  relationsList: () => invoke<Relation[]>("relations_list"),
+  relationSave: (relation: Relation) => invoke<Relation>("relation_save", { relation }),
+  relationDelete: (id: string) => invoke<void>("relation_delete", { id }),
+  /** The connection the other side lives on for documents of this connection, or null. */
+  relationTargetConnection: (relation: Relation, dir: RelationDir, sourceConnectionId: string) =>
+    invoke<string | null>("relation_target_connection", { relation, dir, sourceConnectionId }),
+  /** The related documents of a page of documents; one query per rule on the other side. */
+  relationFindRelated: (input: FindRelatedInput) => invoke<FindRelatedOutput>("relation_find_related", { input }),
+  relationSuggestLinks: (input: {
+    fromSessionId: string;
+    from: { database: string; collection: string };
+    toSessionId: string;
+    to: { database: string; collection: string };
+  }) => invoke<RelationSuggestion[]>("relation_suggest_links", { input }),
+  relationCheck: (input: { relation: Relation; fromConnectionId: string; fromSessionId: string; toSessionId: string }) =>
+    invoke<RelationCheckReport>("relation_check", { input }),
 };

@@ -8,7 +8,9 @@ export type McpCapability =
   | "connList"
   | "connEdit"
   | "connDelete"
-  | "saveScript";
+  | "saveScript"
+  | "relRead"
+  | "relEdit";
 
 export type McpPolicy = "off" | "ask" | "allow";
 

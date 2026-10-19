@@ -9,6 +9,7 @@ import type { Tab } from "../../store/sessionsStore";
 import { useScriptsStore } from "../../store/scriptsStore";
 import { PaneNumber } from "../tabs/PaneNumber";
 import { tabName } from "../tabs/tabName";
+import { TabKind } from "../../store/sessionsStore";
 
 interface EditorPaneHeaderProps {
   pane: number;
@@ -28,7 +29,7 @@ export function EditorPaneHeader({ pane, tab, focused, maximized, style }: Edito
   const toggleMaximize = useEditorLayoutStore((s) => s.toggleMaximize);
   const closePane = useEditorLayoutStore((s) => s.closePane);
   const color = useConnectionColor(tab?.connection.id ?? "");
-  const fileName = useScriptsStore((s) => (tab?.kind === "console" ? s.files[tab.id]?.name : undefined));
+  const fileName = useScriptsStore((s) => (tab?.kind === TabKind.Console ? s.files[tab.id]?.name : undefined));
   const title = tab ? (fileName ?? tabName(tab)) : "Empty";
 
   return (

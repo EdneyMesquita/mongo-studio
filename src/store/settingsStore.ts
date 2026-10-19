@@ -35,6 +35,8 @@ export const DEFAULT_MCP_CAPS: McpSettings["caps"] = {
   connEdit: "ask",
   connDelete: "off",
   saveScript: "allow",
+  relRead: "allow",
+  relEdit: "allow",
 };
 
 export const PAGE_SIZES = [20, 50, 100, 200] as const;

@@ -3,7 +3,7 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/tauri";
 import { currentConsoleTarget, useConsoleStore } from "./consoleStore";
 import { useConnectionsStore } from "./connectionsStore";
-import { selectActiveTab, useSessionsStore } from "./sessionsStore";
+import { selectActiveTab, TabKind, useSessionsStore } from "./sessionsStore";
 import type { TabConnection } from "./sessionsStore";
 import { useUiStore } from "./uiStore";
 import type { SavedScript } from "../types/script";
@@ -128,7 +128,7 @@ export const useScriptsStore = create<ScriptsState>((set, get) => ({
     const openIn = sessions.tabs.find((t) => get().files[t.id]?.path === script.path);
     if (openIn) {
       sessions.activateTab(openIn.id);
-      if (openIn.kind === "collection") useUiStore.getState().setMainTab(openIn.id, "console");
+      if (openIn.kind === TabKind.Collection) useUiStore.getState().setMainTab(openIn.id, "console");
       return;
     }
     const home = scriptHome();

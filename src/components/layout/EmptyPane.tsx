@@ -1,12 +1,11 @@
 import type { CSSProperties } from "react";
-import { SquareTerminal, Table2 } from "lucide-react";
 import { ConnectionChip } from "@/components/ui/ConnectionChip";
 import { useConnectionColor } from "@/lib/connectionColor";
 import { useEditorLayoutStore } from "../../store/editorLayoutStore";
 import { useSessionsStore } from "../../store/sessionsStore";
 import type { Tab } from "../../store/sessionsStore";
 import { LayoutIcon } from "../tabs/LayoutPicker";
-import { tabName } from "../tabs/tabName";
+import { tabIcon, tabName } from "../tabs/tabName";
 
 /** How many open tabs an empty pane offers to show. */
 const SUGGESTED = 5;
@@ -47,7 +46,7 @@ export function EmptyPane({ pane, focused, style }: { pane: number; focused: boo
 
 function SuggestedTab({ tab, onOpen }: { tab: Tab; onOpen: () => void }) {
   const color = useConnectionColor(tab.connection.id);
-  const Icon = tab.kind === "console" ? SquareTerminal : Table2;
+  const Icon = tabIcon(tab);
   return (
     <button
       type="button"

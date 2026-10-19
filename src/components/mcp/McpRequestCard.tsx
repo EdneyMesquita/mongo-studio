@@ -17,6 +17,8 @@ const ASKING: Record<McpCapability, string> = {
   connEdit: "wants to change a connection",
   connDelete: "wants to delete a connection",
   saveScript: "wants to save a script",
+  relRead: "wants to read related documents",
+  relEdit: "wants to propose a relation",
 };
 
 const POLICY_NAME: Record<McpCapability, string> = {
@@ -29,6 +31,8 @@ const POLICY_NAME: Record<McpCapability, string> = {
   connEdit: "Editing connections",
   connDelete: "Deleting connections",
   saveScript: "Saving scripts",
+  relRead: "Reading relations",
+  relEdit: "Proposing relations",
 };
 
 /**

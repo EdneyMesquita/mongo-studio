@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "react";
-import { Loader2, SquareTerminal, Table, X } from "lucide-react";
+import { Link2, Loader2, SquareTerminal, Table, X } from "lucide-react";
 import { useEditorLayoutStore } from "../../store/editorLayoutStore";
-import { useSessionsStore } from "../../store/sessionsStore";
+import { TabKind, useSessionsStore } from "../../store/sessionsStore";
 import type { Tab } from "../../store/sessionsStore";
 import { useScriptsStore } from "../../store/scriptsStore";
+import { useRelationsStore } from "../../store/relationsStore";
 import { RowContextMenu } from "@/components/common/ActionMenu";
 import type { MenuEntry } from "@/components/common/ActionMenu";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,7 @@ export function EditorTab({ tab, active, entries, bare = false, pane = null, pan
   const closeTab = useSessionsStore((s) => s.closeTab);
   const ref = useRef<HTMLDivElement>(null);
   const fileName = useScriptsStore((s) =>
-    tab.kind === "console" ? s.files[tab.id]?.name : undefined,
+    tab.kind === TabKind.Console ? s.files[tab.id]?.name : undefined,
   );
   const dirty = useConsoleDirty(tab);
   const color = useConnectionColor(tab.connection.id);
@@ -45,9 +46,11 @@ export function EditorTab({ tab, active, entries, bare = false, pane = null, pan
   }, [active]);
 
   // a console shows the script it's editing, once it has a file
-  const name = tab.kind === "console" ? (fileName ?? tabName(tab)) : tabName(tab);
+  const name = tab.kind === TabKind.Console ? (fileName ?? tabName(tab)) : tabName(tab);
+  // a relation's name can change while its tab is open
+  useRelationsStore((s) => (tab.kind === TabKind.Relation ? s.relations.find((r) => r.id === tab.relationId)?.name : null));
   const Icon =
-    tab.kind === "console" ? SquareTerminal : tab.loading ? Loader2 : Table;
+    tab.kind === TabKind.Console ? SquareTerminal : tab.kind === TabKind.Relation ? Link2 : tab.loading ? Loader2 : Table;
 
   return (
     <RowContextMenu entries={entries}>
@@ -83,7 +86,7 @@ export function EditorTab({ tab, active, entries, bare = false, pane = null, pan
         <Icon
           className={cn(
             "size-3.5 shrink-0 text-fg-2",
-            tab.kind === "collection" && tab.loading && "animate-spin text-fg-3",
+            tab.kind === TabKind.Collection && tab.loading && "animate-spin text-fg-3",
           )}
           aria-hidden
         />

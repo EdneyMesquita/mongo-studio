@@ -29,6 +29,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::error::{AppError, AppResult};
+use crate::relations::RelationsStore;
 use crate::saved_scripts::SavedScriptsStore;
 use crate::secrets::SecretKind;
 use crate::state::AppState;
@@ -76,7 +77,7 @@ pub enum Level {
 
 /// The settings the frontend pushes: whether the server runs, where, and
 /// what clients may do. Capability ids: browse, read, write, ddl, script,
-/// connList, connEdit, connDelete, saveScript.
+/// connList, connEdit, connDelete, saveScript, relRead, relEdit.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpConfig {
@@ -144,6 +145,8 @@ pub(crate) trait Host: Send + Sync + 'static {
     fn emit(&self, event: &str, payload: Value);
     fn app_state(&self) -> &AppState;
     fn saved_scripts(&self) -> &SavedScriptsStore;
+    /// The saved relations between collections.
+    fn relations(&self) -> &RelationsStore;
     /// The sidebar's folder tree (the frontend's own JSON), or null.
     fn sidebar_layout(&self) -> Value;
 }
@@ -161,6 +164,11 @@ impl Host for tauri::AppHandle {
     fn saved_scripts(&self) -> &SavedScriptsStore {
         use tauri::Manager;
         self.state::<SavedScriptsStore>().inner()
+    }
+
+    fn relations(&self) -> &RelationsStore {
+        use tauri::Manager;
+        self.state::<RelationsStore>().inner()
     }
 
     fn sidebar_layout(&self) -> Value {
@@ -457,6 +465,7 @@ pub(crate) mod test_support {
         pub events: Mutex<Vec<(String, Value)>>,
         pub state: AppState,
         pub scripts: SavedScriptsStore,
+        pub relations: RelationsStore,
         pub layout: Mutex<Value>,
     }
 
@@ -474,11 +483,13 @@ pub(crate) mod test_support {
                 running_tasks: Mutex::new(HashMap::new()),
             };
             let scripts = SavedScriptsStore::load(&dir, &dir.join("home")).unwrap();
+            let relations = RelationsStore::load(&dir).unwrap();
             Self {
                 dir,
                 events: Mutex::new(Vec::new()),
                 state,
                 scripts,
+                relations,
                 layout: Mutex::new(Value::Null),
             }
         }
@@ -514,6 +525,10 @@ pub(crate) mod test_support {
 
         fn saved_scripts(&self) -> &SavedScriptsStore {
             &self.scripts
+        }
+
+        fn relations(&self) -> &RelationsStore {
+            &self.relations
         }
 
         fn sidebar_layout(&self) -> Value {

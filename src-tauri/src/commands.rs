@@ -25,6 +25,7 @@ use crate::models::{
     SecretBackendKind, TlsOptions,
 };
 use crate::mongosh::{Mongosh, MongoshInfo, MongoshRunOptions};
+use crate::relations::{self, engine, sampling, Aggregate, Dir, Relation, RelationsStore};
 use crate::saved_scripts::{SavedScript, SavedScriptsStore};
 use crate::scripting;
 use crate::secrets::SecretKind;
@@ -1342,5 +1343,195 @@ mod tests {
         assert_eq!(secrets.len(), 0);
         assert!(state.connection_store.list().is_empty());
         std::fs::remove_dir_all(dir).ok();
+    }
+}
+
+// ---------------------------------------------------------------- relations
+
+fn emit_relations(app: &AppHandle, store: &RelationsStore) {
+    if let Ok(list) = store.list() {
+        let _ = app.emit(relations::CHANGED_EVENT, list);
+    }
+}
+
+#[tauri::command]
+pub fn relations_list(store: State<RelationsStore>) -> AppResult<Vec<Relation>> {
+    logged("relations_list", store.list())
+}
+
+#[tauri::command]
+pub fn relation_save(
+    store: State<RelationsStore>,
+    app: AppHandle,
+    relation: Relation,
+) -> AppResult<Relation> {
+    let saved = logged("relation_save", store.upsert(relation))?;
+    emit_relations(&app, &store);
+    Ok(saved)
+}
+
+#[tauri::command]
+pub fn relation_delete(store: State<RelationsStore>, app: AppHandle, id: String) -> AppResult<()> {
+    logged("relation_delete", store.delete(&id))?;
+    emit_relations(&app, &store);
+    Ok(())
+}
+
+/// The connection the other side lives on for documents of `source_connection_id`.
+#[tauri::command]
+pub fn relation_target_connection(
+    state: State<AppState>,
+    relation: Relation,
+    dir: Dir,
+    source_connection_id: String,
+) -> Option<String> {
+    relations::pairing::target_connection(
+        &state.connection_store,
+        &relation,
+        dir,
+        &source_connection_id,
+    )
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FindRelatedInput {
+    pub relation: Relation,
+    pub dir: Dir,
+    pub source: engine::Source,
+    /// The live session of the other side's connection.
+    pub target_session_id: String,
+    /// The page's documents, as relaxed Extended JSON.
+    pub documents: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub aggregates: Vec<Aggregate>,
+    #[serde(default)]
+    pub docs_per_source: usize,
+}
+
+#[tauri::command]
+pub async fn relation_find_related(
+    state: State<'_, AppState>,
+    input: FindRelatedInput,
+) -> AppResult<engine::FindRelatedOutput> {
+    let (client, _) = logged(
+        "relation_find_related",
+        session_client(&state, &input.target_session_id).await,
+    )?;
+    let docs = input
+        .documents
+        .into_iter()
+        .map(crate::ejson::json_to_document)
+        .collect::<AppResult<Vec<_>>>()?;
+    logged(
+        "relation_find_related",
+        engine::find_related(
+            &client,
+            &input.relation,
+            input.dir,
+            &input.source,
+            &docs,
+            &input.aggregates,
+            input.docs_per_source,
+        )
+        .await,
+    )
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuggestLinksInput {
+    pub from_session_id: String,
+    pub from: sampling::SampleSide,
+    pub to_session_id: String,
+    pub to: sampling::SampleSide,
+}
+
+#[tauri::command]
+pub async fn relation_suggest_links(
+    state: State<'_, AppState>,
+    input: SuggestLinksInput,
+) -> AppResult<Vec<sampling::Suggestion>> {
+    let (from, _) = logged(
+        "relation_suggest_links",
+        session_client(&state, &input.from_session_id).await,
+    )?;
+    let (to, _) = logged(
+        "relation_suggest_links",
+        session_client(&state, &input.to_session_id).await,
+    )?;
+    logged(
+        "relation_suggest_links",
+        sampling::suggest_links(&from, &input.from, &to, &input.to).await,
+    )
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckRelationInput {
+    pub relation: Relation,
+    pub from_connection_id: String,
+    pub from_session_id: String,
+    pub to_session_id: String,
+}
+
+#[tauri::command]
+pub async fn relation_check(
+    state: State<'_, AppState>,
+    input: CheckRelationInput,
+) -> AppResult<sampling::CheckReport> {
+    let (from, _) = logged(
+        "relation_check",
+        session_client(&state, &input.from_session_id).await,
+    )?;
+    let (to, _) = logged(
+        "relation_check",
+        session_client(&state, &input.to_session_id).await,
+    )?;
+    logged(
+        "relation_check",
+        sampling::check_relation(&from, &to, &input.relation, &input.from_connection_id).await,
+    )
+}
+
+#[cfg(test)]
+mod relation_input_tests {
+    use super::FindRelatedInput;
+    use mongodb::bson::{spec::BinarySubtype, Bson};
+
+    /// What the frontend sends: a blank-ish relation, a page of relaxed
+    /// Extended JSON, and column aggregates keyed by `columnKey`.
+    #[test]
+    fn find_related_input_reads_the_frontends_shape() {
+        let input: FindRelatedInput = serde_json::from_value(serde_json::json!({
+            "relation": {
+                "id": "", "name": "", "from": { "conn": "any", "db": "shop", "coll": "{tenant}_orders" },
+                "to": { "conn": "cluster", "db": "logistics", "coll": "shipments" },
+                "rules": [[{ "from": "key", "op": "prefix", "to": "orderRef", "as": "uuid-string" }]],
+                "ruleNotes": [], "scope": [{ "to": "store", "value": "{tenant}" }],
+                "fromName": "", "toName": "", "pairs": {}, "draft": null, "createdAt": "", "updatedAt": ""
+            },
+            "dir": "from",
+            "source": { "connectionId": "c1", "database": "shop", "collection": "berlin_orders" },
+            "targetSessionId": "s2",
+            "documents": [{ "_id": { "$oid": "6ab072d14abe768149d8066c" }, "key": { "$binary": { "base64": "AAECAwQFBgcICQoLDA0ODw==", "subType": "04" } } }],
+            "aggregates": [{ "id": "r|from|count|||\"DELIVERED\"", "kind": "count", "whereField": "status", "whereValue": "DELIVERED" }]
+        }))
+        .unwrap();
+        assert!(input.aggregates[0].id.contains('|'));
+        let doc = crate::ejson::json_to_document(input.documents[0].clone()).unwrap();
+        assert!(matches!(doc.get("_id"), Some(Bson::ObjectId(_))));
+        match doc.get("key") {
+            Some(Bson::Binary(b)) => assert_eq!(b.subtype, BinarySubtype::Uuid),
+            other => panic!("key should be a UUID binary, got {other:?}"),
+        }
+        // the editor leaves these out
+        let bare: FindRelatedInput = serde_json::from_value(serde_json::json!({
+            "relation": serde_json::to_value(&input.relation).unwrap(),
+            "dir": "to", "source": { "connectionId": "c1", "database": "logistics", "collection": "shipments" },
+            "targetSessionId": "s2", "documents": []
+        }))
+        .unwrap();
+        assert!(bare.aggregates.is_empty());
     }
 }

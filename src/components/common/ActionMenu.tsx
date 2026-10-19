@@ -120,7 +120,7 @@ interface ActionMenuButtonProps {
   className?: string;
   /** Replaces the default "…" icon trigger. */
   trigger?: ReactNode;
-  align?: "start" | "end";
+  align?: "start" | "center" | "end";
 }
 
 /** The "…" button that opens the same actions as a row's right-click menu. */

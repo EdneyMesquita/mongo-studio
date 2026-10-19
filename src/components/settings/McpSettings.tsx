@@ -50,6 +50,8 @@ const CAP_GROUPS: { title: string; rows: CapRow[] }[] = [
       { id: "connEdit", label: "Create and edit saved connections", help: "Passwords for new connections are typed by you, in the app." },
       { id: "connDelete", label: "Delete saved connections" },
       { id: "saveScript", label: "Save queries and scripts", help: "They land in Saved scripts, marked with the client's name." },
+      { id: "relRead", label: "See relations and find related documents", help: "Related documents are read like any other, on connections it may read." },
+      { id: "relEdit", label: "Propose and test relations", help: "What a client creates is a draft until you save it from its tab." },
     ],
   },
 ];
@@ -64,6 +66,8 @@ const CAP_LABELS: Record<McpCapability, string> = {
   connEdit: "Edit connections",
   connDelete: "Delete connections",
   saveScript: "Save scripts",
+  relRead: "Relations",
+  relEdit: "Propose relations",
 };
 
 const POLICY_TONE: Record<McpPolicy, string> = { off: "", ask: "text-warn", allow: "text-ok" };

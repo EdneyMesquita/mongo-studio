@@ -2,11 +2,13 @@ import { useState } from "react";
 import { useUiStore } from "../../store/uiStore";
 import { SavedScriptsPanel } from "../sidebar/SavedScriptsPanel";
 import { Sidebar } from "../sidebar/Sidebar";
+import { RelationsPanel } from "../relations/RelationsPanel";
 
 /**
  * The side panel's tool windows. The Explorer stays mounted even while
  * hidden: it loads the connection list the rest of the app reads, and keeps
- * its search and scroll. Saved scripts mounts the first time it's shown.
+ * its search and scroll. Saved scripts mounts the first time it's shown; Relations
+ * only while shown.
  */
 export function SidePanelHost() {
   const panel = useUiStore((s) => s.sidePanel);
@@ -21,6 +23,11 @@ export function SidePanelHost() {
       {scriptsShown && (
         <div className={panel === "scripts" ? "h-full" : "hidden"}>
           <SavedScriptsPanel />
+        </div>
+      )}
+      {panel === "relations" && (
+        <div className="h-full">
+          <RelationsPanel />
         </div>
       )}
     </>

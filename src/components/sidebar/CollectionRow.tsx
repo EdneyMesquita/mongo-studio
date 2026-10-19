@@ -18,6 +18,7 @@ interface CollectionRowProps {
   query: string;
   onOpen: () => void;
   onOpenConsole: () => void;
+  onRelate: () => void;
 }
 
 /** A collection, view or time series; opens in a tab on click. */
@@ -29,6 +30,7 @@ export function CollectionRow({
   query,
   onOpen,
   onOpenConsole,
+  onRelate,
 }: CollectionRowProps) {
   const Icon = KIND_ICONS[collection.collectionType] ?? Table;
   const plain = collection.collectionType === "collection" || !collection.collectionType;
@@ -41,6 +43,7 @@ export function CollectionRow({
           collection: collection.name,
           onOpen,
           onOpenConsole,
+          onRelate,
         })
       }
     >

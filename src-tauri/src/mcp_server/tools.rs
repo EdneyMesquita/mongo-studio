@@ -1,5 +1,6 @@
 //! The tools: browse, query and change the user's saved connections, edit
-//! the saved connections themselves, and save scripts.
+//! the saved connections themselves, save scripts, and use and propose
+//! relations (in `relations`).
 //!
 //! Every call goes the same way: its capability and the connection's level
 //! are checked against the user's settings (`policy::decide`); calls that
@@ -9,6 +10,8 @@
 //! connection. Every call is reported to the windows as an `mcp-activity`
 //! event. Logs name the tool, connection and namespace, never filters,
 //! documents or scripts.
+
+mod relations;
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -73,6 +76,14 @@ pub(crate) enum Tool {
     UpdateConnection,
     DeleteConnection,
     SaveScript,
+    ListRelations,
+    GetRelation,
+    SuggestRelationLinks,
+    CreateRelation,
+    UpdateRelation,
+    TestRelation,
+    FindRelated,
+    DeleteRelation,
 }
 
 /// What a tool works on, and so which of connection_id, database and
@@ -86,7 +97,7 @@ enum Scope {
 }
 
 impl Tool {
-    const ALL: [Tool; 21] = [
+    const ALL: [Tool; 29] = [
         Tool::ListConnections,
         Tool::ListDatabases,
         Tool::ListCollections,
@@ -108,6 +119,14 @@ impl Tool {
         Tool::UpdateConnection,
         Tool::DeleteConnection,
         Tool::SaveScript,
+        Tool::ListRelations,
+        Tool::GetRelation,
+        Tool::SuggestRelationLinks,
+        Tool::CreateRelation,
+        Tool::UpdateRelation,
+        Tool::TestRelation,
+        Tool::FindRelated,
+        Tool::DeleteRelation,
     ];
 
     fn from_name(name: &str) -> Option<Self> {
@@ -137,11 +156,20 @@ impl Tool {
             Tool::UpdateConnection => "update_connection",
             Tool::DeleteConnection => "delete_connection",
             Tool::SaveScript => "save_script",
+            Tool::ListRelations => "list_relations",
+            Tool::GetRelation => "get_relation",
+            Tool::SuggestRelationLinks => "suggest_relation_links",
+            Tool::CreateRelation => "create_relation",
+            Tool::UpdateRelation => "update_relation",
+            Tool::TestRelation => "test_relation",
+            Tool::FindRelated => "find_related",
+            Tool::DeleteRelation => "delete_relation",
         }
     }
 
     /// The capability the tool needs; an aggregation that writes needs
-    /// `write` instead, see `call`.
+    /// `write` instead, test_relation takes `relEdit` when `relRead` is off,
+    /// and find_related also needs `read`, see `call`.
     fn cap(self) -> Cap {
         match self {
             Tool::ListConnections => Cap::ConnList,
@@ -158,12 +186,30 @@ impl Tool {
             Tool::CreateConnection | Tool::UpdateConnection => Cap::ConnEdit,
             Tool::DeleteConnection => Cap::ConnDelete,
             Tool::SaveScript => Cap::SaveScript,
+            Tool::ListRelations | Tool::GetRelation | Tool::TestRelation | Tool::FindRelated => {
+                Cap::RelRead
+            }
+            Tool::SuggestRelationLinks
+            | Tool::CreateRelation
+            | Tool::UpdateRelation
+            | Tool::DeleteRelation => Cap::RelEdit,
         }
     }
 
     fn scope(self) -> Scope {
         match self {
-            Tool::ListConnections | Tool::CreateConnection | Tool::SaveScript => Scope::Nothing,
+            Tool::ListConnections
+            | Tool::CreateConnection
+            | Tool::SaveScript
+            | Tool::ListRelations
+            | Tool::GetRelation
+            | Tool::SuggestRelationLinks
+            | Tool::CreateRelation
+            | Tool::UpdateRelation
+            | Tool::DeleteRelation => Scope::Nothing,
+            // The From (or source) connection; the other side's is resolved
+            // from the relation and checked too.
+            Tool::TestRelation | Tool::FindRelated => Scope::Connection,
             Tool::ListDatabases | Tool::UpdateConnection | Tool::DeleteConnection => {
                 Scope::Connection
             }
@@ -172,7 +218,7 @@ impl Tool {
         }
     }
 
-    /// Whether the tool talks to MongoDB.
+    /// Whether the tool talks to MongoDB through the connection it's about.
     fn uses_mongo(self) -> bool {
         !matches!(
             self,
@@ -181,6 +227,26 @@ impl Tool {
                 | Tool::UpdateConnection
                 | Tool::DeleteConnection
                 | Tool::SaveScript
+                | Tool::ListRelations
+                | Tool::GetRelation
+                | Tool::SuggestRelationLinks
+                | Tool::CreateRelation
+                | Tool::UpdateRelation
+                | Tool::DeleteRelation
+        )
+    }
+
+    fn is_relation_tool(self) -> bool {
+        matches!(
+            self,
+            Tool::ListRelations
+                | Tool::GetRelation
+                | Tool::SuggestRelationLinks
+                | Tool::CreateRelation
+                | Tool::UpdateRelation
+                | Tool::TestRelation
+                | Tool::FindRelated
+                | Tool::DeleteRelation
         )
     }
 }
@@ -190,7 +256,9 @@ fn level_needed(cap: Cap) -> Level {
     match cap {
         Cap::Write | Cap::Ddl | Cap::Script => Level::Write,
         Cap::ConnList | Cap::SaveScript => Level::None,
-        Cap::Browse | Cap::Read | Cap::ConnEdit | Cap::ConnDelete => Level::Read,
+        Cap::Browse | Cap::Read | Cap::ConnEdit | Cap::ConnDelete | Cap::RelRead | Cap::RelEdit => {
+            Level::Read
+        }
     }
 }
 
@@ -241,7 +309,7 @@ fn all_definitions() -> Vec<Value> {
         on_db(Value::Object(properties), &req)
     };
     // In `Tool::ALL` order.
-    vec![
+    let mut defs = vec![
         json!({
             "name": "list_connections",
             "description": "List the MongoDB connections saved in Mongo Studio that you may use: id, name, sidebar folder, hosts, default database and your access level (read or write). Start here: every other data tool takes a connection_id from this list. Passwords and full connection strings are never shown.",
@@ -420,7 +488,9 @@ fn all_definitions() -> Vec<Value> {
             },
             "annotations": writes,
         }),
-    ]
+    ];
+    defs.extend(relations::definitions());
+    defs
 }
 
 pub(crate) struct ToolOutput {
@@ -435,11 +505,16 @@ struct Target {
     profile: Option<ConnectionProfile>,
     database: Option<String>,
     collection: Option<String>,
+    /// Shown instead of the namespace, e.g. a relation's name.
+    label: Option<String>,
 }
 
 impl Target {
-    /// `shop.users`, `shop`, or the connection's name.
+    /// `shop.users`, `shop`, the label, or the connection's name.
     fn text(&self) -> String {
+        if let (Some(label), None) = (&self.label, &self.collection) {
+            return label.clone();
+        }
         match (&self.database, &self.collection) {
             (Some(db), Some(coll)) => format!("{db}.{coll}"),
             (Some(db), None) => db.clone(),
@@ -605,17 +680,27 @@ async fn run_call(call: &mut Call<'_>, args: &Value) -> ToolOutput {
         }
     }
 
+    let config = call.inner.config();
     let cap = match tool {
         Tool::Aggregate if aggregate_writes(args) => Cap::Write,
+        Tool::TestRelation if policy::cap_policy(&config, Cap::RelRead) == Policy::Off => {
+            Cap::RelEdit
+        }
         _ => tool.cap(),
     };
-    let config = call.inner.config();
-    let decision = policy::decide(
-        &config,
-        cap,
-        call.target.connection_id.as_deref(),
-        level_needed(cap),
-    );
+    let decide = |cap: Cap| {
+        policy::decide(
+            &config,
+            cap,
+            call.target.connection_id.as_deref(),
+            level_needed(cap),
+        )
+    };
+    let (cap, decision) = match tool {
+        // Joining returns documents: `read` must allow it as well.
+        Tool::FindRelated => strictest((cap, decide(cap)), (Cap::Read, decide(Cap::Read))),
+        _ => (cap, decide(cap)),
+    };
     match decision {
         Decision::Off => return call.refuse("Refused: turned off", policy::REFUSED_OFF),
         Decision::NoAccess => return call.refuse("Refused: no access", policy::REFUSED_NO_ACCESS),
@@ -630,6 +715,16 @@ async fn run_call(call: &mut Call<'_>, args: &Value) -> ToolOutput {
                     "no saved connection has this id; call list_connections".to_string(),
                 ))
             }
+        }
+    }
+
+    if tool.is_relation_tool() {
+        match relations::prepare(call, args) {
+            Ok(relations::Access::Granted) => {}
+            Ok(relations::Access::NoAccess) => {
+                return call.refuse("Refused: no access", policy::REFUSED_NO_ACCESS)
+            }
+            Err(e) => return call.fail(e),
         }
     }
 
@@ -697,6 +792,23 @@ async fn run_call(call: &mut Call<'_>, args: &Value) -> ToolOutput {
             call.finish("ok", label.to_string(), done.meta, done.text)
         }
         Err(e) => call.fail(e),
+    }
+}
+
+/// The stricter of two decisions, with its capability: off, then no
+/// access, then ask, then allowed.
+fn strictest(a: (Cap, Decision), b: (Cap, Decision)) -> (Cap, Decision) {
+    let rank = |d: Decision| match d {
+        Decision::Off => 0,
+        Decision::NoAccess => 1,
+        Decision::Ask => 2,
+        Decision::AllowAlways => 3,
+        Decision::Allow => 4,
+    };
+    if rank(b.1) < rank(a.1) {
+        b
+    } else {
+        a
     }
 }
 
@@ -1058,6 +1170,7 @@ async fn plan(call: &Call<'_>, args: &Value, mongo: Option<&Client>) -> AppResul
             let (name, content) = script_save_args(args)?;
             plan(format!("Save the script \"{name}\""), content)
         }
+        _ => relations::plan(call, args)?,
     })
 }
 
@@ -1123,6 +1236,7 @@ async fn execute(
         Tool::UpdateConnection => update_connection(call, args).await,
         Tool::DeleteConnection => delete_connection(call).await,
         Tool::SaveScript => save_script(call, args),
+        tool if tool.is_relation_tool() => relations::execute(call, args, mongo).await,
         _ => {
             let client = mongo.expect("data tools have a client");
             match call.tool {

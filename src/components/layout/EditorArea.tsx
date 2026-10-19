@@ -1,13 +1,14 @@
 import type { CSSProperties } from "react";
 import { CollectionTabView } from "../collection/CollectionTabView";
 import { ScriptConsole } from "../console/ScriptConsole";
+import { RelationEditor } from "../relations/RelationEditor";
 import { DormantTab } from "./DormantTab";
 import { CollectionTabs } from "../tabs/CollectionTabs";
 import { TabDragGhost } from "../tabs/TabDragGhost";
 import { useTabDragStore } from "../tabs/useTabDrag";
 import { SPLIT_LAYOUTS } from "../../lib/editorLayout";
 import { useEditorLayoutStore } from "../../store/editorLayoutStore";
-import { selectActiveTab, useSessionsStore } from "../../store/sessionsStore";
+import { selectActiveTab, type Tab, TabKind, useSessionsStore } from "../../store/sessionsStore";
 import { cn } from "@/lib/utils";
 import { EditorPaneHeader } from "./EditorPaneHeader";
 import { EmptyPane } from "./EmptyPane";
@@ -93,7 +94,7 @@ export function EditorArea() {
           const visible = slot >= 0;
           const pane = split && visible ? shown[slot] : -1;
           const isFocused = split ? pane === focused : visible;
-          if (tab.kind === "console" && !visible) return null; // a console tab is only a console
+          if (tab.kind === TabKind.Console && !visible) return null; // a console tab is only a console
           return (
             <div
               key={tab.id}
@@ -105,13 +106,7 @@ export function EditorArea() {
               onFocusCapture={split && visible ? () => focusPane(pane) : undefined}
             >
               <PaneContext.Provider value={{ inPane: split, compact }}>
-                {tab.dormant ? (
-                  visible && <DormantTab tab={tab} />
-                ) : tab.kind === "collection" ? (
-                  <CollectionTabView tab={tab} active={isFocused} shown={visible} />
-                ) : (
-                  <ScriptConsole tab={tab} active={isFocused} />
-                )}
+                {tab.dormant ? visible && <DormantTab tab={tab} /> : <TabBody tab={tab} active={isFocused} shown={visible} />}
               </PaneContext.Provider>
             </div>
           );
@@ -150,4 +145,21 @@ export function EditorArea() {
       <TabDragGhost />
     </>
   );
+}
+
+/** What a live tab shows, by its kind. */
+function TabBody({ tab, active, shown }: { tab: Tab; active: boolean; shown: boolean }) {
+  switch (tab.kind) {
+    case TabKind.Collection:
+      return <CollectionTabView tab={tab} active={active} shown={shown} />;
+    case TabKind.Console:
+      return <ScriptConsole tab={tab} active={active} />;
+    case TabKind.Relation:
+      return <RelationEditor tab={tab} active={active} />;
+    default: {
+      // a new kind of tab has to say what it shows
+      const unhandled: never = tab;
+      return unhandled;
+    }
+  }
 }
