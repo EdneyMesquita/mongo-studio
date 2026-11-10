@@ -1,6 +1,6 @@
 [package]
 name = "mongo-studio"
-version = "2.4.0"
+version = "2.5.0"
 description = "An open-source MongoDB GUI client"
 authors = ["Matheus Caetano"]
 edition = "2021"
@@ -46,6 +46,13 @@ flate2 = "1.1.10"
 tar = "0.4.46"
 zip = { version = "9.0.4", default-features = false, features = ["deflate"] }
 toml_edit = "0.25.17"
+
+# Linux: the desktop notification that brings the window forward when an MCP
+# request waits (Wayland won't let an app take the focus by itself). Both are
+# already in the tree, through keyring and tauri.
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "5"
+gtk = "0.18"
 
 # Only needed to force-enable apple-native-keyring-store's own "keychain"
 # feature (keyring's own feature flag doesn't do that for us). Gated to

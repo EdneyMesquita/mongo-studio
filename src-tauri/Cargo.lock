@@ -3554,7 +3554,7 @@ dependencies = [
 
 [[package]]
 name = "mongo-studio"
-version = "2.4.0"
+version = "2.5.0"
 dependencies = [
  "aes-gcm",
  "apple-native-keyring-store",
@@ -3563,6 +3563,7 @@ dependencies = [
  "csv",
  "flate2",
  "futures-util",
+ "gtk",
  "keyring",
  "log",
  "mongodb",
@@ -3585,6 +3586,7 @@ dependencies = [
  "toml_edit 0.25.17+spec-1.1.0",
  "urlencoding",
  "uuid",
+ "zbus",
  "zip",
 ]
 
