@@ -27,6 +27,7 @@ The MCP server is off until you turn it on in Settings, and runs only while the 
 - Clients get only what you allow: per capability (reading, writing, schema changes, scripts, managing connections, saving scripts) and per connection. Calls you set to "Ask" wait for your approval in the app.
 - What a client reads goes to that client, and to the AI provider it uses, under your terms with them. Clients never receive passwords or full connection strings.
 - "Add to Claude Code" (and the other clients) writes the server's address and token into that client's own configuration file on your computer.
+- If you keep its history of changes (on by default), the app records on your computer each change a client made: the code it ran, when, on which connection, who approved it and what came of it. It is never sent anywhere, except that clients you allowed can read back the entries for connections they may read. You can export it, clear it or turn it off in Settings.
 
 ## mongosh download (optional)
 
